@@ -1,0 +1,8 @@
+[build]
+  publish = "."
+
+# Short tenant links: /l/abc123 serves the app, which reads the id and fetches the lease
+[[redirects]]
+  from = "/l/*"
+  to = "/index.html"
+  status = 200
