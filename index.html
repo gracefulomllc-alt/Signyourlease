@@ -432,7 +432,15 @@
         <div class="card">
           <div class="section-label">Property</div>
           <div class="field-grid">
-            <div class="field full"><label>Street address</label><input type="text" id="f-address" list="property-datalist" placeholder="Start typing or pick a saved property" required>${propertyDatalistHtml('property-datalist')}</div>
+            <div class="field full">
+              <label>Pick a saved property</label>
+              <select id="f-property-select">
+                <option value="">— Select a property —</option>
+                ${PROPERTIES.map((p, i) => `<option value="${i}">${esc(p.label)}</option>`).join('')}
+                <option value="__manual__">Other / not listed — type it below</option>
+              </select>
+            </div>
+            <div class="field full"><label>Street address</label><input type="text" id="f-address" placeholder="Type the street address" required></div>
             <div class="field"><label>Unit / apt (optional)</label><input type="text" id="f-unit" placeholder="Unit B"></div>
             <div class="field"><label>City, state, ZIP</label><input type="text" id="f-cityzip" placeholder="Pueblo, Colorado 81001" required></div>
           </div>
@@ -557,21 +565,25 @@
     phoneSelect.addEventListener('change', syncPhoneFromSelect);
     syncPhoneFromSelect();
 
-    document.getElementById('f-address').addEventListener('input', (e) => {
-      const match = findPropertyByLabel(e.target.value);
-      if (match) {
-        e.target.value = match.street;
-        document.getElementById('f-unit').value = match.unit;
-        document.getElementById('f-cityzip').value = match.cityZip;
-        if (match.entity) {
-          if (ENTITIES.includes(match.entity)) {
-            entitySelect.value = match.entity;
-          } else {
-            entitySelect.value = '__other__';
-          }
-          syncEntityFromSelect();
-          entityInput.value = match.entity;
+    document.getElementById('f-property-select').addEventListener('change', (e) => {
+      const val = e.target.value;
+      if (val === '' || val === '__manual__') {
+        if (val === '__manual__') document.getElementById('f-address').focus();
+        return;
+      }
+      const match = PROPERTIES[parseInt(val, 10)];
+      if (!match) return;
+      document.getElementById('f-address').value = match.street;
+      document.getElementById('f-unit').value = match.unit || '';
+      document.getElementById('f-cityzip').value = match.cityZip;
+      if (match.entity) {
+        if (ENTITIES.includes(match.entity)) {
+          entitySelect.value = match.entity;
+        } else {
+          entitySelect.value = '__other__';
         }
+        syncEntityFromSelect();
+        entityInput.value = match.entity;
       }
     });
     document.querySelectorAll('input[name="f-termtype"]').forEach(r => r.addEventListener('change', () => {
@@ -1203,7 +1215,15 @@
         <div class="card">
           <div class="section-label">Who and what</div>
           <div class="field-grid">
-            <div class="field full"><label>Property address</label><input type="text" id="r-address" list="property-datalist-r" value="${esc(pre.propertyAddress)}" placeholder="Start typing or pick a saved property" required>${propertyDatalistHtml('property-datalist-r')}</div>
+            <div class="field full">
+              <label>Pick a saved property</label>
+              <select id="r-property-select">
+                <option value="">— Select a property —</option>
+                ${PROPERTIES.map((p, i) => `<option value="${i}">${esc(p.label)}</option>`).join('')}
+                <option value="__manual__">Other / not listed — type it below</option>
+              </select>
+            </div>
+            <div class="field full"><label>Property address</label><input type="text" id="r-address" value="${esc(pre.propertyAddress)}" placeholder="Type the property address" required></div>
             <div class="field"><label>Tenant name</label><input type="text" id="r-tenant" value="${esc(pre.tenantName)}" placeholder="Full name" required></div>
             <div class="field"><label>Date received</label><input type="date" id="r-date" value="${new Date().toISOString().slice(0,10)}" required></div>
           </div>
@@ -1237,11 +1257,13 @@
         </div>
       </form>
     `;
-    document.getElementById('r-address').addEventListener('input', (e) => {
-      const match = findPropertyByLabel(e.target.value);
-      if (match) {
-        e.target.value = match.unit ? match.street + ', ' + match.unit + ', ' + match.cityZip : match.street + ', ' + match.cityZip;
-      }
+    document.getElementById('r-property-select').addEventListener('change', (e) => {
+      const val = e.target.value;
+      if (val === '' ) return;
+      if (val === '__manual__') { document.getElementById('r-address').focus(); return; }
+      const match = PROPERTIES[parseInt(val, 10)];
+      if (!match) return;
+      document.getElementById('r-address').value = match.unit ? match.street + ', ' + match.unit + ', ' + match.cityZip : match.street + ', ' + match.cityZip;
     });
     let rows = [{ label: 'Rent (prorated)', amount: '' }];
     function renderRows() {
