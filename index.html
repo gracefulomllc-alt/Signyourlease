@@ -358,6 +358,17 @@
     try { return JSON.parse(decodeURIComponent(escape(atob(decodeURIComponent(str))))); }
     catch (e) { return null; }
   }
+  function goToLease(d) {
+    // If we're on a short-link path (/l/<id>), setting only the hash would re-trigger
+    // the short-link loader and discard in-progress signatures. Navigate to root instead.
+    const target = '#lease=' + encodeState(d);
+    if (/^\/l\/[A-Za-z0-9]+\/?$/.test(location.pathname)) {
+      location.replace(location.origin + '/' + target);
+    } else {
+      location.hash = target;
+    }
+  }
+
   function baseUrl() {
     // Always build links against the app root — never the /l/<id> short-link path,
     // otherwise a link built while viewing a short link would lose its #lease data.
@@ -972,11 +983,11 @@
                <button class="btn" onclick="copyLink('tenant-link')">Copy link</button>`
           }
         </div>
-        <p class="hint" style="margin-top:1rem;">Tip: tap <strong>Shorten link</strong> first to turn the long link into a short one that's easy to text, then Copy and send it. ${linkTooLong ? '' : (sms ? '' : 'Add a tenant phone number on the previous step to also enable texting. ')}Once they sign, they'll send it back to ${esc(d.landlordEmail)}${d.landlordPhone ? ' or text it to ' + esc(d.landlordPhone) : ''} for your signature.</p>
+        <p class="hint" style="margin-top:1rem;">Tip: tap <strong>Create short link to send</strong> first — it makes a short link that texts and emails reliably, then send that. ${linkTooLong ? '' : (sms ? '' : 'Add a tenant phone number on the previous step to also enable texting. ')}Once they sign, they'll send it back to ${esc(d.landlordEmail)}${d.landlordPhone ? ' or text it to ' + esc(d.landlordPhone) : ''} for your signature.</p>
       </div>
     `;
     document.getElementById('btn-go-direct-tenant').addEventListener('click', () => {
-      location.hash = '#lease=' + encodeState(d);
+      goToLease(d);
     });
     document.getElementById('btn-shorten-tenant').addEventListener('click', function () { createShortLink(d, 'tenant-link', this); });
     const textTenantBtn = document.getElementById('btn-text-tenant');
@@ -1297,7 +1308,7 @@
       </div>
     `;
     document.getElementById('btn-go-direct-landlord').addEventListener('click', () => {
-      location.hash = '#lease=' + encodeState(d);
+      goToLease(d);
     });
     document.getElementById('btn-shorten-landlord').addEventListener('click', function () { createShortLink(d, 'landlord-link', this); });
     const textLandlordBtn = document.getElementById('btn-text-landlord');
@@ -1344,7 +1355,7 @@
       d.landlordSignedAt = result.signedAt;
       if (result.image) d.landlordSignatureImage = result.image;
       celebrate();
-      location.hash = '#lease=' + encodeState(d);
+      goToLease(d);
     });
   }
 
