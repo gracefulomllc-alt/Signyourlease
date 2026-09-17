@@ -1051,7 +1051,6 @@
     const depositLine = deposits.length ? deposits.map(dep => dep.label + ': ' + fmtMoney(dep.amount)).join(', ') : 'None';
 
     app.innerHTML = header(true) + `
-      <button class="step-back" id="btn-back-tenant-sign">&larr; Clear and start over</button>
       <div class="banner banner-brass">Please review the details below, confirm your information, and sign.</div>
       <div class="paper" id="lease-paper">${leaseBody(d)}</div>
 
@@ -1104,12 +1103,6 @@
       window.location.href = 'mailto:' + encodeURIComponent(to) + '?subject=' + encodeURIComponent(subject) + '&body=' + encodeURIComponent(body);
     });
 
-    document.getElementById('btn-back-tenant-sign').addEventListener('click', () => {
-      if (confirm('Start this screen over? Anything you typed or uploaded here will be cleared.')) {
-        window.__pendingUploads = {};
-        renderTenantSign(d);
-      }
-    });
     document.getElementById('btn-submit-tenant-sign').addEventListener('click', () => {
       const result = readSignPanel('sig');
       if (!result) return;
