@@ -1,4 +1,5 @@
 import { getStore } from '@netlify/blobs';
+import { randomBytes } from 'node:crypto';
 
 const EXPIRY_DAYS = 7;
 const MAX_BYTES = 6 * 1024 * 1024; // 6 MB ceiling to keep photos sane
@@ -7,7 +8,7 @@ function makeId() {
   // short, url-safe, unambiguous (no 0/O/1/l)
   const alphabet = 'abcdefghjkmnpqrstuvwxyz23456789';
   let out = '';
-  const bytes = crypto.getRandomValues(new Uint8Array(8));
+  const bytes = randomBytes(8);
   for (const b of bytes) out += alphabet[b % alphabet.length];
   return out;
 }
