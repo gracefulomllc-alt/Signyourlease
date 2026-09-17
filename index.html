@@ -940,19 +940,21 @@
         <div class="section-label">Signing remotely</div>
         <div class="link-box"><code id="tenant-link">${esc(link)}</code></div>
         <div class="btn-row" style="margin-top:0;">
+          <button class="btn btn-brass" id="btn-shorten-tenant">Shorten link</button>
           ${linkTooLong
-            ? `<button class="btn btn-brass" onclick="copyLink('tenant-link')">Copy link to paste into email or text</button>`
-            : `<a class="btn btn-brass" href="${mailto}" style="text-decoration:none;display:inline-flex;align-items:center;">Email to tenant</a>
-               ${sms ? `<button class="btn btn-brass" id="btn-text-tenant">Text to tenant</button>` : ''}
+            ? `<button class="btn" onclick="copyLink('tenant-link')">Copy link</button>`
+            : `<a class="btn" href="${mailto}" style="text-decoration:none;display:inline-flex;align-items:center;">Email to tenant</a>
+               ${sms ? `<button class="btn" id="btn-text-tenant">Text to tenant</button>` : ''}
                <button class="btn" onclick="copyLink('tenant-link')">Copy link</button>`
           }
         </div>
-        <p class="hint" style="margin-top:1rem;">${linkTooLong ? 'This link is long, so auto-filling an email or text isn\'t reliable — copy it and paste it in manually. ' : (sms ? 'Send by either or both — whichever they\'ll actually see. ' : 'Add a tenant phone number on the previous step to also enable texting. ')}Once they sign, they'll send it back to ${esc(d.landlordEmail)}${d.landlordPhone ? ' or text it to ' + esc(d.landlordPhone) : ''} for your signature.</p>
+        <p class="hint" style="margin-top:1rem;">Tip: tap <strong>Shorten link</strong> first to turn the long link into a short one that's easy to text, then Copy and send it. ${linkTooLong ? '' : (sms ? '' : 'Add a tenant phone number on the previous step to also enable texting. ')}Once they sign, they'll send it back to ${esc(d.landlordEmail)}${d.landlordPhone ? ' or text it to ' + esc(d.landlordPhone) : ''} for your signature.</p>
       </div>
     `;
     document.getElementById('btn-go-direct-tenant').addEventListener('click', () => {
       location.hash = '#lease=' + encodeState(d);
     });
+    document.getElementById('btn-shorten-tenant').addEventListener('click', function () { shortenLink('tenant-link', this); });
     const textTenantBtn = document.getElementById('btn-text-tenant');
     if (textTenantBtn) textTenantBtn.addEventListener('click', () => trySmsOrCopy(sms, msg, textTenantBtn));
   }
@@ -966,6 +968,37 @@
       setTimeout(() => { btn.textContent = orig; }, 1500);
     });
   };
+
+  async function shortenLink(linkElId, btn) {
+    const codeEl = document.getElementById(linkElId);
+    const longUrl = codeEl.textContent.trim();
+    if (longUrl.startsWith('https://is.gd/') || longUrl.startsWith('https://tinyurl.com/')) return; // already short
+    const orig = btn.textContent;
+    btn.textContent = 'Shortening…';
+    btn.disabled = true;
+    try {
+      const resp = await fetch('https://is.gd/create.php?format=simple&url=' + encodeURIComponent(longUrl));
+      if (!resp.ok) throw new Error('bad response');
+      const short = (await resp.text()).trim();
+      if (!short.startsWith('http')) throw new Error('unexpected: ' + short);
+      codeEl.textContent = short;
+      btn.textContent = 'Shortened ✓';
+      // auto-copy the short link for convenience
+      if (navigator.clipboard) navigator.clipboard.writeText(short).catch(() => {});
+      setTimeout(() => { btn.textContent = 'Copy short link'; btn.disabled = false; btn.onclick = () => copyLinkText(short, btn); }, 1200);
+    } catch (e) {
+      btn.textContent = 'Couldn\'t shorten — use Copy';
+      btn.disabled = false;
+      setTimeout(() => { btn.textContent = orig; }, 2500);
+    }
+  }
+
+  function copyLinkText(text, btn) {
+    if (!navigator.clipboard) return;
+    navigator.clipboard.writeText(text).then(() => {
+      const o = btn.textContent; btn.textContent = 'Copied'; setTimeout(() => { btn.textContent = o; }, 1500);
+    });
+  }
 
   function trySmsOrCopy(smsHref, message, btn) {
     let navigated = false;
