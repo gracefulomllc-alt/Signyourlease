@@ -103,6 +103,12 @@
   .confirm-row .clabel { color: var(--slate); }
   .confirm-row .cval { font-weight: 600; text-align: right; }
   .locked-note { font-size: 0.8125rem; color: var(--slate); margin-top: 0.75rem; }
+  .ci-toggle { display: flex; gap: 0.625rem; margin-top: 1rem; }
+  .ci-btn { flex: 1; font-family: 'Inter', sans-serif; font-size: 0.9rem; font-weight: 500; padding: 0.7rem 1rem; border-radius: 6px; border: 1.5px solid var(--line); background: var(--card); color: var(--ink); cursor: pointer; }
+  .ci-btn.correct.active { background: color-mix(in srgb, var(--success) 16%, transparent); border-color: var(--success); color: var(--success); }
+  .ci-btn.incorrect.active { background: color-mix(in srgb, var(--danger) 14%, transparent); border-color: var(--danger); color: var(--danger); }
+  .ci-readonly { font-size: 0.95rem; line-height: 1.7; }
+  .ci-readonly strong { font-weight: 600; }
   .sig-tabs { display: flex; gap: 0.5rem; margin: 0.75rem 0 0.5rem; }
   .sig-tab { font-family: 'Inter', sans-serif; font-size: 0.8125rem; font-weight: 500; padding: 0.4rem 0.875rem; border-radius: 4px; border: 1px solid var(--line); background: var(--card); color: var(--slate); cursor: pointer; }
   .sig-tab.active { background: var(--ink); color: var(--paper); border-color: var(--ink); }
@@ -1055,24 +1061,44 @@
       <div class="paper" id="lease-paper">${leaseBody(d)}</div>
 
       <div class="card no-print">
-        <div class="section-label">Confirm your information</div>
-        <p class="hint" style="margin-bottom:0.75rem;">Please make sure your name and contact details are spelled correctly — fix anything that's wrong.</p>
-        <div class="field"><label>Full legal name</label><input type="text" id="tc-name" value="${esc(d.tenantName || '')}"></div>
-        <div class="field-grid">
-          <div class="field"><label>Phone</label><input type="tel" id="tc-phone" value="${esc(d.tenantPhone || '')}" placeholder="(719) 555-0100"></div>
-          <div class="field"><label>Email</label><input type="email" id="tc-email" value="${esc(d.tenantEmail || '')}" placeholder="name@email.com"></div>
+        <div class="section-label">Confirm your details</div>
+
+        <div style="margin-bottom:1.25rem;">
+          <div class="confirm-row"><span class="clabel">Name</span><span class="cval" id="tc-name-display">${esc(d.tenantName || '')}</span></div>
+          <div class="ci-toggle">
+            <button type="button" class="ci-btn correct" id="tcn-correct">Correct</button>
+            <button type="button" class="ci-btn incorrect" id="tcn-incorrect">Needs a fix</button>
+          </div>
+          <div class="field" id="tcn-edit" style="display:none;margin-top:0.75rem;">
+            <label>Full legal name</label><input type="text" id="tc-name" value="${esc(d.tenantName || '')}">
+          </div>
+        </div>
+
+        <div>
+          <div class="confirm-row"><span class="clabel">Phone</span><span class="cval" id="tc-phone-display">${esc(d.tenantPhone || 'No phone on file')}</span></div>
+          <div class="ci-toggle">
+            <button type="button" class="ci-btn correct" id="tcp-correct">Correct</button>
+            <button type="button" class="ci-btn incorrect" id="tcp-incorrect">Needs a fix</button>
+          </div>
+          <div class="field" id="tcp-edit" style="display:none;margin-top:0.75rem;">
+            <label>Phone</label><input type="tel" id="tc-phone" value="${esc(d.tenantPhone || '')}" placeholder="(719) 555-0100">
+          </div>
         </div>
       </div>
 
       <div class="card no-print">
-        <div class="section-label">Confirm the lease terms</div>
+        <div class="section-label">Are the lease terms correct?</div>
         <div class="confirm-row"><span class="clabel">Property</span><span class="cval">${esc(d.propertyAddress)}${d.unitLabel ? ', ' + esc(d.unitLabel) : ''}</span></div>
         <div class="confirm-row"><span class="clabel">Term</span><span class="cval">${esc(termLine)}</span></div>
         <div class="confirm-row"><span class="clabel">Rent</span><span class="cval">${esc(rentLine)}</span></div>
         <div class="confirm-row"><span class="clabel">Deposit / fees</span><span class="cval">${esc(depositLine)}</span></div>
-        <p class="locked-note">These terms are set by the landlord. If anything here is wrong, don't sign — tap below to let them know and they'll send a corrected lease.</p>
-        <div class="btn-row" style="margin-top:0.75rem;">
-          <button class="btn" id="btn-flag-problem">Something here is wrong</button>
+        <div class="ci-toggle">
+          <button type="button" class="ci-btn correct" id="lt-correct">Correct</button>
+          <button type="button" class="ci-btn incorrect" id="lt-incorrect">Something's wrong</button>
+        </div>
+        <p class="locked-note" id="lt-note" style="display:none;">These terms are set by the landlord and can't be changed here. Tap below to let them know and they'll send a corrected lease.</p>
+        <div class="btn-row" id="lt-flag-row" style="margin-top:0.75rem;display:none;">
+          <button class="btn" id="btn-flag-problem">Tell the landlord</button>
         </div>
       </div>
 
@@ -1087,13 +1113,62 @@
     wireUploadBox('idphoto');
     wireUploadBox('paystub');
 
-    // Keep the signature name field in sync if they correct their name above
-    const tcName = document.getElementById('tc-name');
-    tcName.addEventListener('input', () => {
+    const state = { nameOk: false, phoneOk: false, termsOk: false };
+
+    function syncSigName() {
+      const tcName = document.getElementById('tc-name');
+      if (!tcName) return;
       const sigName = document.getElementById('sig-name');
       sigName.value = tcName.value;
       const preview = document.getElementById('sig-preview');
       if (preview && !document.getElementById('sig-tab-draw').classList.contains('active')) preview.textContent = tcName.value;
+    }
+
+    // ----- Name toggle -----
+    const tcnCorrect = document.getElementById('tcn-correct');
+    const tcnIncorrect = document.getElementById('tcn-incorrect');
+    const tcnEdit = document.getElementById('tcn-edit');
+    tcnCorrect.addEventListener('click', () => {
+      tcnCorrect.classList.add('active'); tcnIncorrect.classList.remove('active');
+      tcnEdit.style.display = 'none';
+      state.nameOk = true;
+    });
+    tcnIncorrect.addEventListener('click', () => {
+      tcnIncorrect.classList.add('active'); tcnCorrect.classList.remove('active');
+      tcnEdit.style.display = '';
+      state.nameOk = true;
+      document.getElementById('tc-name').addEventListener('input', syncSigName);
+    });
+
+    // ----- Phone toggle -----
+    const tcpCorrect = document.getElementById('tcp-correct');
+    const tcpIncorrect = document.getElementById('tcp-incorrect');
+    const tcpEdit = document.getElementById('tcp-edit');
+    tcpCorrect.addEventListener('click', () => {
+      tcpCorrect.classList.add('active'); tcpIncorrect.classList.remove('active');
+      tcpEdit.style.display = 'none';
+      state.phoneOk = true;
+    });
+    tcpIncorrect.addEventListener('click', () => {
+      tcpIncorrect.classList.add('active'); tcpCorrect.classList.remove('active');
+      tcpEdit.style.display = '';
+      state.phoneOk = true;
+    });
+
+    // ----- Terms toggle -----
+    const ltCorrect = document.getElementById('lt-correct');
+    const ltIncorrect = document.getElementById('lt-incorrect');
+    ltCorrect.addEventListener('click', () => {
+      ltCorrect.classList.add('active'); ltIncorrect.classList.remove('active');
+      document.getElementById('lt-note').style.display = 'none';
+      document.getElementById('lt-flag-row').style.display = 'none';
+      state.termsOk = true;
+    });
+    ltIncorrect.addEventListener('click', () => {
+      ltIncorrect.classList.add('active'); ltCorrect.classList.remove('active');
+      document.getElementById('lt-note').style.display = '';
+      document.getElementById('lt-flag-row').style.display = '';
+      state.termsOk = false;
     });
 
     document.getElementById('btn-flag-problem').addEventListener('click', () => {
@@ -1104,12 +1179,15 @@
     });
 
     document.getElementById('btn-submit-tenant-sign').addEventListener('click', () => {
+      if (!state.nameOk) { alert('Please confirm your name above (Correct or Needs a fix).'); return; }
+      if (!state.phoneOk) { alert('Please confirm your phone number above (Correct or Needs a fix).'); return; }
+      if (!state.termsOk) { alert('Please confirm the lease terms are correct before signing. If something is wrong, tap "Tell the landlord" so they can send a corrected lease.'); return; }
       const result = readSignPanel('sig');
       if (!result) return;
-      // capture any corrections the tenant made to their own contact info
-      d.tenantName = document.getElementById('tc-name').value.trim() || d.tenantName;
-      d.tenantPhone = document.getElementById('tc-phone').value.trim();
-      d.tenantEmail = document.getElementById('tc-email').value.trim();
+      const nm = document.getElementById('tc-name');
+      if (nm) d.tenantName = nm.value.trim() || d.tenantName;
+      const ph = document.getElementById('tc-phone');
+      if (ph) d.tenantPhone = ph.value.trim();
       d.tenantSignerName = result.name;
       d.tenantSignedAt = result.signedAt;
       if (result.image) d.tenantSignatureImage = result.image;
