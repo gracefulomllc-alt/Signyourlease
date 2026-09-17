@@ -359,10 +359,34 @@
     catch (e) { return null; }
   }
   function baseUrl() {
+    // Always build links against the app root — never the /l/<id> short-link path,
+    // otherwise a link built while viewing a short link would lose its #lease data.
+    if (/^\/l\/[A-Za-z0-9]+\/?$/.test(location.pathname)) return location.origin + '/';
     return location.origin + location.pathname;
   }
 
+  async function loadShortLease(id) {
+    app.innerHTML = header(true) + `<p class="hint" style="text-align:center;padding:2rem 0;">Loading your lease&hellip;</p>`;
+    try {
+      const resp = await fetch('/api/lease?id=' + encodeURIComponent(id));
+      if (resp.status === 410) {
+        app.innerHTML = header(true) + `<div class="banner banner-brass">This lease link has expired. Please ask your landlord to send a new one.</div>`;
+        return;
+      }
+      if (!resp.ok) throw new Error('not found');
+      const text = await resp.text();
+      const state = JSON.parse(text);
+      renderLeaseView(state);
+    } catch (e) {
+      app.innerHTML = header(true) + `<div class="banner banner-brass">We couldn't open this lease link. Please ask your landlord to resend it.</div>`;
+    }
+  }
+
   function route() {
+    // Short link form: /l/<id>
+    const pathMatch = location.pathname.match(/^\/l\/([A-Za-z0-9]+)\/?$/);
+    if (pathMatch) { loadShortLease(pathMatch[1]); return; }
+
     const hash = location.hash;
     if (hash.startsWith('#lease=')) {
       const state = decodeState(hash.slice(7));
@@ -940,7 +964,7 @@
         <div class="section-label">Signing remotely</div>
         <div class="link-box"><code id="tenant-link">${esc(link)}</code></div>
         <div class="btn-row" style="margin-top:0;">
-          <button class="btn btn-brass" id="btn-shorten-tenant">Shorten link</button>
+          <button class="btn btn-brass" id="btn-shorten-tenant">Create short link to send</button>
           ${linkTooLong
             ? `<button class="btn" onclick="copyLink('tenant-link')">Copy link</button>`
             : `<a class="btn" href="${mailto}" style="text-decoration:none;display:inline-flex;align-items:center;">Email to tenant</a>
@@ -954,7 +978,7 @@
     document.getElementById('btn-go-direct-tenant').addEventListener('click', () => {
       location.hash = '#lease=' + encodeState(d);
     });
-    document.getElementById('btn-shorten-tenant').addEventListener('click', function () { shortenLink('tenant-link', this); });
+    document.getElementById('btn-shorten-tenant').addEventListener('click', function () { createShortLink(d, 'tenant-link', this); });
     const textTenantBtn = document.getElementById('btn-text-tenant');
     if (textTenantBtn) textTenantBtn.addEventListener('click', () => trySmsOrCopy(sms, msg, textTenantBtn));
   }
@@ -969,27 +993,35 @@
     });
   };
 
-  async function shortenLink(linkElId, btn) {
+  async function createShortLink(d, linkElId, btn) {
     const codeEl = document.getElementById(linkElId);
-    const longUrl = codeEl.textContent.trim();
-    if (longUrl.startsWith('https://is.gd/') || longUrl.startsWith('https://tinyurl.com/')) return; // already short
     const orig = btn.textContent;
-    btn.textContent = 'Shortening…';
+    btn.textContent = 'Creating…';
     btn.disabled = true;
     try {
-      const resp = await fetch('https://is.gd/create.php?format=simple&url=' + encodeURIComponent(longUrl));
-      if (!resp.ok) throw new Error('bad response');
-      const short = (await resp.text()).trim();
-      if (!short.startsWith('http')) throw new Error('unexpected: ' + short);
-      codeEl.textContent = short;
-      btn.textContent = 'Shortened ✓';
-      // auto-copy the short link for convenience
-      if (navigator.clipboard) navigator.clipboard.writeText(short).catch(() => {});
-      setTimeout(() => { btn.textContent = 'Copy short link'; btn.disabled = false; btn.onclick = () => copyLinkText(short, btn); }, 1200);
+      const resp = await fetch('/api/lease', {
+        method: 'POST',
+        headers: { 'Content-Type': 'text/plain' },
+        body: JSON.stringify(d),
+      });
+      if (!resp.ok) throw new Error('save failed (' + resp.status + ')');
+      const out = await resp.json();
+      if (!out.id) throw new Error('no id returned');
+      const shortUrl = location.origin + '/l/' + out.id;
+      codeEl.textContent = shortUrl;
+      btn.textContent = 'Short link ready ✓';
+      if (navigator.clipboard) navigator.clipboard.writeText(shortUrl).catch(() => {});
+      setTimeout(() => {
+        btn.textContent = 'Copy short link';
+        btn.disabled = false;
+        btn.onclick = () => copyLinkText(shortUrl, btn);
+      }, 1200);
+      return shortUrl;
     } catch (e) {
-      btn.textContent = 'Couldn\'t shorten — use Copy';
+      btn.textContent = "Couldn't create — use Copy link";
       btn.disabled = false;
-      setTimeout(() => { btn.textContent = orig; }, 2500);
+      setTimeout(() => { btn.textContent = orig; }, 3000);
+      return null;
     }
   }
 
@@ -1253,19 +1285,21 @@
         <div class="section-label">Landlord signing remotely</div>
         <div class="link-box"><code id="landlord-link">${esc(link)}</code></div>
         <div class="btn-row" style="margin-top:0;">
+          <button class="btn btn-brass" id="btn-shorten-landlord">Create short link to send</button>
           ${linkTooLong
-            ? `<button class="btn btn-brass" onclick="copyLink('landlord-link')">Copy link to paste into email or text</button>`
-            : `<a class="btn btn-brass" href="${mailtoBack}" style="text-decoration:none;display:inline-flex;align-items:center;">Email to landlord</a>
-               ${smsBack ? `<button class="btn btn-brass" id="btn-text-landlord">Text to landlord</button>` : ''}
+            ? `<button class="btn" onclick="copyLink('landlord-link')">Copy link</button>`
+            : `<a class="btn" href="${mailtoBack}" style="text-decoration:none;display:inline-flex;align-items:center;">Email to landlord</a>
+               ${smsBack ? `<button class="btn" id="btn-text-landlord">Text to landlord</button>` : ''}
                <button class="btn" onclick="copyLink('landlord-link')">Copy link</button>`
           }
         </div>
-        ${linkTooLong ? '<p class="hint" style="margin-top:0.75rem;">This link is long, so auto-filling an email or text isn\'t reliable — copy it and paste it in manually.</p>' : ''}
+        <p class="hint" style="margin-top:0.75rem;">Tap <strong>Create short link to send</strong> first — it makes a short link that texts and emails reliably.</p>
       </div>
     `;
     document.getElementById('btn-go-direct-landlord').addEventListener('click', () => {
       location.hash = '#lease=' + encodeState(d);
     });
+    document.getElementById('btn-shorten-landlord').addEventListener('click', function () { createShortLink(d, 'landlord-link', this); });
     const textLandlordBtn = document.getElementById('btn-text-landlord');
     if (textLandlordBtn) textLandlordBtn.addEventListener('click', () => trySmsOrCopy(smsBack, msg, textLandlordBtn));
     document.getElementById('btn-back-to-tenant-resign').addEventListener('click', () => {
