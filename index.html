@@ -98,6 +98,11 @@
   .row-remove { background: none; border: none; color: var(--slate); cursor: pointer; font-size: 1.125rem; padding: 0 0.375rem; line-height: 1; }
   .row-remove:hover { color: var(--danger); }
   .deposit-total { font-size: 0.875rem; color: var(--ink-soft); margin-top: 0.5rem; text-align: right; }
+  .confirm-row { display: flex; justify-content: space-between; gap: 1rem; padding: 0.6rem 0; border-bottom: 1px solid var(--paper-line); font-size: 0.95rem; }
+  .confirm-row:last-child { border-bottom: none; }
+  .confirm-row .clabel { color: var(--slate); }
+  .confirm-row .cval { font-weight: 600; text-align: right; }
+  .locked-note { font-size: 0.8125rem; color: var(--slate); margin-top: 0.75rem; }
   .sig-tabs { display: flex; gap: 0.5rem; margin: 0.75rem 0 0.5rem; }
   .sig-tab { font-family: 'Inter', sans-serif; font-size: 0.8125rem; font-weight: 500; padding: 0.4rem 0.875rem; border-radius: 4px; border: 1px solid var(--line); background: var(--card); color: var(--slate); cursor: pointer; }
   .sig-tab.active { background: var(--ink); color: var(--paper); border-color: var(--ink); }
@@ -371,7 +376,7 @@
   window.addEventListener('hashchange', route);
   route();
 
-  function header() {
+  function header(hideNav) {
     return `
       <div class="letterhead no-print">
         <svg class="letterhead-logo" width="46" height="46" viewBox="0 0 48 48" fill="none">
@@ -384,10 +389,10 @@
         <div class="letterhead-rule"></div>
         <div class="letterhead-tagline">Colorado residential lease preparation and execution</div>
       </div>
-      <div class="letterhead-nav no-print">
+      ${hideNav ? '' : `<div class="letterhead-nav no-print">
         <a class="step-back" style="margin:0 0 0 1rem;display:inline-flex;" href="#" onclick="location.hash='#/receipt';return false;">New receipt</a>
         <a class="step-back" style="margin:0;display:inline-flex;" href="#" onclick="location.hash='';return false;">Start a new lease</a>
-      </div>`;
+      </div>`}`;
   }
 
   function renderBadLink() {
@@ -806,20 +811,21 @@
   // ---------- SHARED SIGNATURE PANEL (type or draw) ----------
   const pads = {};
 
-  function signPanelHtml(idPrefix, title) {
+  function signPanelHtml(idPrefix, title, prefillName) {
+    const pre = prefillName || '';
     return `
       <div class="card no-print">
         <div class="section-label">${title}</div>
         <div class="field" style="max-width:360px;">
-          <label>Typed full legal name</label>
-          <input type="text" id="${idPrefix}-name" placeholder="Your full name">
+          <label>Full legal name${pre ? ' — please confirm it\'s spelled correctly' : ''}</label>
+          <input type="text" id="${idPrefix}-name" placeholder="Your full name" value="${esc(pre)}">
         </div>
         <div class="sig-tabs">
           <button type="button" class="sig-tab active" id="${idPrefix}-tab-type">Type</button>
           <button type="button" class="sig-tab" id="${idPrefix}-tab-draw">Draw</button>
         </div>
         <div id="${idPrefix}-type-panel">
-          <div class="sig-preview" id="${idPrefix}-preview"></div>
+          <div class="sig-preview" id="${idPrefix}-preview">${esc(pre)}</div>
         </div>
         <div id="${idPrefix}-draw-panel" style="display:none;">
           <div class="pad-wrap"><canvas class="pad" id="${idPrefix}-pad"></canvas></div>
@@ -1033,20 +1039,71 @@
   };
 
   function renderTenantSign(d) {
-    app.innerHTML = header() + `
-      <button class="step-back" id="btn-back-tenant-sign">&larr; Start this over</button>
-      <div class="banner banner-brass">Review this lease for ${esc(d.propertyAddress)}, then sign below.</div>
+    const termLine = d.termType === 'mtm'
+      ? 'Month-to-month, starting ' + fmtDate(d.startDate)
+      : fmtDate(d.startDate) + ' to ' + fmtDate(d.endDate);
+    let rentLine = fmtMoney(d.rent) + '/mo';
+    if (d.hasPetRent && parseFloat(d.petRentAmount) > 0) {
+      const total = (parseFloat(d.rent) || 0) + (parseFloat(d.petRentAmount) || 0) * (parseInt(d.petCount) || 0);
+      rentLine = fmtMoney(total) + '/mo (incl. pet rent)';
+    }
+    const deposits = Array.isArray(d.deposits) ? d.deposits : [];
+    const depositLine = deposits.length ? deposits.map(dep => dep.label + ': ' + fmtMoney(dep.amount)).join(', ') : 'None';
+
+    app.innerHTML = header(true) + `
+      <button class="step-back" id="btn-back-tenant-sign">&larr; Clear and start over</button>
+      <div class="banner banner-brass">Please review the details below, confirm your information, and sign.</div>
       <div class="paper" id="lease-paper">${leaseBody(d)}</div>
+
+      <div class="card no-print">
+        <div class="section-label">Confirm your information</div>
+        <p class="hint" style="margin-bottom:0.75rem;">Please make sure your name and contact details are spelled correctly — fix anything that's wrong.</p>
+        <div class="field"><label>Full legal name</label><input type="text" id="tc-name" value="${esc(d.tenantName || '')}"></div>
+        <div class="field-grid">
+          <div class="field"><label>Phone</label><input type="tel" id="tc-phone" value="${esc(d.tenantPhone || '')}" placeholder="(719) 555-0100"></div>
+          <div class="field"><label>Email</label><input type="email" id="tc-email" value="${esc(d.tenantEmail || '')}" placeholder="name@email.com"></div>
+        </div>
+      </div>
+
+      <div class="card no-print">
+        <div class="section-label">Confirm the lease terms</div>
+        <div class="confirm-row"><span class="clabel">Property</span><span class="cval">${esc(d.propertyAddress)}${d.unitLabel ? ', ' + esc(d.unitLabel) : ''}</span></div>
+        <div class="confirm-row"><span class="clabel">Term</span><span class="cval">${esc(termLine)}</span></div>
+        <div class="confirm-row"><span class="clabel">Rent</span><span class="cval">${esc(rentLine)}</span></div>
+        <div class="confirm-row"><span class="clabel">Deposit / fees</span><span class="cval">${esc(depositLine)}</span></div>
+        <p class="locked-note">These terms are set by the landlord. If anything here is wrong, don't sign — tap below to let them know and they'll send a corrected lease.</p>
+        <div class="btn-row" style="margin-top:0.75rem;">
+          <button class="btn" id="btn-flag-problem">Something here is wrong</button>
+        </div>
+      </div>
+
       ${uploadBoxHtml('idphoto', 'Photo ID (optional)', 'On a phone, this opens your camera. You can also choose a photo already saved.')}
       ${uploadBoxHtml('paystub', 'Proof of income (optional)', "A pay stub or similar document, for the landlord's records.")}
-      ${signPanelHtml('sig', 'Sign as tenant')}
+      ${signPanelHtml('sig', 'Sign as tenant', d.tenantName)}
       <div class="btn-row no-print">
-        <button class="btn btn-brass" id="btn-submit-tenant-sign">Sign lease &rarr;</button>
+        <button class="btn btn-brass" id="btn-submit-tenant-sign">Confirm &amp; sign &rarr;</button>
       </div>
     `;
     setupSignPanel('sig');
     wireUploadBox('idphoto');
     wireUploadBox('paystub');
+
+    // Keep the signature name field in sync if they correct their name above
+    const tcName = document.getElementById('tc-name');
+    tcName.addEventListener('input', () => {
+      const sigName = document.getElementById('sig-name');
+      sigName.value = tcName.value;
+      const preview = document.getElementById('sig-preview');
+      if (preview && !document.getElementById('sig-tab-draw').classList.contains('active')) preview.textContent = tcName.value;
+    });
+
+    document.getElementById('btn-flag-problem').addEventListener('click', () => {
+      const subject = 'Correction needed on lease — ' + d.propertyAddress;
+      const body = 'Hi, before I sign the lease for ' + d.propertyAddress + (d.unitLabel ? ', ' + d.unitLabel : '') + ', something in the terms needs to be corrected:\n\n[describe what is wrong here]\n\nThanks.';
+      const to = d.landlordEmail || '';
+      window.location.href = 'mailto:' + encodeURIComponent(to) + '?subject=' + encodeURIComponent(subject) + '&body=' + encodeURIComponent(body);
+    });
+
     document.getElementById('btn-back-tenant-sign').addEventListener('click', () => {
       if (confirm('Start this screen over? Anything you typed or uploaded here will be cleared.')) {
         window.__pendingUploads = {};
@@ -1056,6 +1113,10 @@
     document.getElementById('btn-submit-tenant-sign').addEventListener('click', () => {
       const result = readSignPanel('sig');
       if (!result) return;
+      // capture any corrections the tenant made to their own contact info
+      d.tenantName = document.getElementById('tc-name').value.trim() || d.tenantName;
+      d.tenantPhone = document.getElementById('tc-phone').value.trim();
+      d.tenantEmail = document.getElementById('tc-email').value.trim();
       d.tenantSignerName = result.name;
       d.tenantSignedAt = result.signedAt;
       if (result.image) d.tenantSignatureImage = result.image;
@@ -1075,7 +1136,7 @@
     const mailtoBack = 'mailto:' + encodeURIComponent(d.landlordEmail || '') + '?subject=' + encodeURIComponent(subject) + '&body=' + encodeURIComponent(emailBody);
     const smsBack = d.landlordPhone ? 'sms:' + encodeURIComponent(d.landlordPhone.replace(/[^\d+]/g, '')) + '?body=' + encodeURIComponent(msg) : '';
     const linkTooLong = link.length > 1800;
-    app.innerHTML = header() + `
+    app.innerHTML = header(true) + `
       <button class="step-back" id="btn-back-to-tenant-resign">&larr; Re-do my signature</button>
       <div class="banner banner-success">Signed. If your landlord is here, hand them the device now.</div>
       <div class="card">
