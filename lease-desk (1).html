@@ -9,27 +9,27 @@
 <link href="https://fonts.googleapis.com/css2?family=Playfair+Display:wght@600;700&family=Source+Serif+4:opsz,wght@8..60,400;8..60,600&family=Dancing+Script:wght@600&family=Inter:wght@400;500;600&display=swap" rel="stylesheet">
 <style>
   :root {
-    --ink: #1B1F2A; --ink-soft: #3A4152; --paper: #FBF9F4; --paper-line: #E8E1D3;
-    --slate: #6B6558; --brass: #A9862F; --brass-dark: #8A6D23; --line: #DDD5C3;
-    --burgundy: #6B1F2A; --burgundy-dark: #4E141C;
-    --card: #FFFFFF; --danger: #8C2F26; --success: #2F5D3A;
+    --ink: #2A2E38; --ink-soft: #55606F; --paper: #FCFBF9; --paper-line: #ECE7DD;
+    --slate: #7E7A70; --brass: #B08A3E; --brass-dark: #93712C; --line: #E6E0D5;
+    --burgundy: #9A4A55; --burgundy-dark: #7E3A45;
+    --card: #FFFFFF; --danger: #B0554C; --success: #4A8262;
   }
   @media (prefers-color-scheme: dark) {
     :root:not([data-theme="light"]) {
-      --ink: #EAE6DC; --ink-soft: #C9C2B0; --paper: #201D18; --paper-line: #38332A;
-      --slate: #A69E8C; --brass: #D3AD68; --brass-dark: #E6C27F; --line: #423B2E;
-      --burgundy: #B9525F; --burgundy-dark: #D9707C;
-      --card: #29251E; --danger: #E08072; --success: #7FC79E;
+      --ink: #EEEAE1; --ink-soft: #CFC8B9; --paper: #2A2823; --paper-line: #403A30;
+      --slate: #ABA391; --brass: #DCB878; --brass-dark: #ECCB8E; --line: #4A4336;
+      --burgundy: #C77E88; --burgundy-dark: #DE97A0;
+      --card: #33302A; --danger: #E89185; --success: #8FD3AC;
     }
   }
   :root[data-theme="dark"] {
-    --ink: #EAE6DC; --ink-soft: #C9C2B0; --paper: #201D18; --paper-line: #38332A;
-    --slate: #A69E8C; --brass: #D3AD68; --brass-dark: #E6C27F; --line: #423B2E;
-    --burgundy: #B9525F; --burgundy-dark: #D9707C;
-    --card: #29251E; --danger: #E08072; --success: #7FC79E;
+    --ink: #EEEAE1; --ink-soft: #CFC8B9; --paper: #2A2823; --paper-line: #403A30;
+    --slate: #ABA391; --brass: #DCB878; --brass-dark: #ECCB8E; --line: #4A4336;
+    --burgundy: #C77E88; --burgundy-dark: #DE97A0;
+    --card: #33302A; --danger: #E89185; --success: #8FD3AC;
   }
   * { box-sizing: border-box; }
-  body { margin: 0; background: var(--paper); color: var(--ink); font-family: 'Inter', sans-serif; -webkit-font-smoothing: antialiased; }
+  body { margin: 0; background: var(--paper); color: var(--ink); font-family: 'Inter', sans-serif; font-size: 1.0625rem; -webkit-font-smoothing: antialiased; }
   .app { max-width: 900px; margin: 0 auto; padding: 0 1.25rem 5rem; }
   .letterhead { text-align: center; padding: 2.25rem 0 1.25rem; margin-bottom: 2rem; }
   .letterhead-logo { display: block; margin: 0 auto 0.625rem; }
@@ -40,7 +40,7 @@
   .letterhead-nav { text-align: right; margin: 0.75rem 0 -0.5rem; }
   .brand-row { display: none; }
   h1 { font-family: 'Playfair Display', serif; font-weight: 700; font-size: 1.875rem; margin: 0 0 0.375rem; }
-  .subhead { color: var(--slate); font-size: 0.9375rem; margin: 0 0 2rem; max-width: 62ch; line-height: 1.55; }
+  .subhead { color: var(--ink-soft); font-size: 1rem; margin: 0 0 2rem; max-width: 62ch; line-height: 1.6; }
   .btn { font-family: 'Inter', sans-serif; font-size: 0.875rem; font-weight: 500; padding: 0.625rem 1.125rem; border-radius: 4px; border: 1px solid var(--line); background: var(--card); color: var(--ink); cursor: pointer; transition: background .15s, border-color .15s; }
   .btn:hover { border-color: var(--slate); }
   .btn-primary { background: var(--burgundy); color: #FBF9F4; border-color: var(--burgundy); }
@@ -55,8 +55,8 @@
   @media (max-width: 560px) { .field-grid { grid-template-columns: 1fr; } }
   .field { display: flex; flex-direction: column; gap: 0.375rem; margin-bottom: 1rem; }
   .field.full { grid-column: 1 / -1; }
-  label { font-size: 0.8125rem; font-weight: 500; color: var(--ink-soft); }
-  .hint { font-size: 0.75rem; color: var(--slate); margin-top: -2px; }
+  label { font-size: 0.875rem; font-weight: 500; color: var(--ink-soft); }
+  .hint { font-size: 0.8125rem; color: var(--ink-soft); margin-top: -2px; }
   input[type="text"], input[type="email"], input[type="tel"], input[type="number"], input[type="date"], select, textarea {
     font-family: 'Inter', sans-serif; font-size: 0.9375rem; padding: 0.625rem 0.75rem;
     border: 1px solid var(--line); border-radius: 4px; background: var(--paper); color: var(--ink); width: 100%;
@@ -67,7 +67,7 @@
   .radio-row { display: flex; gap: 1.25rem; margin-bottom: 1rem; }
   .radio-opt { display: flex; align-items: center; gap: 0.4rem; font-size: 0.875rem; }
   .error-text { color: var(--danger); font-size: 0.8125rem; margin-top: 4px; }
-  .paper { background: var(--card); border: 1px solid var(--paper-line); border-top: 4px double var(--ink); border-bottom: 4px double var(--ink); border-radius: 0; padding: 3rem; font-family: 'Source Serif 4', serif; font-size: 0.9375rem; line-height: 1.65; max-width: 680px; margin: 0 auto; }
+  .paper { background: var(--card); border: 1px solid var(--line); border-top: 3px solid var(--brass); border-radius: 8px; padding: 3rem; font-family: 'Source Serif 4', serif; font-size: 1rem; line-height: 1.7; max-width: 680px; margin: 0 auto; }
   @media (max-width: 700px) { .paper { padding: 1.75rem 1.5rem; } }
   .paper h2 { font-family: 'Playfair Display', serif; font-size: 1.5rem; font-weight: 700; text-align: center; margin: 0 0 1.75rem; }
   .paper h3 { font-size: 1rem; font-weight: 600; margin: 1.5rem 0 0.5rem; }
@@ -122,6 +122,54 @@
   let landlordDraft = null;
 
   function esc(s) { return (s || '').replace(/[&<>"']/g, c => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c])); }
+
+  const PROPERTIES = (() => {
+    const base = [
+      { street: '2043 East 4th Street', cityZip: 'Pueblo, Colorado 81001', entity: 'TLDR Enterprise LLC' },
+      { street: '2045 East 4th Street', cityZip: 'Pueblo, CO 81001', entity: 'TLDR Enterprise LLC' },
+      { street: '310 Catalina Court', cityZip: 'Colorado Springs, CO 80906', entity: 'Catalina 310 LLC' },
+      { street: '312 Catalina Court', cityZip: 'Colorado Springs, Colorado 80906', entity: 'DiOrio House LLC' },
+      { street: '625 Brinn Court', cityZip: 'Colorado Springs, Colorado 80911', entity: 'Leslie French' },
+      { street: '2420 E Willamette Ave', cityZip: 'Colorado Springs, CO 80909', entity: 'Bregitta Place LLC' },
+      { street: '2728 Casden Cir', cityZip: 'Colorado Springs, CO 80909', entity: 'Casden LLC' },
+      { street: '4258 Deerfield Hills Rd', cityZip: 'Colorado Springs, CO 80916', entity: '4258 Deerfield LLC' },
+      { street: '4166 Deerfield Hills Rd', cityZip: 'Colorado Springs, CO 80916', entity: '4116 Deerfield LLC' },
+      { street: '410 Windsor Ln', cityZip: 'Fountain, CO 80817', entity: 'Windsor 410 LLC' },
+      { street: '412 Windsor Ln', cityZip: 'Fountain, CO 80817', entity: 'Windsor 410 LLC' },
+      { street: '414 Windsor Ln', cityZip: 'Fountain, CO 80817', entity: '414 Windsor Lane LLC' },
+      { street: '416 Windsor Ln', cityZip: 'Fountain, CO 80817', entity: '414 Windsor Lane LLC' },
+      { street: '4445 London Ln', cityZip: 'Colorado Springs, CO 80916', entity: '4445 London LLC' },
+      { street: '4208 Loomis Ave', cityZip: 'Colorado Springs, CO 80906', entity: '4208 Loomis LLC' },
+      { street: '4210 Loomis Ave', cityZip: 'Colorado Springs, CO 80906', entity: '4210 Loomis LLC' },
+      { street: '4206 Loomis Ave', cityZip: 'Colorado Springs, CO 80906', entity: 'Trumaine Hughes' },
+      { street: '544 E Platte Ave', cityZip: 'Colorado Springs, CO 80903', entity: 'Leslie French' },
+    ];
+    const list = base.map(p => ({ ...p, unit: '', label: p.street + ' — ' + p.cityZip }));
+    for (let i = 1; i <= 11; i++) {
+      list.push({ street: '411 Troy Ave', unit: 'Unit ' + i, cityZip: 'Pueblo, Colorado 81001', entity: 'TLDR Enterprise LLC', label: '411 Troy Ave, Unit ' + i + ' — Pueblo, CO 81001' });
+    }
+    return list;
+  })();
+
+  const ENTITIES = (() => {
+    const seen = new Set();
+    const out = [];
+    PROPERTIES.forEach(p => { if (p.entity && !seen.has(p.entity)) { seen.add(p.entity); out.push(p.entity); } });
+    return out.sort();
+  })();
+
+  function entityOptionsHtml(selected) {
+    return ENTITIES.map(e => `<option value="${esc(e)}"${e === selected ? ' selected' : ''}>${esc(e)}</option>`).join('') +
+      `<option value="__other__"${selected && !ENTITIES.includes(selected) ? ' selected' : ''}>Other (type it in)…</option>`;
+  }
+
+  function propertyDatalistHtml(id) {
+    return `<datalist id="${id}">${PROPERTIES.map(p => `<option value="${esc(p.label)}">`).join('')}</datalist>`;
+  }
+
+  function findPropertyByLabel(label) {
+    return PROPERTIES.find(p => p.label === label);
+  }
   function fmtMoney(n) { const v = parseFloat(n); if (isNaN(v)) return '$0.00'; return '$' + v.toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 }); }
   function fmtDate(iso) { if (!iso) return ''; const [y,m,d] = iso.split('-').map(Number); return new Date(y,m-1,d).toLocaleDateString('en-US',{year:'numeric',month:'long',day:'numeric'}); }
   function fmtDateTime(ts) { if (!ts) return ''; return new Date(ts).toLocaleString('en-US',{dateStyle:'medium',timeStyle:'short'}); }
@@ -355,16 +403,36 @@
         <div class="card">
           <div class="section-label">Landlord</div>
           <div class="field-grid">
-            <div class="field"><label>Landlord / entity name</label><input type="text" id="f-entity" placeholder="TLDR Enterprise LLC" required></div>
+            <div class="field">
+              <label>Landlord / entity name</label>
+              <select id="f-entity-select">${entityOptionsHtml('TLDR Enterprise LLC')}</select>
+              <input type="text" id="f-entity" placeholder="Type the entity name" required style="margin-top:0.5rem;display:none;">
+            </div>
             <div class="field"><label>Managing agent (optional)</label><input type="text" id="f-agent" placeholder="Leave blank if same as above"></div>
-            <div class="field"><label>Your email (tenant sends the signed lease back here)</label><input type="email" id="f-landlordemail" placeholder="you@email.com" required></div>
-            <div class="field"><label>Your phone (optional, for text)</label><input type="tel" id="f-landlordphone" placeholder="(719) 555-0100"></div>
+            <div class="field">
+              <label>Your email (tenant sends the signed lease back here)</label>
+              <select id="f-landlordemail-select">
+                <option value="TLDRenterprise@gmail.com" selected>TLDRenterprise@gmail.com</option>
+                <option value="Gracefulomllc@gmail.com">Gracefulomllc@gmail.com</option>
+                <option value="__other__">Other (type it in)…</option>
+              </select>
+              <input type="email" id="f-landlordemail" placeholder="Type the email" required style="margin-top:0.5rem;display:none;">
+            </div>
+            <div class="field">
+              <label>Your phone (optional, for text)</label>
+              <select id="f-landlordphone-select">
+                <option value="7193597502" selected>(719) 359-7502</option>
+                <option value="__other__">Other (type it in)…</option>
+                <option value="__none__">No phone / skip</option>
+              </select>
+              <input type="tel" id="f-landlordphone" placeholder="Type the phone number" style="margin-top:0.5rem;display:none;">
+            </div>
           </div>
         </div>
         <div class="card">
           <div class="section-label">Property</div>
           <div class="field-grid">
-            <div class="field full"><label>Street address</label><input type="text" id="f-address" placeholder="2043 East 4th Street" required></div>
+            <div class="field full"><label>Street address</label><input type="text" id="f-address" list="property-datalist" placeholder="Start typing or pick a saved property" required>${propertyDatalistHtml('property-datalist')}</div>
             <div class="field"><label>Unit / apt (optional)</label><input type="text" id="f-unit" placeholder="Unit B"></div>
             <div class="field"><label>City, state, ZIP</label><input type="text" id="f-cityzip" placeholder="Pueblo, Colorado 81001" required></div>
           </div>
@@ -430,6 +498,9 @@
             <p class="hint">Colorado caps late fees at $50 or 5% of rent, whichever is greater, once per late month.</p>
           </div>
           <div class="field full"><label>Pet policy</label><textarea id="f-pets">No pets are permitted on the Leased Property without the Landlord's prior written approval.</textarea></div>
+          <label style="display:flex;align-items:center;gap:0.5rem;font-size:0.875rem;margin-top:0.5rem;">
+            <input type="checkbox" id="f-sharedutils" style="width:auto;"> This unit shares a utility meter with another unit (adds a RUBS disclosure clause)
+          </label>
           <div class="field full">
             <label>Additional clauses (optional)</label>
             <textarea id="f-additional" placeholder="Anything specific to this unit or tenant"></textarea>
@@ -441,6 +512,68 @@
         </div>
       </form>
     `;
+    const entitySelect = document.getElementById('f-entity-select');
+    const entityInput = document.getElementById('f-entity');
+    function syncEntityFromSelect() {
+      if (entitySelect.value === '__other__') {
+        entityInput.style.display = '';
+        entityInput.required = true;
+        if (ENTITIES.includes(entityInput.value)) entityInput.value = '';
+      } else {
+        entityInput.style.display = 'none';
+        entityInput.required = false;
+        entityInput.value = entitySelect.value;
+      }
+    }
+    entitySelect.addEventListener('change', syncEntityFromSelect);
+    syncEntityFromSelect();
+
+    const emailSelect = document.getElementById('f-landlordemail-select');
+    const emailInput = document.getElementById('f-landlordemail');
+    function syncEmailFromSelect() {
+      if (emailSelect.value === '__other__') {
+        emailInput.style.display = ''; emailInput.required = true;
+        if (['TLDRenterprise@gmail.com', 'Gracefulomllc@gmail.com'].includes(emailInput.value)) emailInput.value = '';
+      } else {
+        emailInput.style.display = 'none'; emailInput.required = false;
+        emailInput.value = emailSelect.value;
+      }
+    }
+    emailSelect.addEventListener('change', syncEmailFromSelect);
+    syncEmailFromSelect();
+
+    const phoneSelect = document.getElementById('f-landlordphone-select');
+    const phoneInput = document.getElementById('f-landlordphone');
+    function syncPhoneFromSelect() {
+      if (phoneSelect.value === '__other__') {
+        phoneInput.style.display = '';
+        if (phoneInput.value === '7193597502') phoneInput.value = '';
+      } else if (phoneSelect.value === '__none__') {
+        phoneInput.style.display = 'none'; phoneInput.value = '';
+      } else {
+        phoneInput.style.display = 'none'; phoneInput.value = phoneSelect.value;
+      }
+    }
+    phoneSelect.addEventListener('change', syncPhoneFromSelect);
+    syncPhoneFromSelect();
+
+    document.getElementById('f-address').addEventListener('input', (e) => {
+      const match = findPropertyByLabel(e.target.value);
+      if (match) {
+        e.target.value = match.street;
+        document.getElementById('f-unit').value = match.unit;
+        document.getElementById('f-cityzip').value = match.cityZip;
+        if (match.entity) {
+          if (ENTITIES.includes(match.entity)) {
+            entitySelect.value = match.entity;
+          } else {
+            entitySelect.value = '__other__';
+          }
+          syncEntityFromSelect();
+          entityInput.value = match.entity;
+        }
+      }
+    });
     document.querySelectorAll('input[name="f-termtype"]').forEach(r => r.addEventListener('change', () => {
       const mtm = document.querySelector('input[name="f-termtype"]:checked').value === 'mtm';
       document.getElementById('end-date-field').style.display = mtm ? 'none' : '';
@@ -548,6 +681,7 @@
         deposits: depositRows.filter(r => r.label.trim() !== '' || parseFloat(r.amount) > 0).map(r => ({ label: r.label.trim() || 'Deposit', amount: r.amount || '0', status: r.status })),
         lateFee: document.getElementById('f-latefee').value.trim(),
         pets: document.getElementById('f-pets').value.trim(),
+        hasSharedUtilities: document.getElementById('f-sharedutils').checked,
         additional: document.getElementById('f-additional').value.trim(),
         createdDate: new Date().toISOString().slice(0,10),
       };
@@ -575,7 +709,7 @@
     if (d.termType === 'mtm') {
       termParagraph = `This Lease is a month-to-month tenancy, starting on ${fmtDate(d.startDate)} ("Start Date"). Either party may terminate this tenancy by providing written notice in accordance with Colorado law.`;
     } else {
-      termParagraph = `This Lease shall be for a fixed term, starting on ${fmtDate(d.startDate)} ("Start Date") and ending on ${fmtDate(d.endDate)} ("Termination Date"). The Tenant will be entitled to possession of the Leased Property beginning on the Start Date and shall maintain possession until the Termination Date unless terminated through approved methods outlined in this Lease or under Colorado law. In the event that the Tenant fails to serve a written notice on the Landlord at least 30 days before the Termination Date stating their intention not to renew, this Lease shall, at the Landlord's option, be deemed renewed and converted into a month-to-month lease on the same terms, covenants, and conditions herein contained.`;
+      termParagraph = `This Lease shall be for a fixed term, starting on ${fmtDate(d.startDate)} ("Start Date") and ending on ${fmtDate(d.endDate)} ("Termination Date"). The Tenant will be entitled to possession of the Leased Property beginning on the Start Date and shall maintain possession until the Termination Date unless terminated through approved methods outlined in this Lease or under Colorado law. At the expiration of the Termination Date, unless the Landlord serves a lawful non-renewal or no-fault notice as permitted under Colorado law, or the Tenant provides written notice of non-renewal at least thirty (30) days before the Termination Date, this tenancy shall continue on a month-to-month basis under the same terms and conditions contained in this Lease.`;
     }
     let depositParagraph;
     const deposits = Array.isArray(d.deposits) ? d.deposits : [];
@@ -611,9 +745,13 @@
       <h3>Rent</h3><p>${rentClause}</p>
       <h3>Security Deposit and Fees</h3><p>${depositParagraph}</p>
       <h3>Late Fee</h3><p>${esc(d.lateFee)}</p>
+      <h3>Application of Payments</h3><p>Unless prohibited by applicable law, payments received from the Tenant shall be applied first to the base monthly Rent then due, and only after Rent is satisfied to any other outstanding lawful charges under this Lease, such as utility reimbursements, repair charges, or late fees. Late fees are not Rent and nonpayment of a late fee alone is not grounds for termination of this Lease or eviction.</p>
       <h3>Utilities</h3><p>The Tenant agrees to pay all charges for utilities used in or on the Leased Property during the term of this Lease, unless otherwise agreed in writing.</p>
+      <h3>Utility Account Maintenance</h3><p>Where the Tenant is responsible for utility accounts under this Lease, the Tenant shall keep those accounts active and in the Tenant's name without interruption for the full term. If an account reverts to the Landlord's name due to the Tenant's non-payment or account closure, the Tenant shall reimburse the Landlord the actual billed amount within fifteen (15) days of invoice, plus any reconnection fee charged by the utility provider.</p>
+      ${d.hasSharedUtilities ? `<p>The Leased Property shares one or more utility meters with another unit at the property. Utility costs are allocated using a Ratio Utility Billing System (RUBS), and the Landlord will provide the Tenant with a written disclosure showing how the allocation is calculated, as required by Colorado law.</p>` : ''}
       <h3>Property Maintenance</h3><p>The Tenant is entitled to safe and healthy housing under Colorado's warranty of habitability, and the Landlord is prohibited by law from retaliating against the Tenant for reporting unsafe conditions, requesting repairs, or exercising this right. The Landlord shall maintain the Leased Property in reasonably good repair and perform repairs reasonably necessary to satisfy the implied warranty of habitability.</p>
       <h3>Landlord Access</h3><p>The Landlord or Landlord's agents may enter the Leased Property during reasonable hours for inspection, repairs, or in case of emergency, with at least twenty-four (24) hours' written notice except in an emergency.</p>
+      <h3>Annual Renewal Inspection</h3><p>In addition to the general right of entry above, the Landlord reserves the right to conduct a preventive maintenance inspection within thirty (30) days before or after any lease renewal date, with at least forty-eight (48) hours' advance written notice. The Tenant agrees to provide unobstructed access to plumbing fixtures, water shut-offs, electrical panels, smoke and carbon monoxide detectors, and HVAC and water heater equipment for this inspection.</p>
       <h3>Pets</h3><p>${esc(d.pets)}</p>
       <h3>Use of Leased Property</h3><p>The Leased Property shall be used solely as a private residence. The Tenant shall not use the Leased Property for any illegal purpose, any commercial or business activity, or in any manner that constitutes a nuisance or interferes with the quiet enjoyment of neighboring occupants. Violation of this provision constitutes a material default of this Lease.</p>
       <h3>Guests and Occupancy</h3><p>Only the individuals named as Tenant on this Lease may reside at the Leased Property. Any other person staying at the Leased Property for more than fourteen (14) days in any twelve-month period, whether consecutive or not, shall be considered an unauthorized occupant and a material default of this Lease unless approved in writing by the Landlord in advance.</p>
@@ -635,7 +773,7 @@
       </p>
       <h3>No Waiver</h3><p>The Landlord's failure to enforce any provision of this Lease, or acceptance of a partial or late payment, does not waive the Landlord's right to enforce that provision or any other provision later, and does not waive any right to pursue possession or damages for the default.</p>
       <h3>Governing Law and Venue</h3><p>This Lease shall be construed in accordance with the laws of the State of Colorado. Venue for any legal proceeding arising from this Lease shall be the county in which the Leased Property is located. This Lease contains the entire agreement of the parties and may be modified only in writing signed by both parties. If any provision of this Lease is found invalid or unenforceable, the remaining provisions remain in full force and effect.</p>
-      <h3>Electronic Signatures</h3><p>The parties agree that this Lease may be signed electronically, and that an electronic signature has the same legal effect as a handwritten signature under the federal ESIGN Act and Colorado's Uniform Electronic Transactions Act.</p>
+      <h3>Electronic Signatures</h3><p>The parties agree that this Lease may be signed electronically, and that an electronic signature has the same legal effect and enforceability as a handwritten signature under applicable federal and Colorado law.</p>
     `;
   }
 
@@ -771,7 +909,7 @@
         <div class="section-label">Signing in person</div>
         <p class="hint" style="margin-bottom:0.75rem;">If the tenant is with you now, skip email or text — hand them this device to sign directly.</p>
         <div class="btn-row" style="margin-top:0;">
-          <button class="btn btn-primary" onclick='goDirect(${JSON.stringify(JSON.stringify(d))})'>Hand device to tenant to sign now</button>
+          <button class="btn btn-primary" id="btn-go-direct-tenant">Hand device to tenant to sign now</button>
         </div>
       </div>
       <div class="card no-print">
@@ -781,19 +919,19 @@
           ${linkTooLong
             ? `<button class="btn btn-brass" onclick="copyLink('tenant-link')">Copy link to paste into email or text</button>`
             : `<a class="btn btn-brass" href="${mailto}" style="text-decoration:none;display:inline-flex;align-items:center;">Email to tenant</a>
-               ${sms ? `<a class="btn btn-brass" href="${sms}" style="text-decoration:none;display:inline-flex;align-items:center;">Text to tenant</a>` : ''}
+               ${sms ? `<button class="btn btn-brass" id="btn-text-tenant">Text to tenant</button>` : ''}
                <button class="btn" onclick="copyLink('tenant-link')">Copy link</button>`
           }
         </div>
         <p class="hint" style="margin-top:1rem;">${linkTooLong ? 'This link is long, so auto-filling an email or text isn\'t reliable — copy it and paste it in manually. ' : (sms ? 'Send by either or both — whichever they\'ll actually see. ' : 'Add a tenant phone number on the previous step to also enable texting. ')}Once they sign, they'll send it back to ${esc(d.landlordEmail)}${d.landlordPhone ? ' or text it to ' + esc(d.landlordPhone) : ''} for your signature.</p>
       </div>
     `;
+    document.getElementById('btn-go-direct-tenant').addEventListener('click', () => {
+      location.hash = '#lease=' + encodeState(d);
+    });
+    const textTenantBtn = document.getElementById('btn-text-tenant');
+    if (textTenantBtn) textTenantBtn.addEventListener('click', () => trySmsOrCopy(sms, msg, textTenantBtn));
   }
-
-  window.goDirect = function (dJson) {
-    const d = JSON.parse(dJson);
-    location.hash = '#lease=' + encodeState(d);
-  };
 
   window.copyLink = function (elId) {
     const text = document.getElementById(elId).textContent;
@@ -804,6 +942,37 @@
       setTimeout(() => { btn.textContent = orig; }, 1500);
     });
   };
+
+  function trySmsOrCopy(smsHref, message, btn) {
+    let navigated = false;
+    const orig = btn.textContent;
+    // If the page is still here after trying, the sms link was blocked — fall back to clipboard.
+    const fallback = () => {
+      if (navigated) return;
+      if (navigator.clipboard) {
+        navigator.clipboard.writeText(message).then(() => {
+          btn.textContent = 'Copied — paste into a text';
+          setTimeout(() => { btn.textContent = orig; }, 2500);
+        }).catch(() => {
+          btn.textContent = 'Couldn\'t open — use Copy link';
+          setTimeout(() => { btn.textContent = orig; }, 2500);
+        });
+      } else {
+        btn.textContent = 'Couldn\'t open — use Copy link';
+        setTimeout(() => { btn.textContent = orig; }, 2500);
+      }
+    };
+    // Detect if we actually left/backgrounded the page (i.e. Messages opened).
+    const onHide = () => { navigated = true; };
+    document.addEventListener('visibilitychange', onHide, { once: true });
+    window.addEventListener('pagehide', onHide, { once: true });
+    try { window.location.href = smsHref; } catch (e) {}
+    setTimeout(() => {
+      document.removeEventListener('visibilitychange', onHide);
+      window.removeEventListener('pagehide', onHide);
+      fallback();
+    }, 700);
+  }
 
   // ---------- SHARED LINK VIEW ----------
   function renderLeaseView(d) {
@@ -853,33 +1022,38 @@
 
   function renderTenantSign(d) {
     app.innerHTML = header() + `
+      <button class="step-back" id="btn-back-tenant-sign">&larr; Start this over</button>
       <div class="banner banner-brass">Review this lease for ${esc(d.propertyAddress)}, then sign below.</div>
       <div class="paper" id="lease-paper">${leaseBody(d)}</div>
       ${uploadBoxHtml('idphoto', 'Photo ID (optional)', 'On a phone, this opens your camera. You can also choose a photo already saved.')}
       ${uploadBoxHtml('paystub', 'Proof of income (optional)', "A pay stub or similar document, for the landlord's records.")}
       ${signPanelHtml('sig', 'Sign as tenant')}
       <div class="btn-row no-print">
-        <button class="btn btn-brass" onclick='submitTenantSign(${JSON.stringify(JSON.stringify(d))})'>Sign lease &rarr;</button>
+        <button class="btn btn-brass" id="btn-submit-tenant-sign">Sign lease &rarr;</button>
       </div>
     `;
     setupSignPanel('sig');
     wireUploadBox('idphoto');
     wireUploadBox('paystub');
+    document.getElementById('btn-back-tenant-sign').addEventListener('click', () => {
+      if (confirm('Start this screen over? Anything you typed or uploaded here will be cleared.')) {
+        window.__pendingUploads = {};
+        renderTenantSign(d);
+      }
+    });
+    document.getElementById('btn-submit-tenant-sign').addEventListener('click', () => {
+      const result = readSignPanel('sig');
+      if (!result) return;
+      d.tenantSignerName = result.name;
+      d.tenantSignedAt = result.signedAt;
+      if (result.image) d.tenantSignatureImage = result.image;
+      const uploads = window.__pendingUploads || {};
+      if (uploads.idphoto) d.tenantIdImage = uploads.idphoto;
+      if (uploads.paystub) d.tenantPayStubImage = uploads.paystub;
+      celebrate();
+      renderTenantSentToLandlord(d);
+    });
   }
-
-  window.submitTenantSign = function (dJson) {
-    const d = JSON.parse(dJson);
-    const result = readSignPanel('sig');
-    if (!result) return;
-    d.tenantSignerName = result.name;
-    d.tenantSignedAt = result.signedAt;
-    if (result.image) d.tenantSignatureImage = result.image;
-    const uploads = window.__pendingUploads || {};
-    if (uploads.idphoto) d.tenantIdImage = uploads.idphoto;
-    if (uploads.paystub) d.tenantPayStubImage = uploads.paystub;
-    celebrate();
-    renderTenantSentToLandlord(d);
-  };
 
   function renderTenantSentToLandlord(d) {
     const link = baseUrl() + '#lease=' + encodeState(d);
@@ -890,11 +1064,12 @@
     const smsBack = d.landlordPhone ? 'sms:' + encodeURIComponent(d.landlordPhone.replace(/[^\d+]/g, '')) + '?body=' + encodeURIComponent(msg) : '';
     const linkTooLong = link.length > 1800;
     app.innerHTML = header() + `
+      <button class="step-back" id="btn-back-to-tenant-resign">&larr; Re-do my signature</button>
       <div class="banner banner-success">Signed. If your landlord is here, hand them the device now.</div>
       <div class="card">
         <div class="section-label">Landlord signing in person</div>
         <div class="btn-row" style="margin-top:0;">
-          <button class="btn btn-primary" onclick='goDirect(${JSON.stringify(JSON.stringify(d))})'>Hand device to landlord to sign now</button>
+          <button class="btn btn-primary" id="btn-go-direct-landlord">Hand device to landlord to sign now</button>
         </div>
       </div>
       <div class="card">
@@ -904,13 +1079,24 @@
           ${linkTooLong
             ? `<button class="btn btn-brass" onclick="copyLink('landlord-link')">Copy link to paste into email or text</button>`
             : `<a class="btn btn-brass" href="${mailtoBack}" style="text-decoration:none;display:inline-flex;align-items:center;">Email to landlord</a>
-               ${smsBack ? `<a class="btn btn-brass" href="${smsBack}" style="text-decoration:none;display:inline-flex;align-items:center;">Text to landlord</a>` : ''}
+               ${smsBack ? `<button class="btn btn-brass" id="btn-text-landlord">Text to landlord</button>` : ''}
                <button class="btn" onclick="copyLink('landlord-link')">Copy link</button>`
           }
         </div>
         ${linkTooLong ? '<p class="hint" style="margin-top:0.75rem;">This link is long, so auto-filling an email or text isn\'t reliable — copy it and paste it in manually.</p>' : ''}
       </div>
     `;
+    document.getElementById('btn-go-direct-landlord').addEventListener('click', () => {
+      location.hash = '#lease=' + encodeState(d);
+    });
+    const textLandlordBtn = document.getElementById('btn-text-landlord');
+    if (textLandlordBtn) textLandlordBtn.addEventListener('click', () => trySmsOrCopy(smsBack, msg, textLandlordBtn));
+    document.getElementById('btn-back-to-tenant-resign').addEventListener('click', () => {
+      if (confirm('Clear your signature and sign again?')) {
+        delete d.tenantSignerName; delete d.tenantSignedAt; delete d.tenantSignatureImage;
+        renderTenantSign(d);
+      }
+    });
   }
 
   function attachmentsPageHtml(d) {
@@ -926,26 +1112,30 @@
 
   function renderLandlordSignFromLink(d) {
     app.innerHTML = header() + `
+      <button class="step-back" id="btn-back-landlord-sign">&larr; Start this over</button>
       <div class="banner banner-brass">${esc(d.tenantSignerName)} has signed. Review and sign below.</div>
       <div class="paper" id="lease-paper">${leaseBody(d)}${sigBlockHtml(d)}${attachmentsPageHtml(d)}</div>
       ${signPanelHtml('lsig', 'Sign as landlord')}
       <div class="btn-row no-print">
-        <button class="btn btn-brass" onclick='submitLandlordSign(${JSON.stringify(JSON.stringify(d))})'>Sign &amp; complete lease</button>
+        <button class="btn btn-brass" id="btn-submit-landlord-sign">Sign &amp; complete lease</button>
       </div>
     `;
     setupSignPanel('lsig');
+    document.getElementById('btn-back-landlord-sign').addEventListener('click', () => {
+      if (confirm('Start this screen over? Anything you typed here will be cleared.')) {
+        renderLandlordSignFromLink(d);
+      }
+    });
+    document.getElementById('btn-submit-landlord-sign').addEventListener('click', () => {
+      const result = readSignPanel('lsig');
+      if (!result) return;
+      d.landlordSignerName = result.name;
+      d.landlordSignedAt = result.signedAt;
+      if (result.image) d.landlordSignatureImage = result.image;
+      celebrate();
+      location.hash = '#lease=' + encodeState(d);
+    });
   }
-
-  window.submitLandlordSign = function (dJson) {
-    const d = JSON.parse(dJson);
-    const result = readSignPanel('lsig');
-    if (!result) return;
-    d.landlordSignerName = result.name;
-    d.landlordSignedAt = result.signedAt;
-    if (result.image) d.landlordSignatureImage = result.image;
-    celebrate();
-    location.hash = '#lease=' + encodeState(d);
-  };
 
   function renderCompleted(d) {
     const link = baseUrl() + '#lease=' + encodeState(d);
@@ -960,21 +1150,28 @@
         <div class="btn-row" style="margin-top:0;">
           <button class="btn" onclick="copyLink('final-link')">Copy link</button>
           <button class="btn btn-primary" onclick="window.print()">Print / save as PDF</button>
-          <button class="btn" onclick='downloadRecord(${JSON.stringify(JSON.stringify(d))})'>Download record</button>
+          <button class="btn" id="btn-download-record">Download record</button>
         </div>
       </div>
       <div class="card no-print">
         <div class="section-label">Collected a payment for this lease?</div>
         <p class="hint" style="margin-bottom:0.75rem;">Record what was actually received today — full rent, prorated rent, a deposit, or any mix — as its own receipt.</p>
         <div class="btn-row" style="margin-top:0;">
-          <button class="btn" onclick='renderReceiptForm(${JSON.stringify(JSON.stringify({propertyAddress: d.propertyAddress + (d.unitLabel ? ", " + d.unitLabel : ""), tenantName: [d.tenantName, d.tenantName2].filter(Boolean).join(" and "), entity: d.entity}))})'>New receipt for this tenant</button>
+          <button class="btn" id="btn-new-receipt-for-tenant">New receipt for this tenant</button>
         </div>
       </div>
     `;
+    document.getElementById('btn-download-record').addEventListener('click', () => downloadRecord(d));
+    document.getElementById('btn-new-receipt-for-tenant').addEventListener('click', () => {
+      renderReceiptForm({
+        propertyAddress: d.propertyAddress + (d.unitLabel ? ', ' + d.unitLabel : ''),
+        tenantName: [d.tenantName, d.tenantName2].filter(Boolean).join(' and '),
+        entity: d.entity,
+      });
+    });
   }
 
-  window.downloadRecord = async function (dJson) {
-    const d = JSON.parse(dJson);
+  async function downloadRecord(d) {
     const paper = document.getElementById('lease-paper');
     const html = `<!DOCTYPE html><html><head><meta charset="UTF-8"><title>Signed Lease</title>
       <style>body{font-family:Georgia,serif;max-width:720px;margin:2rem auto;padding:0 1rem;line-height:1.6;}
@@ -990,7 +1187,7 @@
       try { await downloads.save({ filename: fname, data: html }); return; } catch (e) {}
     }
     window.print();
-  };
+  }
 
   // ---------- RECEIPTS (separate from the lease) ----------
   let receiptRows = [{ label: 'Rent (prorated)', amount: '' }];
@@ -999,13 +1196,14 @@
   function renderReceiptForm(prefill) {
     const pre = prefill || {};
     app.innerHTML = header() + `
+      <button class="step-back" onclick="location.hash='';return false;">&larr; Back to lease</button>
       <h1>New receipt</h1>
       <p class="subhead">Record what was actually collected today — full rent, prorated rent, a security deposit, or any mix. This isn't part of the lease; it's its own record.</p>
       <form id="receipt-form">
         <div class="card">
           <div class="section-label">Who and what</div>
           <div class="field-grid">
-            <div class="field full"><label>Property address</label><input type="text" id="r-address" value="${esc(pre.propertyAddress)}" placeholder="2043 East 4th Street, Unit B" required></div>
+            <div class="field full"><label>Property address</label><input type="text" id="r-address" list="property-datalist-r" value="${esc(pre.propertyAddress)}" placeholder="Start typing or pick a saved property" required>${propertyDatalistHtml('property-datalist-r')}</div>
             <div class="field"><label>Tenant name</label><input type="text" id="r-tenant" value="${esc(pre.tenantName)}" placeholder="Full name" required></div>
             <div class="field"><label>Date received</label><input type="date" id="r-date" value="${new Date().toISOString().slice(0,10)}" required></div>
           </div>
@@ -1039,6 +1237,12 @@
         </div>
       </form>
     `;
+    document.getElementById('r-address').addEventListener('input', (e) => {
+      const match = findPropertyByLabel(e.target.value);
+      if (match) {
+        e.target.value = match.unit ? match.street + ', ' + match.unit + ', ' + match.cityZip : match.street + ', ' + match.cityZip;
+      }
+    });
     let rows = [{ label: 'Rent (prorated)', amount: '' }];
     function renderRows() {
       const wrap = document.getElementById('receipt-rows');
@@ -1127,30 +1331,28 @@
       ${d.needsLandlordSign ? signPanelHtml('rlsig', 'Landlord signature') : ''}
       ${d.needsTenantSign ? signPanelHtml('rtsig', 'Tenant signature') : ''}
       <div class="btn-row no-print">
-        <button class="btn btn-brass" onclick='finishReceipt(${JSON.stringify(JSON.stringify(d))})'>${needsAnySign ? 'Sign & finish receipt' : 'Finish receipt'}</button>
+        <button class="btn btn-brass" id="btn-finish-receipt">${needsAnySign ? 'Sign & finish receipt' : 'Finish receipt'}</button>
       </div>
     `;
     if (d.needsLandlordSign) setupSignPanel('rlsig');
     if (d.needsTenantSign) setupSignPanel('rtsig');
+    document.getElementById('btn-finish-receipt').addEventListener('click', () => {
+      if (d.needsLandlordSign) {
+        const r = readSignPanel('rlsig');
+        if (!r) return;
+        d.landlordSignerName = r.name; d.landlordSignedAt = r.signedAt;
+        if (r.image) d.landlordSignatureImage = r.image;
+      }
+      if (d.needsTenantSign) {
+        const r = readSignPanel('rtsig');
+        if (!r) return;
+        d.tenantSignerName = r.name; d.tenantSignedAt = r.signedAt;
+        if (r.image) d.tenantSignatureImage = r.image;
+      }
+      if (d.needsTenantSign || d.needsLandlordSign) celebrate();
+      location.hash = '#receipt=' + encodeState(d);
+    });
   }
-
-  window.finishReceipt = function (dJson) {
-    const d = JSON.parse(dJson);
-    if (d.needsLandlordSign) {
-      const r = readSignPanel('rlsig');
-      if (!r) return;
-      d.landlordSignerName = r.name; d.landlordSignedAt = r.signedAt;
-      if (r.image) d.landlordSignatureImage = r.image;
-    }
-    if (d.needsTenantSign) {
-      const r = readSignPanel('rtsig');
-      if (!r) return;
-      d.tenantSignerName = r.name; d.tenantSignedAt = r.signedAt;
-      if (r.image) d.tenantSignatureImage = r.image;
-    }
-    if (d.needsTenantSign || d.needsLandlordSign) celebrate();
-    location.hash = '#receipt=' + encodeState(d);
-  };
 
   function renderReceiptFinal(d) {
     const link = baseUrl() + '#receipt=' + encodeState(d);
@@ -1166,14 +1368,14 @@
         <div class="btn-row" style="margin-top:0;">
           <a class="btn btn-brass" href="${mailto}" style="text-decoration:none;display:inline-flex;align-items:center;">Email a copy</a>
           <button class="btn btn-primary" onclick="window.print()">Print / save as PDF</button>
-          <button class="btn" onclick='downloadReceipt(${JSON.stringify(JSON.stringify(d))})'>Download record</button>
+          <button class="btn" id="btn-download-receipt">Download record</button>
         </div>
       </div>
     `;
+    document.getElementById('btn-download-receipt').addEventListener('click', () => downloadReceipt(d));
   }
 
-  window.downloadReceipt = async function (dJson) {
-    const d = JSON.parse(dJson);
+  async function downloadReceipt(d) {
     const paper = document.getElementById('receipt-paper');
     const html = `<!DOCTYPE html><html><head><meta charset="UTF-8"><title>Receipt</title>
       <style>body{font-family:Georgia,serif;max-width:600px;margin:2rem auto;padding:0 1rem;line-height:1.6;}
@@ -1187,7 +1389,7 @@
       try { await downloads.save({ filename: fname, data: html }); return; } catch (e) {}
     }
     window.print();
-  };
+  }
 })();
 </script>
 </body>
