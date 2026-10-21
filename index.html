@@ -528,6 +528,12 @@
           <div class="field-grid">
             <div class="field"><label>Monthly rent</label><input type="number" id="f-rent" min="0" step="1" placeholder="975" required></div>
             <div class="field"><label>Rent due day of month</label><input type="number" id="f-dueday" min="1" max="28" value="1"></div>
+            <div class="field full">
+              <label style="display:flex;align-items:center;gap:0.5rem;font-size:0.875rem;">
+                <input type="checkbox" id="f-prorate" style="width:auto;"> Prorate first month's rent (auto-calculated from move-in date)
+              </label>
+              <p class="hint" id="prorate-preview" style="display:none;"></p>
+            </div>
           </div>
           <label style="display:flex;align-items:center;gap:0.5rem;font-size:0.875rem;margin-top:0.25rem;">
             <input type="checkbox" id="f-haspetrent" style="width:auto;"> Add monthly pet rent
@@ -663,6 +669,37 @@
       document.getElementById('petrent-fields').style.display = e.target.checked ? '' : 'none';
       updatePetRentHint();
     });
+    function prorateCalc() {
+      const rent = parseFloat(document.getElementById('f-rent').value) || 0;
+      const start = document.getElementById('f-start').value;
+      if (!rent || !start) return null;
+      const dt = new Date(start + 'T12:00:00');
+      const daysInMonth = new Date(dt.getFullYear(), dt.getMonth() + 1, 0).getDate();
+      const remaining = daysInMonth - dt.getDate() + 1;
+      if (remaining >= daysInMonth) return null; // moving in on the 1st: no proration
+      const amount = Math.round((rent / daysInMonth) * remaining * 100) / 100;
+      return { amount, remaining, daysInMonth, periodEnd: new Date(dt.getFullYear(), dt.getMonth() + 1, 0).toISOString().slice(0,10) };
+    }
+    function refreshProrate() {
+      const box = document.getElementById('f-prorate');
+      const prev = document.getElementById('prorate-preview');
+      if (!box || !prev) return;
+      const p = box.checked ? prorateCalc() : null;
+      if (box.checked && p) {
+        prev.style.display = '';
+        prev.textContent = 'Prorated first month: ' + fmtMoney(p.amount) + ' (' + p.remaining + ' of ' + p.daysInMonth + ' days). Full rent starts the 1st of the following month.';
+      } else if (box.checked) {
+        prev.style.display = '';
+        prev.textContent = 'Enter rent and a start date after the 1st to calculate proration.';
+      } else {
+        prev.style.display = 'none';
+      }
+    }
+    ['f-prorate','f-start'].forEach(id => {
+      const el = document.getElementById(id);
+      if (el) el.addEventListener('change', refreshProrate);
+    });
+    document.getElementById('f-rent').addEventListener('input', refreshProrate);
     ['f-rent','f-petrentamount','f-petcount'].forEach(id => {
       document.getElementById(id).addEventListener('input', updatePetRentHint);
     });
@@ -685,12 +722,59 @@
           <input type="number" min="0" step="1" placeholder="Amount" value="${esc(row.amount)}" data-field="amount">
           <select data-field="status">
             <option value="due" ${row.status==='due'?'selected':''}>Due at signing</option>
+            <option value="plan" ${row.status==='plan'?'selected':''}>Payment plan</option>
             <option value="carried" ${row.status==='carried'?'selected':''}>Already held</option>
             <option value="nonrefundable" ${row.status==='nonrefundable'?'selected':''}>Non-refundable fee</option>
           </select>
           <button type="button" class="row-remove" title="Remove" ${depositRows.length===1?'disabled style="opacity:.3;cursor:default;"':''}>&times;</button>
         </div>
+        ${row.status==='plan' ? `
+        <div class="plan-editor" data-idx="${i}" style="margin:0 0 0.75rem 0;padding:0.75rem;border:1px dashed var(--line, #c9b89a);border-radius:6px;">
+          <div style="display:flex;align-items:center;gap:0.5rem;margin-bottom:0.5rem;">
+            <label style="font-size:0.82rem;white-space:nowrap;">Due at signing $</label>
+            <input type="number" min="0" step="1" style="max-width:110px;" value="${esc(row.down||'')}" data-plan-down placeholder="0">
+            <span style="font-size:0.78rem;opacity:.7;">then installments:</span>
+          </div>
+          ${(row.plan||[]).map((p, j) => `
+            <div style="display:flex;gap:0.5rem;margin-bottom:0.4rem;align-items:center;" data-plan-row="${j}">
+              <input type="date" value="${esc(p.date||'')}" data-plan-field="date" style="flex:1;">
+              <input type="number" min="0" step="1" placeholder="Amount" value="${esc(p.amount||'')}" data-plan-field="amount" style="max-width:110px;">
+              <button type="button" data-plan-remove="${j}" style="background:none;border:none;cursor:pointer;font-size:1rem;">&times;</button>
+            </div>`).join('')}
+          <button type="button" class="plan-add" style="font-size:0.8rem;">+ Add installment</button>
+          <div style="font-size:0.78rem;margin-top:0.4rem;opacity:.75;" class="plan-check"></div>
+        </div>` : ''}
       `).join('') + `<div class="deposit-total">Total: ${fmtMoney(depositRows.reduce((s,r)=>s+(parseFloat(r.amount)||0),0))}</div>`;
+      // plan editor wiring
+      wrap.querySelectorAll('.plan-editor').forEach(ed => {
+        const idx = parseInt(ed.dataset.idx, 10);
+        const row = depositRows[idx];
+        if (!Array.isArray(row.plan)) row.plan = [];
+        const refreshCheck = () => {
+          const target = parseFloat(row.amount) || 0;
+          const scheduled = (parseFloat(row.down)||0) + row.plan.reduce((s,p)=>s+(parseFloat(p.amount)||0),0);
+          const el = ed.querySelector('.plan-check');
+          if (!target) { el.textContent = ''; return; }
+          const diff = target - scheduled;
+          el.textContent = diff === 0 ? '✓ Schedule covers the full ' + fmtMoney(target)
+            : diff > 0 ? 'Scheduled ' + fmtMoney(scheduled) + ' of ' + fmtMoney(target) + ' — ' + fmtMoney(diff) + ' unscheduled'
+            : 'Scheduled ' + fmtMoney(scheduled) + ' exceeds the ' + fmtMoney(target) + ' deposit by ' + fmtMoney(-diff);
+          el.style.color = diff === 0 ? 'green' : '#8a6d1a';
+        };
+        const down = ed.querySelector('[data-plan-down]');
+        down.addEventListener('input', () => { row.down = down.value; refreshCheck(); });
+        ed.querySelectorAll('[data-plan-row]').forEach(pr => {
+          const j = parseInt(pr.dataset.planRow, 10);
+          pr.querySelectorAll('[data-plan-field]').forEach(inp => {
+            inp.addEventListener('input', () => { row.plan[j][inp.dataset.planField] = inp.value; refreshCheck(); });
+          });
+        });
+        ed.querySelectorAll('[data-plan-remove]').forEach(btn => {
+          btn.addEventListener('click', () => { row.plan.splice(parseInt(btn.dataset.planRemove,10),1); renderDepositRows(); });
+        });
+        ed.querySelector('.plan-add').addEventListener('click', () => { row.plan.push({date:'',amount:''}); renderDepositRows(); });
+        refreshCheck();
+      });
       wrap.querySelectorAll('.deposit-row').forEach(rowEl => {
         const idx = parseInt(rowEl.dataset.idx, 10);
         rowEl.querySelectorAll('[data-field]').forEach(input => {
@@ -698,7 +782,10 @@
             depositRows[idx][input.dataset.field] = input.value;
             if (input.dataset.field === 'amount') {
               wrap.querySelector('.deposit-total').textContent = 'Total: ' + fmtMoney(depositRows.reduce((s,r)=>s+(parseFloat(r.amount)||0),0));
+              const ed = wrap.querySelector('.plan-editor[data-idx="'+idx+'"] .plan-check');
+              if (ed) renderDepositRows();
             }
+            if (input.dataset.field === 'status') renderDepositRows();
           });
         });
         const removeBtn = rowEl.querySelector('.row-remove');
@@ -741,10 +828,12 @@
         priorTerm: document.getElementById('f-priorterm').value.trim(),
         rent: document.getElementById('f-rent').value,
         dueDay: document.getElementById('f-dueday').value || '1',
+        prorateFirst: document.getElementById('f-prorate') ? document.getElementById('f-prorate').checked : false,
+        prorate: (document.getElementById('f-prorate') && document.getElementById('f-prorate').checked) ? prorateCalc() : null,
         hasPetRent: document.getElementById('f-haspetrent').checked,
         petRentAmount: document.getElementById('f-petrentamount').value || '0',
         petCount: document.getElementById('f-petcount').value || '1',
-        deposits: depositRows.filter(r => r.label.trim() !== '' || parseFloat(r.amount) > 0).map(r => ({ label: r.label.trim() || 'Deposit', amount: r.amount || '0', status: r.status })),
+        deposits: depositRows.filter(r => r.label.trim() !== '' || parseFloat(r.amount) > 0).map(r => ({ label: r.label.trim() || 'Deposit', amount: r.amount || '0', status: r.status, down: r.status==='plan' ? (r.down || '0') : undefined, plan: r.status==='plan' ? (r.plan||[]).filter(p => p.date && parseFloat(p.amount) > 0) : undefined })),
         lateFee: document.getElementById('f-latefee').value.trim(),
         pets: document.getElementById('f-pets').value.trim(),
         hasSharedUtilities: document.getElementById('f-sharedutils').checked,
@@ -772,6 +861,9 @@
     } else {
       rentClause = `The Tenant agrees to pay to the Landlord as rent for the use and occupancy of the Leased Property the sum of ${rentText} due on the ${esc(String(d.dueDay||1))}${ordinalSuffix(d.dueDay||1)} day of each month ("Rent").`;
     }
+    if (d.prorateFirst && d.prorate && d.prorate.amount) {
+      rentClause += ` Because the Start Date falls after the first day of the month, Rent for the first partial month, covering ${fmtDate(d.startDate)} through ${fmtDate(d.prorate.periodEnd)} (${d.prorate.remaining} of ${d.prorate.daysInMonth} days), is prorated to ${fmtMoney(d.prorate.amount)} and is due on or before the Start Date. The full monthly Rent is due beginning on the first day of the following month and on the regular due date each month thereafter.`;
+    }
     let termParagraph;
     if (d.termType === 'mtm') {
       termParagraph = `This Lease is a month-to-month tenancy, starting on ${fmtDate(d.startDate)} ("Start Date"). Either party may terminate this tenancy by providing written notice in accordance with Colorado law.`;
@@ -785,7 +877,15 @@
     } else {
       const lines = deposits.map(dep => {
         const amt = fmtMoney(dep.amount);
-        if (dep.status === 'carried') {
+        if (dep.status === 'plan') {
+          const down = parseFloat(dep.down) || 0;
+          const planRows = Array.isArray(dep.plan) ? dep.plan : [];
+          const sched = [];
+          if (down > 0) sched.push(`${fmtMoney(down)} due at signing`);
+          planRows.forEach(p => sched.push(`${fmtMoney(p.amount)} due on or before ${fmtDate(p.date)}`));
+          const schedText = sched.length ? sched.join('; ') : 'according to the schedule agreed in writing';
+          return `The Tenant shall pay to the Landlord, in trust, a ${esc(dep.label)} totaling ${amt}, payable in installments as follows: ${schedText}. Each installment is held as part of the security deposit as it is received, and all protections and obligations relating to the security deposit under this Lease and Colorado law apply to amounts actually received. The Tenant's agreement to this installment schedule is a material term of this Lease, and the full ${amt} remains owed regardless of the schedule. Failure to pay any installment in full within seven (7) days after its scheduled date is a material violation of this Lease, separate and distinct from nonpayment of Rent, entitling the Landlord to the remedies available under this Lease and Colorado law. Deposit installments are not Rent, shall not be applied to Rent, and the deposit may not be applied by the Tenant toward any month's Rent.`;
+        } else if (dep.status === 'carried') {
           return `The Tenant previously paid, and the Landlord continues to hold in trust, a ${esc(dep.label)} of ${amt} for the Leased Property. This carries forward and continues to be held under this Lease.`;
         } else if (dep.status === 'nonrefundable') {
           return `The Tenant shall pay a ${esc(dep.label)} of ${amt}. This fee is non-refundable and is not held as a security deposit.`;
@@ -795,7 +895,8 @@
       const refundable = deposits.filter(dep => dep.status !== 'nonrefundable');
       const total = deposits.reduce((s, dep) => s + (parseFloat(dep.amount) || 0), 0);
       depositParagraph = lines.map(l => '<span style="display:block;margin-bottom:0.6rem;">' + l + '</span>').join('');
-      if (deposits.length > 1) depositParagraph += `<span style="display:block;margin-bottom:0.6rem;">Total due at signing under this section: ${fmtMoney(total)}.</span>`;
+      const dueAtSigning = deposits.reduce((s, dep) => s + (dep.status === 'plan' ? (parseFloat(dep.down) || 0) : dep.status === 'carried' ? 0 : (parseFloat(dep.amount) || 0)), 0);
+      if (deposits.length > 1 || deposits.some(dep => dep.status === 'plan')) depositParagraph += `<span style="display:block;margin-bottom:0.6rem;">Total under this section: ${fmtMoney(total)}. Amount due at signing: ${fmtMoney(dueAtSigning)}.</span>`;
       if (refundable.length > 0) {
         depositParagraph += ` The Landlord shall, within thirty (30) days after the termination of this Lease or surrender and acceptance of the premises, whichever occurs last, return to the Tenant any refundable deposit, less lawful deductions, together with a written statement listing the exact reasons for any amount retained. In accordance with Colorado law, no refundable deposit shall be retained to cover normal wear and tear or any damage or defect that existed before the tenancy began, and deductions are limited to unpaid Rent, unpaid utility charges lawfully owed under this Lease, other lawful charges identified in this Lease, and the documented cost of repairing damage beyond normal wear and tear caused during the tenancy. The deposit is security for the Tenant's performance and may not be applied by the Tenant as payment of the last month's Rent or any other Rent.`;
       }
