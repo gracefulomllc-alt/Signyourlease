@@ -417,12 +417,12 @@
   }
 
   // ---------- LANDING GATE ----------
-  const LANDLORD_CODE = '1208';
+  const LANDLORD_CODES = ['1208', '6040'];
   function landlordAuthed() {
-    try { return localStorage.getItem('ld_landlord') === LANDLORD_CODE; } catch (e) { return window.__ldAuth === true; }
+    try { return LANDLORD_CODES.includes(localStorage.getItem('ld_landlord')); } catch (e) { return window.__ldAuth === true; }
   }
-  function setLandlordAuthed() {
-    try { localStorage.setItem('ld_landlord', LANDLORD_CODE); } catch (e) {}
+  function setLandlordAuthed(code) {
+    try { localStorage.setItem('ld_landlord', code); } catch (e) {}
     window.__ldAuth = true;
   }
   function renderGate(dest) {
@@ -461,8 +461,8 @@
     });
     const tryCode = () => {
       const v = document.getElementById('gate-code').value.trim();
-      if (v === LANDLORD_CODE) {
-        setLandlordAuthed();
+      if (LANDLORD_CODES.includes(v)) {
+        setLandlordAuthed(v);
         if (dest === '#/receipt') { renderReceiptForm(); } else { renderForm(); }
       } else {
         document.getElementById('gate-error').style.display = '';
