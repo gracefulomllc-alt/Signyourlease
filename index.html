@@ -9,9 +9,9 @@
 <link href="https://fonts.googleapis.com/css2?family=Playfair+Display:wght@600;700&family=Source+Serif+4:opsz,wght@8..60,400;8..60,600&family=Dancing+Script:wght@600&family=Inter:wght@400;500;600&display=swap" rel="stylesheet">
 <style>
   :root {
-    --ink: #2A2E38; --ink-soft: #55606F; --paper: #FCFBF9; --paper-line: #ECE7DD;
-    --slate: #7E7A70; --brass: #B08A3E; --brass-dark: #93712C; --line: #E6E0D5;
-    --burgundy: #9A4A55; --burgundy-dark: #7E3A45;
+    --ink: #1F2430; --ink-soft: #4A5565; --paper: #FFFFFF; --paper-line: #EFE6DC;
+    --slate: #6B6A66; --brass: #C9962E; --brass-dark: #A87A1F; --line: #EEE3D8;
+    --burgundy: #B23A4E; --burgundy-dark: #8F2B3D;
     --card: #FFFFFF; --danger: #B0554C; --success: #4A8262;
   }
   @media (prefers-color-scheme: dark) {
@@ -122,6 +122,28 @@
   @media print {
     body { background: white; } .no-print { display: none !important; }
     .paper { border: none; padding: 0; max-width: 100%; } .app { padding: 0; max-width: 100%; }
+  }
+
+  /* ---------- brighter, friendlier screen look (print unaffected) ---------- */
+  @media screen {
+    body { background: linear-gradient(180deg, #FFF4EE 0px, #FFFBF7 320px, #FFFFFF 900px) fixed; }
+    .letterhead { padding-top: 2rem; }
+    .letterhead-mark { font-size: 1.95rem; }
+    .letterhead-rule { height: 4px; border-radius: 4px; }
+    .card { border: 1px solid #F1E4D8; border-top: 4px solid var(--burgundy); border-radius: 14px;
+            box-shadow: 0 8px 24px rgba(178, 58, 78, 0.07), 0 1px 3px rgba(31, 36, 48, 0.05); }
+    .paper { border-radius: 14px; box-shadow: 0 8px 24px rgba(31, 36, 48, 0.06); }
+    .btn { border-radius: 10px; font-weight: 600; padding: 0.7rem 1.2rem; transition: transform .12s, box-shadow .12s, background .15s; }
+    .btn:hover { transform: translateY(-1px); box-shadow: 0 4px 12px rgba(31, 36, 48, 0.10); }
+    .btn-primary { background: linear-gradient(135deg, #C24459, #9E2F43); border-color: #A8344A; color: #fff; }
+    .btn-brass { background: linear-gradient(135deg, #DDAA3C, #C08A22); border-color: #BE8A24; color: #2A1D05; }
+    .btn-ghost { background: #FFF6F2; border: 1px solid #F3DCD4; color: var(--ink); }
+    .btn-ghost:hover { background: #FFEDE6; }
+    .section-label { font-size: 1.15rem; }
+    input, select, textarea { border-radius: 10px !important; }
+    input:focus, select:focus, textarea:focus { outline: none; border-color: var(--burgundy) !important; box-shadow: 0 0 0 3px rgba(178, 58, 78, 0.15); }
+    .banner { border-radius: 12px; }
+    h1 { color: var(--ink); }
   }
 </style>
 </head>
@@ -413,7 +435,7 @@
       return;
     }
     if (hash === '#/receipt') { if (!landlordAuthed()) { renderGate('#/receipt'); return; } renderReceiptForm(); return; }
-    if (hash === '#/new') { if (!landlordAuthed()) { renderGate('#/new'); return; } renderForm(); return; }
+    if (hash === '#/new') { if (!landlordAuthed()) { renderGate('#/new'); return; } renderNewLeaseChooser(); return; }
     if (hash === '#/continue') { renderTenantStatus(); return; }
     if (hash === '#/start') { renderTenantIntake(); return; }
     if (hash === '#/staff') { if (!landlordAuthed()) { renderGate('#/staff'); return; } renderStaffMenu(); return; }
@@ -457,7 +479,7 @@
         <div class="card">
           <div class="section-label">Landlord or staff</div>
           <div style="display:flex;flex-direction:column;gap:0.6rem;">
-            ${tile('#/new', 'Create a lease', 'Fill out the terms and get the tenant\'s signing link. Pending tenants show at the top.', false)}
+            ${tile('#/new', 'Create a lease', 'Start blank, or pick up a tenant who already sent their info.', false)}
             ${tile('#/receipt', 'Create a receipt', 'Any tenant: full rent, partial payment, deposit, or installment.', false)}
           </div>
           ${landlordAuthed() ? '' : '<p class="hint" style="margin-top:0.5rem;">Both ask for your landlord code.</p>'}
@@ -475,7 +497,7 @@
       <div style="max-width:520px;margin:1.5rem auto;">
         <h1 style="text-align:center;margin-bottom:1.25rem;">Landlord tools</h1>
         <div class="card"><div style="display:flex;flex-direction:column;gap:0.6rem;">
-          ${tile('#/new', 'Create a new lease', 'Fill out the terms, check it, and get the tenant\'s signing link. Pending tenants show at the top.', true)}
+          ${tile('#/new', 'Create a new lease', 'Start blank, or pick up a tenant who already sent their info.', true)}
           ${tile('#/receipt', 'Record a payment receipt', 'Rent, prorated rent, deposit, or deposit installment.', false)}
         </div></div>
         <p style="text-align:center;"><a href="#" style="font-size:0.82rem;" onclick="lockDevice();return false;">Sign out on this device</a></p>
@@ -643,7 +665,7 @@
   window.removeIntake = async function (id) {
     if (!confirm('Remove this pending tenant?')) return;
     try { await fetch('/api/intake', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ action: 'remove', id, key: staffKey() }) }); } catch (e) {}
-    loadPendingIntakes();
+    renderNewLeaseChooser();
   };
   async function registerIntakeLease(d, leaseId) {
     if (window.__intakeId) return; // tenant-first flow: attach handles it
@@ -658,7 +680,7 @@
     try {
       await fetch('/api/intake', { method: 'POST', headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ action: 'attach', id: window.__intakeId, leaseId, key: staffKey() }) });
-      window.__intakeId = null;
+      window.__intakeId = null; window.__intakeName = ''; window.__intakeUnit = '';
     } catch (e) { /* non-fatal */ }
   }
   window.addEventListener('hashchange', route);
@@ -693,7 +715,11 @@
     app.innerHTML = header() + `
       <h1>New lease</h1>
       <p class="subhead">Fill in the details, sign as landlord, and you'll get a link to email your tenant. They open it, review, and sign on their own device — nothing is stored anywhere except in that link.</p>
-      <div id="pending-intakes" class="no-print"></div>
+      <div id="pending-intakes" class="no-print">${window.__intakeId && window.__intakeName ? `
+        <div class="banner banner-brass" style="display:flex;justify-content:space-between;gap:0.75rem;flex-wrap:wrap;align-items:center;">
+          <span>Preparing a lease for pending tenant <strong>${esc(window.__intakeName)}</strong>${window.__intakeUnit ? ' (asked about: ' + esc(window.__intakeUnit) + ')' : ''}.</span>
+          <a href="#" onclick="startBlankLease();return false;" style="font-size:0.85rem;">Start blank instead</a>
+        </div>` : ''}</div>
       <form id="lease-form">
         <div class="card">
           <div class="section-label">Landlord</div>
@@ -1113,8 +1139,63 @@
       renderReview(landlordDraft);
     });
     if (__restoring) restoreFormFrom(landlordDraft);
-    loadPendingIntakes();
+    if (!__restoring && window.__intakePrefill) {
+      const p = window.__intakePrefill; window.__intakePrefill = null;
+      const set = (fid, v) => { const el = document.getElementById(fid); if (el && v) el.value = v; };
+      set('f-tenant', p.name); set('f-phone', p.phone); set('f-email', p.email);
+    }
   }
+
+  async function renderNewLeaseChooser() {
+    app.innerHTML = header() + `<p class="hint" style="text-align:center;padding:2rem 0;">Loading&hellip;</p>`;
+    let pending = [];
+    try {
+      const resp = await fetch('/api/intake?list=1&key=' + encodeURIComponent(staffKey()));
+      if (resp.ok) pending = ((await resp.json()).items || []).filter(it => it.status !== 'ready');
+    } catch (e) { /* offline or no queue: fall through to blank */ }
+    if (!pending.length) { startBlankLease(); return; }
+    window.__pendingCache = pending;
+    app.innerHTML = header() + `
+      <div style="max-width:560px;margin:1rem auto;">
+        <h1 style="text-align:center;margin-bottom:1.25rem;">Start a lease</h1>
+        <div class="card">
+          <button class="btn btn-primary" style="width:100%;text-align:left;display:block;padding:0.9rem 1rem;" onclick="startBlankLease()">
+            <strong style="display:block;">Start a blank lease</strong><span style="font-size:0.82rem;font-weight:normal;opacity:.9;">Fill everything in yourself.</span>
+          </button>
+        </div>
+        <div class="card">
+          <div class="section-label">Or pick up a pending tenant (${pending.length})</div>
+          <p class="hint" style="margin-bottom:0.75rem;">These tenants sent their info and are waiting on a lease. Picking one fills in their name, phone, and email.</p>
+          <div style="display:flex;flex-direction:column;gap:0.6rem;">
+            ${pending.map((it, i) => `
+              <div style="display:flex;gap:0.5rem;align-items:stretch;">
+                <button class="btn btn-ghost" style="flex:1;text-align:left;display:block;padding:0.8rem 1rem;" onclick="startFromIntake(${i})">
+                  <strong style="display:block;">${esc(it.name)}</strong>
+                  <span style="font-size:0.82rem;font-weight:normal;opacity:.85;">${esc(it.phone || 'no phone')}${it.email ? ' · ' + esc(it.email) : ''}</span>
+                  ${it.unitInterest || it.note ? `<span style="display:block;font-size:0.82rem;font-weight:normal;margin-top:0.2rem;">${esc(it.unitInterest || '')}${it.note ? (it.unitInterest ? ' — ' : '') + esc(it.note) : ''}</span>` : ''}
+                </button>
+                <button class="btn btn-ghost" title="Remove" style="padding:0 0.9rem;" onclick="removeIntake('${it.id}')">&times;</button>
+              </div>`).join('')}
+          </div>
+        </div>
+      </div>`;
+    window.scrollTo(0, 0);
+  }
+  function startBlankLease() {
+    window.__intakeId = null; window.__intakeName = ''; window.__intakeUnit = ''; window.__intakePrefill = null;
+    window.__restoreDraft = false;
+    renderForm(); window.scrollTo(0, 0);
+  }
+  window.startBlankLease = startBlankLease;
+  function startFromIntake(i) {
+    const it = (window.__pendingCache || [])[i];
+    if (!it) { startBlankLease(); return; }
+    window.__intakeId = it.id; window.__intakeName = it.name; window.__intakeUnit = it.unitInterest || '';
+    window.__intakePrefill = { name: it.name, phone: it.phone, email: it.email };
+    window.__restoreDraft = false;
+    renderForm(); window.scrollTo(0, 0);
+  }
+  window.startFromIntake = startFromIntake;
 
   function editDraft() { window.__restoreDraft = true; renderForm(); window.scrollTo(0, 0); }
   window.editDraft = editDraft;
