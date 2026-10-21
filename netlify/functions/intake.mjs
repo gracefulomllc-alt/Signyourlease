@@ -88,6 +88,21 @@ export default async (req) => {
       return json({ id });
     }
 
+    if (body.action === 'advance') {
+      // Anyone holding the current lease id may move the pointer forward to a newer signed version
+      const from = String(body.fromLeaseId || '').trim();
+      const to = String(body.toLeaseId || '').trim();
+      if (!from || !to) return json({ error: 'missing ids' }, 400);
+      const items = await allIntakes(store);
+      const rec = items.find((r) => r.leaseId === from);
+      if (!rec) return json({ ok: true, matched: false });
+      const entry = await store.getWithMetadata(rec.id, { type: 'json' }).catch(() => null);
+      if (!entry || entry.data == null) return json({ ok: true, matched: false });
+      await store.setJSON(rec.id, { ...entry.data, leaseId: to, updatedAt: Date.now() },
+        { metadata: { expiresAt: Date.now() + EXPIRY_DAYS * 86400000 } });
+      return json({ ok: true, matched: true });
+    }
+
     if (body.action === 'attach' || body.action === 'remove') {
       if (!STAFF_CODES.includes(String(body.key || ''))) return json({ error: 'unauthorized' }, 401);
       const id = String(body.id || '');

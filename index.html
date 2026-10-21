@@ -387,6 +387,7 @@
       if (!resp.ok) throw new Error('not found');
       const text = await resp.text();
       const state = JSON.parse(text);
+      window.__currentLeaseId = id;
       renderLeaseView(state);
     } catch (e) {
       app.innerHTML = header(true) + `<div class="banner banner-brass">We couldn't open this lease link. Please ask your landlord to resend it.</div>`;
@@ -1442,7 +1443,47 @@
     const landlordDone = !!d.landlordSignerName;
     if (tenantDone && landlordDone) { renderCompleted(d); return; }
     if (!tenantDone) { renderTenantSign(d); return; }
+    if (!landlordAuthed()) { renderAwaitingLandlord(d); return; }
     renderLandlordSignFromLink(d);
+  }
+
+  function renderAwaitingLandlord(d) {
+    app.innerHTML = header(true) + `
+      <div class="banner banner-success">Signed by ${esc(d.tenantSignerName)} on ${fmtDateTime(d.tenantSignedAt)}. Waiting on your landlord's signature.</div>
+      <div class="card">
+        <p>You're done for now. Once your landlord countersigns, come back with your <strong>name + the last 4 digits of your cell</strong> and you'll be able to download your fully signed copy.</p>
+      </div>
+      <div class="paper">${leaseBody(d)}</div>
+      <div class="card no-print" style="margin-top:1.5rem;">
+        <details>
+          <summary style="cursor:pointer;font-size:0.85rem;">Landlord / staff: countersign</summary>
+          <div class="field" style="max-width:220px;margin-top:0.75rem;"><label>Access code</label><input type="password" inputmode="numeric" id="aw-code" style="text-align:center;letter-spacing:0.3em;"></div>
+          <p class="error-text" id="aw-error" style="display:none;">That code isn't right.</p>
+          <button class="btn btn-primary" id="aw-go">Continue to countersign</button>
+        </details>
+      </div>`;
+    document.getElementById('aw-go').addEventListener('click', () => {
+      const v = document.getElementById('aw-code').value.trim();
+      if (LANDLORD_CODES.includes(v)) { setLandlordAuthed(v); renderLandlordSignFromLink(d); }
+      else document.getElementById('aw-error').style.display = '';
+    });
+  }
+
+  // Save the newest version of the lease and move the tenant's name + last-4 pointer to it
+  async function saveAndAdvance(d) {
+    try {
+      const resp = await fetch('/api/lease', { method: 'POST', headers: { 'Content-Type': 'text/plain' }, body: JSON.stringify(d) });
+      if (!resp.ok) return null;
+      const out = await resp.json();
+      if (!out.id) return null;
+      const from = window.__currentLeaseId;
+      if (from) {
+        await fetch('/api/intake', { method: 'POST', headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ action: 'advance', fromLeaseId: from, toLeaseId: out.id }) }).catch(() => {});
+      }
+      window.__currentLeaseId = out.id;
+      return out.id;
+    } catch (e) { return null; }
   }
 
   function uploadBoxHtml(key, title, hint) {
@@ -1650,6 +1691,7 @@
       if (uploads.idphoto) d.tenantIdImage = uploads.idphoto;
       if (uploads.paystub) d.tenantPayStubImage = uploads.paystub;
       celebrate();
+      saveAndAdvance(d);
       renderTenantSentToLandlord(d);
     });
   }
@@ -1665,6 +1707,7 @@
     app.innerHTML = header(true) + `
       <button class="step-back" id="btn-back-to-tenant-resign">&larr; Re-do my signature</button>
       <div class="banner banner-success">Signed. If your landlord is here, hand them the device now.</div>
+      <p class="hint" style="margin:0.5rem 0 1rem;">Need to get back in later? Go to the lease site, tap <strong>I'm a tenant &rarr; Open my lease</strong>, and enter your name + the last 4 digits of your cell.</p>
       <div class="card">
         <div class="section-label">Landlord signing in person</div>
         <div class="btn-row" style="margin-top:0;">
@@ -1734,6 +1777,7 @@
       d.landlordSignedAt = result.signedAt;
       if (result.image) d.landlordSignatureImage = result.image;
       celebrate();
+      saveAndAdvance(d);
       goToLease(d);
     });
   }
