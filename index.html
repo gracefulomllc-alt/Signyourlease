@@ -956,7 +956,7 @@
       </p>
       <h3>No Waiver</h3><p>The Landlord's failure to enforce any provision of this Lease, or acceptance of a partial or late payment, does not waive the Landlord's right to enforce that provision or any other provision later, and does not waive any right to pursue possession or damages for the default.</p>
       <h3>Governing Law and Venue</h3><p>This Lease shall be construed in accordance with the laws of the State of Colorado. Venue for any legal proceeding arising from this Lease shall be the county in which the Leased Property is located. This Lease contains the entire agreement of the parties and may be modified only in writing signed by both parties. If any provision of this Lease is found invalid or unenforceable, the remaining provisions remain in full force and effect.</p>
-      <h3>Electronic Signatures</h3><p>The parties agree that this Lease may be signed electronically, and that an electronic signature has the same legal effect and enforceability as a handwritten signature under applicable federal and Colorado law.</p>
+      <h3>Electronic Signatures and Identity</h3><p>The parties agree that this Lease may be signed electronically, and that an electronic signature has the same legal effect and enforceability as a handwritten signature under applicable federal and Colorado law. By signing, the Tenant certifies that the Tenant is the person named in this Lease, that any identification or supporting documents provided in connection with signing are the Tenant's own, genuine, and unaltered, and that the Tenant signs voluntarily. The parties agree that providing false identity information or falsified documents to induce this Lease is a material misrepresentation, and the Landlord's execution of this Lease relies on the truth of the Tenant's certification.</p>
     `;
   }
 
@@ -969,7 +969,7 @@
         </div>
         <div class="sig-col">
           ${d.tenantSignatureImage ? `<img class="sig-img" src="${d.tenantSignatureImage}" alt="Tenant signature" style="max-height:55px;display:block;">` : `<div class="sig-script">${esc(d.tenantSignerName || '')}</div>`}
-          <div class="sig-line"><strong>${esc([d.tenantName, d.tenantName2].filter(Boolean).join(' and ') || 'Tenant')}</strong>${d.tenantSignedAt ? ' &middot; signed ' + fmtDateTime(d.tenantSignedAt) : ''}</div>
+          <div class="sig-line"><strong>${esc([d.tenantName, d.tenantName2].filter(Boolean).join(' and ') || 'Tenant')}</strong>${d.tenantSignedAt ? ' &middot; signed ' + fmtDateTime(d.tenantSignedAt) : ''}${d.tenantAttested ? ' &middot; identity certified under penalty of perjury at signing' : ''}</div>
         </div>
       </div>`;
   }
@@ -1001,6 +1001,7 @@
           </div>
         </div>
         <label class="checkbox-row"><input type="checkbox" id="${idPrefix}-agree"> By signing, I intend this as my legal electronic signature on this lease.</label>
+        ${idPrefix.startsWith('ts') ? `<label class="checkbox-row"><input type="checkbox" id="${idPrefix}-attest"> I certify under penalty of perjury that I am the person named above, that any identification or documents I provide with this signature are my own, genuine, and unaltered, and that I am signing this lease voluntarily on my own behalf.</label>` : ''}
         <p class="error-text" id="${idPrefix}-error" style="display:none;"></p>
       </div>
     `;
@@ -1070,8 +1071,11 @@
     if (!name) { err.textContent = 'Enter the full legal name.'; err.style.display = ''; return null; }
     if (drawActive && (!pads[idPrefix] || !pads[idPrefix].hasStroke)) { err.textContent = 'Draw a signature, or switch to Type.'; err.style.display = ''; return null; }
     if (!agree) { err.textContent = 'Check the box confirming this is your signature.'; err.style.display = ''; return null; }
+    const attestEl = document.getElementById(idPrefix + '-attest');
+    if (attestEl && !attestEl.checked) { err.textContent = 'Check the identity certification box to continue.'; err.style.display = ''; return null; }
     err.style.display = 'none';
     const result = { name, signedAt: Date.now() };
+    if (attestEl) result.attested = true;
     if (drawActive) result.image = pads[idPrefix].canvas.toDataURL('image/png');
     return result;
   }
@@ -1391,6 +1395,7 @@
       if (ph) d.tenantPhone = ph.value.trim();
       d.tenantSignerName = result.name;
       d.tenantSignedAt = result.signedAt;
+      if (result.attested) d.tenantAttested = true;
       if (result.image) d.tenantSignatureImage = result.image;
       const uploads = window.__pendingUploads || {};
       if (uploads.idphoto) d.tenantIdImage = uploads.idphoto;
@@ -1704,6 +1709,7 @@
         const r = readSignPanel('rtsig');
         if (!r) return;
         d.tenantSignerName = r.name; d.tenantSignedAt = r.signedAt;
+        if (r.attested) d.tenantAttested = true;
         if (r.image) d.tenantSignatureImage = r.image;
       }
       if (d.needsTenantSign || d.needsLandlordSign) celebrate();
