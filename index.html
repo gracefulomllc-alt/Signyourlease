@@ -152,6 +152,13 @@
     .ci-btn { border-radius: 10px; }
     .hint { font-size: 0.875rem; }
   }
+
+  @media screen {
+    .checkbox-row { align-items: center; gap: 0.9rem; padding: 0.95rem 1rem; margin: 0.75rem 0; border: 2px solid #E7CFC6; border-radius: 12px; background: #FFF8F5; font-size: 0.97rem; line-height: 1.45; cursor: pointer; color: var(--ink); }
+    .checkbox-row input[type=checkbox] { width: 30px !important; height: 30px !important; min-width: 30px; margin: 0 !important; accent-color: var(--burgundy); flex: none; cursor: pointer; }
+    .checkbox-row:has(input:checked) { border-color: var(--success); background: #EEF8F1; }
+    .checkbox-row.needs { border-color: #A8372D; background: #FDECEA; }
+  }
 </style>
 </head>
 <body>
@@ -446,6 +453,7 @@
     if (hash === '#/new') { if (!landlordAuthed()) { renderGate('#/new'); return; } renderNewLeaseChooser(); return; }
     if (hash === '#/continue') { renderTenantStatus(); return; }
     if (hash === '#/start') { renderTenantIntake(); return; }
+    if (hash === '#/archive') { if (!landlordAuthed()) { renderGate('#/archive'); return; } renderArchive(); return; }
     if (hash === '#/status') { if (!landlordAuthed()) { renderGate('#/status'); return; } renderLeaseStatus(); return; }
     if (hash === '#/staff') { if (!landlordAuthed()) { renderGate('#/staff'); return; } renderStaffMenu(); return; }
     renderHome();
@@ -495,13 +503,83 @@
           <div style="display:flex;flex-direction:column;gap:0.6rem;">
             ${tile('#/new', 'Create a lease', 'Start blank, or pick up a tenant who already sent their info.', false)}
             ${tile('#/receipt', 'Create a receipt', 'Any tenant: full rent, partial payment, deposit, or installment.', false)}
-            ${tile('#/status', 'Lease status', 'See who still needs to sign, countersign, and download completed leases.', false)}
+            ${tile('#/status', 'Lease status', 'See who still needs to sign or countersign.', false)}
+            ${tile('#/archive', 'Completed leases', 'Every fully signed lease, saved until you delete it. Download any as a PDF.', false)}
           </div>
           ${landlordAuthed() ? '' : '<p class="hint" style="margin-top:0.5rem;">Both ask for your landlord code.</p>'}
         </div>
       </div>`;
     window.scrollTo(0, 0);
   }
+
+  async function renderArchive() {
+    app.innerHTML = header() + `<p class="hint" style="text-align:center;padding:2rem 0;">Loading completed leases&hellip;</p>`;
+    let items = [];
+    try { const r = await fetch('/api/archive?key=' + encodeURIComponent(staffKey())); if (r.ok) items = (await r.json()).items || []; } catch (e) {}
+    const fmtTerm = (it) => it.termType === 'mtm' ? 'Month-to-month from ' + fmtDate(it.startDate) : (it.startDate ? fmtDate(it.startDate) + ' to ' + fmtDate(it.endDate) : '');
+    const rows = (list) => list.length ? list.map(it => `
+      <div style="padding:0.85rem 0;border-bottom:1px solid #F1E4D8;">
+        <strong>${esc(it.tenant || 'Tenant')}</strong><br>
+        <span style="font-size:0.88rem;color:var(--ink-soft);">${esc(it.property)}${it.entity ? ' &middot; ' + esc(it.entity) : ''}</span><br>
+        <span style="font-size:0.85rem;color:var(--ink-soft);">${esc(fmtTerm(it))}${it.rent ? ' &middot; ' + fmtMoney(it.rent) + '/mo' : ''}</span><br>
+        <span style="display:inline-block;margin-top:0.3rem;font-size:0.78rem;font-weight:700;padding:0.15rem 0.6rem;border-radius:999px;color:#256B45;background:#E7F4EC;">Completed ${it.completedAt ? esc(fmtDateTime(it.completedAt)) : ''}</span>
+        <div class="btn-row" style="margin-top:0.6rem;flex-wrap:wrap;">
+          <button class="btn btn-primary" onclick="archivePdf('${esc(it.id)}', this)">Download PDF</button>
+          <button class="btn btn-ghost" onclick="openArchived('${esc(it.id)}')">Open</button>
+        </div>
+      </div>`).join('') : '<p class="hint" style="margin:0.5rem 0 0;">No matches.</p>';
+    app.innerHTML = header() + `
+      <div style="max-width:640px;margin:1rem auto;">
+        <h1 style="text-align:center;margin-bottom:0.4rem;">Completed leases</h1>
+        <p class="subhead" style="text-align:center;margin:0 auto 1.25rem;">Every fully signed lease is saved here until you delete it. ID photos and pay stubs aren't kept here.</p>
+        <div class="card">
+          ${items.length ? `<div class="field" style="margin-bottom:0.25rem;"><label>Search</label><input type="search" id="arch-q" placeholder="Tenant name or address"></div>` : ''}
+          <div id="arch-list">${items.length ? rows(items) : '<p class="hint" style="margin:0;">No completed leases yet. As soon as both sides sign, the lease shows up here.</p>'}</div>
+        </div>
+      </div>`;
+    const q = document.getElementById('arch-q');
+    if (q) q.addEventListener('input', () => {
+      const s = q.value.trim().toLowerCase();
+      document.getElementById('arch-list').innerHTML = rows(items.filter(it => !s || ((it.tenant || '') + ' ' + (it.property || '') + ' ' + (it.entity || '')).toLowerCase().includes(s)));
+    });
+    window.scrollTo(0, 0);
+  }
+  async function fetchArchived(id) {
+    const r = await fetch('/api/archive?id=' + encodeURIComponent(id) + '&key=' + encodeURIComponent(staffKey()));
+    if (!r.ok) throw new Error('not found');
+    return r.json();
+  }
+  window.archivePdf = async function (id, btn) {
+    const orig = btn.textContent; btn.disabled = true; btn.textContent = 'Loading…';
+    try { const d = await fetchArchived(id); btn.textContent = orig; btn.disabled = false; await downloadLeasePdf(d, btn); }
+    catch (e) { btn.textContent = orig; btn.disabled = false; alert('Could not load that lease. Try again.'); }
+  };
+  window.openArchived = async function (id) {
+    app.innerHTML = header() + `<p class="hint" style="text-align:center;padding:2rem 0;">Loading&hellip;</p>`;
+    let d;
+    try { d = await fetchArchived(id); } catch (e) { app.innerHTML = header() + `<button class="step-back" onclick="goHash('#/archive')">&larr; All completed leases</button><div class="banner banner-brass">Couldn't open that lease.</div>`; return; }
+    app.innerHTML = header() + `
+      <button class="step-back" onclick="goHash('#/archive')">&larr; All completed leases</button>
+      <div class="banner banner-success">Fully signed. Tenant on ${fmtDateTime(d.tenantSignedAt)}, landlord on ${fmtDateTime(d.landlordSignedAt)}.</div>
+      <div class="card no-print"><div class="btn-row" style="margin-top:0;flex-wrap:wrap;">
+        <button class="btn btn-primary" id="arch-pdf">Download PDF</button>
+        <button class="btn" onclick="window.print()">Print / Save as PDF</button>
+      </div></div>
+      <div class="paper">${leaseBody(d)}${sigBlockHtml(d)}</div>
+      <div class="card no-print" style="margin-top:1.5rem;">
+        <div class="section-label">Remove from archive</div>
+        <p class="hint" style="margin-bottom:0.75rem;">Only do this once you've saved the PDF somewhere else, like Innago. This can't be undone.</p>
+        <button class="btn" id="arch-del" style="color:#A8372D;border-color:#E9B8B2;">Delete this lease</button>
+      </div>`;
+    document.getElementById('arch-pdf').addEventListener('click', function () { downloadLeasePdf(d, this); });
+    document.getElementById('arch-del').addEventListener('click', async function () {
+      if (!confirm('Permanently delete the lease for ' + (d.tenantName || 'this tenant') + '? Make sure you have the PDF saved.')) return;
+      this.disabled = true;
+      try { await fetch('/api/archive', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ action: 'delete', id, key: staffKey() }) }); } catch (e) {}
+      goHash('#/archive');
+    });
+    window.scrollTo(0, 0);
+  };
 
   async function renderLeaseStatus() {
     app.innerHTML = header() + `<p class="hint" style="text-align:center;padding:2rem 0;">Loading&hellip;</p>`;
@@ -524,7 +602,7 @@
               <a class="btn ${it.stage === 'landlord_to_sign' ? 'btn-primary' : 'btn-ghost'}" style="text-decoration:none;" href="/l/${esc(it.leaseId)}">${it.stage === 'landlord_to_sign' ? 'Sign now' : it.stage === 'complete' ? 'View / download' : 'View'}</a>
             </div>`; }).join('') : '<p class="hint" style="margin:0;">No leases yet. Leases you send to a tenant portal show up here.</p>'}
         </div>
-        <p class="hint" style="text-align:center;">Leases stay here for 30 days. Download completed ones and upload them to Innago.</p>
+        <p class="hint" style="text-align:center;">This list covers the last 30 days. Every completed lease is also saved permanently under <a href="#" onclick="goHash('#/archive');return false;">Completed leases</a>.</p>
       </div>`;
     window.scrollTo(0, 0);
   }
@@ -540,7 +618,8 @@
         <div class="card"><div style="display:flex;flex-direction:column;gap:0.6rem;">
           ${tile('#/new', 'Create a new lease', 'Start blank, or pick up a tenant who already sent their info.', true)}
           ${tile('#/receipt', 'Record a payment receipt', 'Rent, prorated rent, deposit, or deposit installment.', false)}
-          ${tile('#/status', 'Lease status', 'Who still needs to sign, and completed leases to download.', false)}
+          ${tile('#/status', 'Lease status', 'Who still needs to sign or countersign.', false)}
+          ${tile('#/archive', 'Completed leases', 'Every fully signed lease. Download any as a PDF.', false)}
         </div></div>
         <p style="text-align:center;"><a href="#" style="font-size:0.82rem;" onclick="lockDevice();return false;">Sign out on this device</a></p>
       </div>`;
@@ -747,7 +826,8 @@
         <a class="step-back" style="margin:0 0 0 1rem;display:inline-flex;" href="#" onclick="goHash('');return false;">Home</a>
         ${landlordAuthed() ? `<a class="step-back" style="margin:0 0 0 1rem;display:inline-flex;" href="#" onclick="goHash('#/receipt');return false;">New receipt</a>
         <a class="step-back" style="margin:0;display:inline-flex;" href="#" onclick="goHash('#/new');return false;">Start a new lease</a>
-        <a class="step-back" style="margin:0;display:inline-flex;" href="#" onclick="goHash('#/status');return false;">Lease status</a>` : ''}
+        <a class="step-back" style="margin:0;display:inline-flex;" href="#" onclick="goHash('#/status');return false;">Lease status</a>
+        <a class="step-back" style="margin:0;display:inline-flex;" href="#" onclick="goHash('#/archive');return false;">Completed leases</a>` : ''}
       </div>`}`;
   }
 
@@ -1535,6 +1615,202 @@ ${steps(1, LL_STEPS)}
     `;
   }
 
+  const HELV_W = [278, 278, 355, 556, 556, 889, 667, 191, 333, 333, 389, 584, 278, 333, 278, 278, 556, 556, 556, 556, 556, 556, 556, 556, 556, 556, 278, 278, 584, 584, 584, 556, 1015, 667, 667, 722, 722, 667, 611, 778, 722, 278, 500, 667, 556, 833, 722, 778, 667, 778, 722, 667, 611, 722, 667, 944, 667, 667, 611, 278, 278, 278, 469, 556, 333, 556, 556, 500, 556, 556, 278, 556, 556, 222, 222, 500, 222, 833, 556, 556, 556, 556, 333, 500, 278, 556, 500, 722, 500, 500, 500, 334, 260, 334, 584, 556, 556, 0, 222, 556, 333, 1000, 556, 556, 333, 1000, 667, 333, 1000, 0, 611, 0, 0, 222, 222, 333, 333, 350, 556, 1000, 333, 1000, 500, 333, 944, 0, 500, 667, 278, 333, 556, 556, 556, 556, 260, 556, 333, 737, 370, 556, 584, 333, 737, 552, 400, 549, 333, 333, 333, 576, 537, 333, 333, 333, 365, 556, 834, 834, 834, 611, 667, 667, 667, 667, 667, 667, 1000, 722, 667, 667, 667, 667, 278, 278, 278, 278, 722, 722, 778, 778, 778, 778, 778, 584, 778, 722, 722, 722, 722, 667, 667, 611, 556, 556, 556, 556, 556, 556, 889, 500, 556, 556, 556, 556, 278, 278, 278, 278, 556, 556, 556, 556, 556, 556, 556, 549, 611, 556, 556, 556, 556, 500, 556, 500];
+  const HELV_BW = [278, 333, 474, 556, 556, 889, 722, 238, 333, 333, 389, 584, 278, 333, 278, 278, 556, 556, 556, 556, 556, 556, 556, 556, 556, 556, 333, 333, 584, 584, 584, 611, 975, 722, 722, 722, 722, 667, 611, 778, 722, 278, 556, 722, 611, 833, 722, 778, 667, 778, 722, 667, 611, 722, 667, 944, 667, 667, 611, 333, 278, 333, 584, 556, 333, 556, 611, 556, 611, 556, 333, 611, 611, 278, 278, 556, 278, 889, 611, 611, 611, 611, 389, 556, 333, 611, 556, 778, 556, 556, 500, 389, 280, 389, 584, 556, 556, 0, 278, 556, 500, 1000, 556, 556, 333, 1000, 667, 333, 1000, 0, 611, 0, 0, 278, 278, 500, 500, 350, 556, 1000, 333, 1000, 556, 333, 944, 0, 500, 667, 278, 333, 556, 556, 556, 556, 280, 556, 333, 737, 370, 556, 584, 333, 737, 552, 400, 549, 333, 333, 333, 576, 556, 333, 333, 333, 365, 556, 834, 834, 834, 611, 722, 722, 722, 722, 722, 722, 1000, 722, 667, 667, 667, 667, 278, 278, 278, 278, 722, 722, 778, 778, 778, 778, 778, 584, 778, 722, 722, 722, 722, 667, 667, 611, 556, 556, 556, 556, 556, 556, 889, 556, 556, 556, 556, 556, 278, 278, 278, 278, 611, 611, 611, 611, 611, 611, 611, 549, 611, 611, 611, 611, 611, 556, 611, 556];
+
+  // ---------- PDF (built in: real, searchable text; no outside library) ----------
+  const WIN_MAP = { 0x2014: 0x97, 0x2013: 0x96, 0x201C: 0x93, 0x201D: 0x94, 0x2018: 0x91, 0x2019: 0x92, 0x2022: 0x95, 0x2026: 0x85, 0x20AC: 0x80, 0x2122: 0x99, 0x00A0: 0x20, 0x2192: 0x3E, 0x2713: 0x76 };
+  function pdfCode(ch) { const cp = ch.codePointAt(0); if (cp < 128) return cp; if (WIN_MAP[cp] != null) return WIN_MAP[cp]; if (cp >= 0xA0 && cp <= 0xFF) return cp; return 0x3F; }
+  function charW(code, bold) { const t = bold ? HELV_BW : HELV_W; return (code >= 32 && code < 256 ? t[code - 32] : 556) || 556; }
+  function textW(str, bold, size) { let w = 0; for (const ch of str) w += charW(pdfCode(ch), bold); return w * size / 1000; }
+  function pdfStr(str) { let out = ''; for (const ch of str) { const c = pdfCode(ch); const s = String.fromCharCode(c); out += (s === '(' || s === ')' || s === '\\') ? '\\' + s : s; } return '(' + out + ')'; }
+
+  // Turn an HTML fragment into words, keeping bold runs and forced line breaks
+  function htmlToTokens(node) {
+    const chars = [];
+    const walk = (n, bold) => {
+      if (n.nodeType === 3) { for (const ch of n.textContent.replace(/\s+/g, ' ')) chars.push([ch, bold]); return; }
+      if (n.nodeType !== 1) return;
+      if (n.tagName === 'BR') { chars.push(['\n', bold]); return; }
+      const b = bold || n.tagName === 'STRONG' || n.tagName === 'B' || /font-weight:\s*(bold|[6-9]00)/.test(n.getAttribute('style') || '');
+      n.childNodes.forEach(c => walk(c, b));
+    };
+    walk(node, false);
+    const tokens = []; let cur = null;
+    const flush = () => { if (cur && cur.segs.length) tokens.push(cur); cur = null; };
+    for (const [ch, b] of chars) {
+      if (ch === '\n') { flush(); tokens.push({ br: true }); continue; }
+      if (ch === ' ') { flush(); continue; }
+      if (!cur) cur = { segs: [] };
+      const last = cur.segs[cur.segs.length - 1];
+      if (last && last.b === b) last.t += ch; else cur.segs.push({ t: ch, b });
+    }
+    flush();
+    return tokens;
+  }
+  function wrapTokens(tokens, size, maxW) {
+    const lines = []; let line = [], w = 0;
+    const space = textW(' ', false, size);
+    const tokW = (t) => t.segs.reduce((s, g) => s + textW(g.t, g.b, size), 0);
+    for (const t of tokens) {
+      if (t.br) { lines.push(line); line = []; w = 0; continue; }
+      let tw = tokW(t);
+      if (tw > maxW) { // break a very long word
+        const s = t.segs.map(g => g.t).join(''); const b = t.segs[0].b; let part = '';
+        for (const ch of s) { if (textW(part + ch, b, size) > maxW) { if (line.length) { lines.push(line); line = []; w = 0; } lines.push([{ segs: [{ t: part, b }] }]); part = ''; } part += ch; }
+        t.segs = [{ t: part, b }]; tw = tokW(t);
+      }
+      const add = (line.length ? space : 0) + tw;
+      if (line.length && w + add > maxW) { lines.push(line); line = [t]; w = tw; }
+      else { line.push(t); w += add; }
+    }
+    if (line.length) lines.push(line);
+    return lines;
+  }
+  function leaseToBlocks(d) {
+    const doc = new DOMParser().parseFromString('<div id="r">' + leaseBody(d) + '</div>', 'text/html');
+    const blocks = [];
+    const para = (el) => { const tokens = htmlToTokens(el); if (tokens.length) blocks.push({ t: 'p', tokens }); };
+    const visit = (el) => {
+      for (const n of Array.from(el.childNodes)) {
+        if (n.nodeType === 3) { if (n.textContent.trim()) { const s = doc.createElement('span'); s.textContent = n.textContent; para(s); } continue; }
+        if (n.nodeType !== 1) continue;
+        if (n.tagName === 'H2') blocks.push({ t: 'title', text: n.textContent.trim() });
+        else if (n.tagName === 'H3') blocks.push({ t: 'h', text: n.textContent.trim() });
+        else if (n.tagName === 'P') {
+          // block-level spans inside a paragraph become their own paragraphs
+          const holder = doc.createElement('span'); const bold = /font-weight:\s*bold/.test(n.getAttribute('style') || '');
+          const flushHolder = () => { if (holder.childNodes.length) { const c = holder.cloneNode(true); if (bold) c.setAttribute('style', 'font-weight:bold'); para(c); holder.innerHTML = ''; } };
+          for (const c of Array.from(n.childNodes)) {
+            if (c.nodeType === 1 && c.tagName === 'SPAN' && /display:\s*block/.test(c.getAttribute('style') || '')) { flushHolder(); para(c); }
+            else holder.appendChild(c.cloneNode(true));
+          }
+          flushHolder();
+        } else visit(n);
+      }
+    };
+    visit(doc.getElementById('r'));
+    return blocks;
+  }
+  function dataUrlToBytes(u) { const b = atob(u.split(',')[1]); const a = new Uint8Array(b.length); for (let i = 0; i < b.length; i++) a[i] = b.charCodeAt(i); return a; }
+  async function signatureJpeg(imageDataUrl, typedName) {
+    const c = document.createElement('canvas'); c.width = 640; c.height = 140;
+    const x = c.getContext('2d'); x.fillStyle = '#fff'; x.fillRect(0, 0, c.width, c.height);
+    let drew = false;
+    if (imageDataUrl) {
+      try {
+        const img = await new Promise((res, rej) => { const i = new Image(); i.onload = () => res(i); i.onerror = rej; i.src = imageDataUrl; });
+        const s = Math.min(c.width / img.width, c.height / img.height); const w = img.width * s, h = img.height * s;
+        x.drawImage(img, 0, (c.height - h) / 2, w, h); drew = true;
+      } catch (e) { /* fall back to typed name */ }
+    }
+    if (!drew) {
+      try { await document.fonts.load('600 64px "Dancing Script"'); } catch (e) {}
+      x.fillStyle = '#1F2430'; x.font = '600 64px "Dancing Script", cursive'; x.textBaseline = 'middle'; x.fillText(typedName || '', 8, c.height / 2);
+    }
+    return { bytes: dataUrlToBytes(c.toDataURL('image/jpeg', 0.92)), w: c.width, h: c.height };
+  }
+
+  async function leasePdfBlob(d) {
+    const PW = 612, PH = 792, ML = 60, MR = 60, MT = 64, MB = 64, CW = PW - ML - MR;
+    const pages = []; let ops = null, y = 0;
+    const newPage = () => { ops = []; pages.push(ops); y = PH - MT; };
+    const ensure = (h) => { if (!ops || y - h < MB) newPage(); };
+    const drawLine = (line, x, size) => {
+      ops.push('BT /F1 ' + size + ' Tf ' + x.toFixed(2) + ' ' + y.toFixed(2) + ' Td');
+      let curB = false; const parts = [];
+      line.forEach((tok, i) => { tok.segs.forEach((g, j) => { parts.push({ t: (i > 0 && j === 0 ? ' ' : '') + g.t, b: g.b }); }); });
+      parts.forEach(p => { if (p.b !== curB) { ops.push('/' + (p.b ? 'F2' : 'F1') + ' ' + size + ' Tf'); curB = p.b; } ops.push(pdfStr(p.t) + ' Tj'); });
+      ops.push('ET');
+    };
+    newPage();
+    for (const b of leaseToBlocks(d)) {
+      if (b.t === 'title') {
+        const size = 16; ensure(30); const w = textW(b.text, true, size);
+        ops.push('BT /F2 ' + size + ' Tf ' + ((PW - w) / 2).toFixed(2) + ' ' + y.toFixed(2) + ' Td ' + pdfStr(b.text) + ' Tj ET'); y -= 28;
+      } else if (b.t === 'h') {
+        const size = 11; ensure(16 + 14 * 3); y -= 6;
+        ops.push('BT /F2 ' + size + ' Tf ' + ML + ' ' + y.toFixed(2) + ' Td ' + pdfStr(b.text) + ' Tj ET'); y -= 16;
+      } else {
+        const size = 10, lead = 14; const lines = wrapTokens(b.tokens, size, CW);
+        for (const ln of lines) { ensure(lead); drawLine(ln, ML, size); y -= lead; }
+        y -= 5;
+      }
+    }
+    // Signatures
+    const images = [];
+    const sigs = [
+      { label: d.entity || 'Landlord', role: 'Landlord', img: d.landlordSignatureImage, typed: d.landlordSignerName, at: d.landlordSignedAt, extra: '' },
+      { label: [d.tenantName, d.tenantName2].filter(Boolean).join(' and ') || 'Tenant', role: 'Tenant', img: d.tenantSignatureImage, typed: d.tenantSignerName, at: d.tenantSignedAt, extra: d.tenantAttested ? 'Identity certified under penalty of perjury at signing' : '' },
+    ];
+    ensure(40); y -= 8; ops.push('BT /F2 11 Tf ' + ML + ' ' + y.toFixed(2) + ' Td ' + pdfStr('Signatures') + ' Tj ET'); y -= 14;
+    for (const s of sigs) {
+      if (!s.typed && !s.img) continue;
+      ensure(110);
+      const j = await signatureJpeg(s.img, s.typed); const name = 'Im' + (images.length + 1); images.push({ name, ...j });
+      const dw = 210, dh = dw * j.h / j.w; y -= dh;
+      ops.push('q ' + dw.toFixed(2) + ' 0 0 ' + dh.toFixed(2) + ' ' + ML + ' ' + y.toFixed(2) + ' cm /' + name + ' Do Q');
+      y -= 4; ops.push('0.4 w ' + ML + ' ' + y.toFixed(2) + ' m ' + (ML + 260) + ' ' + y.toFixed(2) + ' l S'); y -= 13;
+      const span = document.createElement('span');
+      span.innerHTML = '<strong>' + esc(s.role + ': ' + s.label) + '</strong>' + (s.at ? ' &middot; signed electronically ' + esc(fmtDateTime(s.at)) : '') + (s.extra ? ' &middot; ' + esc(s.extra) : '');
+      for (const ln of wrapTokens(htmlToTokens(span), 9, CW)) { ensure(12); drawLine(ln, ML, 9); y -= 12; }
+      y -= 12;
+    }
+    // Footers
+    const prop = (d.propertyAddress || '') + (d.unitLabel ? ', ' + d.unitLabel : '');
+    pages.forEach((p, i) => {
+      const t = 'Page ' + (i + 1) + ' of ' + pages.length;
+      p.push('BT /F1 8 Tf ' + (PW - MR - textW(t, false, 8)).toFixed(2) + ' 36 Td ' + pdfStr(t) + ' Tj ET');
+      p.push('BT /F1 8 Tf ' + ML + ' 36 Td ' + pdfStr('Lease: ' + prop) + ' Tj ET');
+    });
+    // Assemble the file
+    const enc = (s) => { const a = new Uint8Array(s.length); for (let i = 0; i < s.length; i++) a[i] = s.charCodeAt(i) & 255; return a; };
+    const parts = []; let len = 0; const offsets = [];
+    const push = (x) => { const b = typeof x === 'string' ? enc(x) : x; parts.push(b); len += b.length; };
+    const obj = (n, body) => { offsets[n] = len; push(n + ' 0 obj\n'); body(); push('\nendobj\n'); };
+    push('%PDF-1.4\n%\xE2\xE3\xCF\xD3\n');
+    const imgBase = 6, pageBase = imgBase + images.length;
+    const xobj = images.map((im, i) => '/' + im.name + ' ' + (imgBase + i) + ' 0 R').join(' ');
+    const res = '<< /Font << /F1 3 0 R /F2 4 0 R /F3 5 0 R >>' + (images.length ? ' /XObject << ' + xobj + ' >>' : '') + ' >>';
+    obj(1, () => push('<< /Type /Catalog /Pages 2 0 R >>'));
+    obj(2, () => push('<< /Type /Pages /Count ' + pages.length + ' /Kids [' + pages.map((_, i) => (pageBase + i * 2) + ' 0 R').join(' ') + '] >>'));
+    obj(3, () => push('<< /Type /Font /Subtype /Type1 /BaseFont /Helvetica /Encoding /WinAnsiEncoding >>'));
+    obj(4, () => push('<< /Type /Font /Subtype /Type1 /BaseFont /Helvetica-Bold /Encoding /WinAnsiEncoding >>'));
+    obj(5, () => push('<< /Type /Font /Subtype /Type1 /BaseFont /Helvetica-Oblique /Encoding /WinAnsiEncoding >>'));
+    images.forEach((im, i) => obj(imgBase + i, () => { push('<< /Type /XObject /Subtype /Image /Width ' + im.w + ' /Height ' + im.h + ' /ColorSpace /DeviceRGB /BitsPerComponent 8 /Filter /DCTDecode /Length ' + im.bytes.length + ' >>\nstream\n'); push(im.bytes); push('\nendstream'); }));
+    pages.forEach((p, i) => {
+      const content = p.join('\n');
+      obj(pageBase + i * 2, () => push('<< /Type /Page /Parent 2 0 R /MediaBox [0 0 ' + PW + ' ' + PH + '] /Resources ' + res + ' /Contents ' + (pageBase + i * 2 + 1) + ' 0 R >>'));
+      obj(pageBase + i * 2 + 1, () => { push('<< /Length ' + enc(content).length + ' >>\nstream\n'); push(content); push('\nendstream'); });
+    });
+    const total = pageBase + pages.length * 2;
+    const xref = len;
+    push('xref\n0 ' + total + '\n0000000000 65535 f \n');
+    for (let n = 1; n < total; n++) push(String(offsets[n]).padStart(10, '0') + ' 00000 n \n');
+    push('trailer\n<< /Size ' + total + ' /Root 1 0 R /Info << /Title ' + pdfStr('Lease - ' + prop) + ' /Producer (Lease Desk) >> >>\nstartxref\n' + xref + '\n%%EOF');
+    return new Blob(parts, { type: 'application/pdf' });
+  }
+  function leaseFileName(d) {
+    const name = ([d.tenantName, d.tenantName2].filter(Boolean).join(' & ') || 'Tenant');
+    const prop = (d.propertyAddress || '') + (d.unitLabel ? ' ' + d.unitLabel : '');
+    return ('Lease - ' + name + ' - ' + prop).replace(/[\\/:*?"<>|#]/g, '').replace(/\s+/g, ' ').trim() + '.pdf';
+  }
+  async function downloadLeasePdf(d, btn) {
+    const orig = btn ? btn.textContent : '';
+    if (btn) { btn.disabled = true; btn.textContent = 'Making PDF…'; }
+    try {
+      const blob = await leasePdfBlob(d);
+      const url = URL.createObjectURL(blob);
+      const a = document.createElement('a'); a.href = url; a.download = leaseFileName(d); document.body.appendChild(a); a.click(); a.remove();
+      setTimeout(() => URL.revokeObjectURL(url), 60000);
+      if (btn) { btn.textContent = 'PDF downloaded ✓'; setTimeout(() => { btn.textContent = orig; btn.disabled = false; }, 1800); }
+    } catch (e) {
+      if (btn) { btn.textContent = orig; btn.disabled = false; }
+      alert('Could not make the PDF. Use "Print / Save as PDF" instead.');
+    }
+  }
+  window.__leasePdfBlob = leasePdfBlob;
+
   function sigBlockHtml(d) {
     return `
       <div class="sig-block">
@@ -1582,6 +1858,7 @@ ${steps(1, LL_STEPS)}
     `;
   }
 
+  document.addEventListener('change', (e) => { const l = e.target && e.target.closest && e.target.closest('.checkbox-row'); if (l && e.target.checked) l.classList.remove('needs'); });
   function setupSignPanel(idPrefix) {
     const nameInput = document.getElementById(idPrefix + '-name');
     const preview = document.getElementById(idPrefix + '-preview');
@@ -1645,9 +1922,12 @@ ${steps(1, LL_STEPS)}
     const drawActive = document.getElementById(idPrefix + '-tab-draw').classList.contains('active');
     if (!name) { err.textContent = 'Enter the full legal name.'; err.style.display = ''; return null; }
     if (drawActive && (!pads[idPrefix] || !pads[idPrefix].hasStroke)) { err.textContent = 'Draw a signature, or switch to Type.'; err.style.display = ''; return null; }
-    if (!agree) { err.textContent = 'Check the box confirming this is your signature.'; err.style.display = ''; return null; }
+    const agreeEl = document.getElementById(idPrefix + '-agree');
     const attestEl = document.getElementById(idPrefix + '-attest');
-    if (attestEl && !attestEl.checked) { err.textContent = 'Check the identity certification box to continue.'; err.style.display = ''; return null; }
+    [agreeEl, attestEl].forEach(el => { if (el && el.closest('label')) el.closest('label').classList.toggle('needs', !el.checked); });
+    if (!agree && attestEl && !attestEl.checked) { err.textContent = 'Check both boxes above to sign.'; err.style.display = ''; agreeEl.closest('label').scrollIntoView({ behavior: 'smooth', block: 'center' }); return null; }
+    if (!agree) { err.textContent = 'Check the box confirming this is your signature.'; err.style.display = ''; agreeEl.closest('label').scrollIntoView({ behavior: 'smooth', block: 'center' }); return null; }
+    if (attestEl && !attestEl.checked) { err.textContent = 'Check the identity certification box to continue.'; err.style.display = ''; attestEl.closest('label').scrollIntoView({ behavior: 'smooth', block: 'center' }); return null; }
     err.style.display = 'none';
     const result = { name, signedAt: Date.now() };
     if (attestEl) result.attested = true;
@@ -2182,7 +2462,8 @@ ${steps(3, TN_STEPS)}
         <div class="link-box"><code id="final-link">${esc(link)}</code></div>
         <div class="btn-row" style="margin-top:0;">
           <button class="btn" onclick="copyLink('final-link')">Copy link</button>
-          <button class="btn btn-primary" onclick="window.print()">Print / save as PDF</button>
+          <button class="btn btn-primary" id="btn-download-pdf">Download PDF</button>
+          <button class="btn" onclick="window.print()">Print / Save as PDF</button>
           <button class="btn" id="btn-download-record">Download record</button>
         </div>
       </div>
@@ -2195,6 +2476,7 @@ ${steps(3, TN_STEPS)}
       </div>
     `;
     document.getElementById('btn-download-record').addEventListener('click', () => downloadRecord(d));
+    document.getElementById('btn-download-pdf').addEventListener('click', function () { downloadLeasePdf(d, this); });
     document.getElementById('btn-new-receipt-for-tenant').addEventListener('click', () => {
       renderReceiptForm({
         propertyAddress: d.propertyAddress + (d.unitLabel ? ', ' + d.unitLabel : ''),

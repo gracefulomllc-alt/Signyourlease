@@ -1,5 +1,6 @@
 import { getStore } from '@netlify/blobs';
 import { randomBytes } from 'node:crypto';
+import { ARCHIVE_STORE, archiveIfComplete } from '../lib/archive-lib.mjs';
 
 const EXPIRY_DAYS = 30;
 const MAX_BYTES = 6 * 1024 * 1024; // 6 MB ceiling to keep photos sane
@@ -44,6 +45,8 @@ export default async (req, context) => {
     } catch (e) {
       return new Response(JSON.stringify({ error: 'store failed' }), { status: 500, headers: { ...cors, 'Content-Type': 'application/json' } });
     }
+    // Fully signed leases are also kept permanently in the archive (without ID photos / pay stubs)
+    try { await archiveIfComplete(getStore({ name: ARCHIVE_STORE, consistency: 'strong' }), JSON.parse(body)); } catch (e) { /* archive is best-effort */ }
     return new Response(JSON.stringify({ id, expiresAt }), { status: 200, headers: { ...cors, 'Content-Type': 'application/json' } });
   }
 
