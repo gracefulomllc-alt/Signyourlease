@@ -455,6 +455,7 @@
               <input type="text" id="f-entity" placeholder="Type the entity name" required style="margin-top:0.5rem;display:none;">
             </div>
             <div class="field"><label>Managing agent (optional)</label><input type="text" id="f-agent" placeholder="Leave blank if same as above"></div>
+            <div class="field full"><label>Landlord notice address</label><input type="text" id="f-landlordaddr" placeholder="Street, city, state ZIP — required in Colorado leases"></div>
             <div class="field">
               <label>Your email (tenant sends the signed lease back here)</label>
               <select id="f-landlordemail-select">
@@ -539,7 +540,7 @@
             <input type="checkbox" id="f-haspetrent" style="width:auto;"> Add monthly pet rent
           </label>
           <div class="field-grid" id="petrent-fields" style="display:none;margin-top:0.75rem;">
-            <div class="field"><label>Pet rent per pet, per month</label><input type="number" id="f-petrentamount" min="0" step="1" placeholder="25"></div>
+            <div class="field"><label>Pet rent per pet, per month</label><input type="number" id="f-petrentamount" min="0" step="1" placeholder="25"><p class="hint">Colorado caps pet rent at the greater of $35/mo or 1.5% of rent, and refundable pet deposits at $300 total (HB23-1068).</p></div>
             <div class="field"><label>Number of pets</label><input type="number" id="f-petcount" min="1" step="1" value="1"></div>
           </div>
           <p class="hint" id="petrent-total-hint" style="display:none;margin-top:0.5rem;"></p>
@@ -569,6 +570,13 @@
           <label style="display:flex;align-items:center;gap:0.5rem;font-size:0.875rem;margin-top:0.5rem;">
             <input type="checkbox" id="f-sharedutils" style="width:auto;"> This unit shares a utility meter with another unit (adds a RUBS disclosure clause)
           </label>
+          <label style="display:flex;align-items:center;gap:0.5rem;font-size:0.875rem;margin-top:0.5rem;">
+            <input type="checkbox" id="f-pre1978" checked style="width:auto;"> Building constructed before 1978 (adds the federally required lead-based paint disclosure)
+          </label>
+          <label style="display:flex;align-items:center;gap:0.5rem;font-size:0.875rem;margin-top:0.5rem;">
+            <input type="checkbox" id="f-radonknown" style="width:auto;"> I have radon test records or mitigation info for this property (describe below)
+          </label>
+          <div class="field full" id="radon-info-wrap" style="display:none;"><label>Known radon information</label><textarea id="f-radoninfo" placeholder="e.g. Tested March 2024: 2.1 pCi/L, no mitigation needed. Attach records to the signed lease."></textarea></div>
           <div class="field full">
             <label>Additional clauses (optional)</label>
             <textarea id="f-additional" placeholder="Anything specific to this unit or tenant"></textarea>
@@ -695,6 +703,10 @@
         prev.style.display = 'none';
       }
     }
+    const radonBox = document.getElementById('f-radonknown');
+    if (radonBox) radonBox.addEventListener('change', () => {
+      document.getElementById('radon-info-wrap').style.display = radonBox.checked ? '' : 'none';
+    });
     ['f-prorate','f-start'].forEach(id => {
       const el = document.getElementById(id);
       if (el) el.addEventListener('change', refreshProrate);
@@ -810,6 +822,10 @@
       landlordDraft = {
         entity: document.getElementById('f-entity').value.trim(),
         agent: document.getElementById('f-agent').value.trim(),
+        landlordAddr: document.getElementById('f-landlordaddr') ? document.getElementById('f-landlordaddr').value.trim() : '',
+        pre1978: document.getElementById('f-pre1978') ? document.getElementById('f-pre1978').checked : false,
+        radonKnown: document.getElementById('f-radonknown') ? document.getElementById('f-radonknown').checked : false,
+        radonInfo: document.getElementById('f-radoninfo') ? document.getElementById('f-radoninfo').value.trim() : '',
         landlordEmail: document.getElementById('f-landlordemail').value.trim(),
         landlordPhone: document.getElementById('f-landlordphone').value.trim(),
         propertyAddress: document.getElementById('f-address').value.trim(),
@@ -857,7 +873,7 @@
       const count = parseInt(d.petCount) || 0;
       const petTotal = per * count;
       const totalRent = (parseFloat(d.rent) || 0) + petTotal;
-      rentClause = `The Tenant agrees to pay to the Landlord as rent for the use and occupancy of the Leased Property the sum of ${rentText} per month, plus pet rent of ${fmtMoney(per)} per pet per month for ${count} pet${count === 1 ? '' : 's'} (${fmtMoney(petTotal)} per month), for a total monthly Rent of ${fmtMoney(totalRent)}, due on the ${esc(String(d.dueDay||1))}${ordinalSuffix(d.dueDay||1)} day of each month ("Rent"). Pet rent adjusts if the number of pets on the Leased Property changes, subject to the Landlord's written approval of any new pet.`;
+      rentClause = `The Tenant agrees to pay to the Landlord as rent for the use and occupancy of the Leased Property the sum of ${rentText} per month, plus pet rent of ${fmtMoney(per)} per pet per month for ${count} pet${count === 1 ? '' : 's'} (${fmtMoney(petTotal)} per month), for a total monthly Rent of ${fmtMoney(totalRent)}, due on the ${esc(String(d.dueDay||1))}${ordinalSuffix(d.dueDay||1)} day of each month ("Rent"). Pet rent adjusts if the number of pets on the Leased Property changes, subject to the Landlord's written approval of any new pet. Pet rent and any pet deposit under this Lease are intended to comply with, and shall be limited to, the maximum amounts permitted by C.R.S. § 38-12-106.`;
     } else {
       rentClause = `The Tenant agrees to pay to the Landlord as rent for the use and occupancy of the Leased Property the sum of ${rentText} due on the ${esc(String(d.dueDay||1))}${ordinalSuffix(d.dueDay||1)} day of each month ("Rent").`;
     }
@@ -947,13 +963,28 @@
       <h3>Abandonment</h3><p>If the Tenant vacates the Leased Property before the end of this Lease without notice, and Rent remains unpaid, or if circumstances reasonably indicate the Tenant has surrendered the Leased Property, the Landlord may consider the Leased Property abandoned and may re-enter and secure it. The Landlord shall handle any personal property left behind in accordance with Colorado law governing abandoned tenant property.</p>
       <h3>Default and Remedies</h3><p>In addition to any other remedy available under this Lease or Colorado law, upon the Tenant's default the Landlord may terminate this Lease, pursue possession of the Leased Property, and recover unpaid Rent, damages, and costs. If the Landlord re-rents the Leased Property following the Tenant's default, the Landlord will apply reasonable efforts to mitigate damages as required by Colorado law, and the Tenant remains liable for any shortfall between the Rent due under this Lease and the rent actually collected, plus the reasonable costs of re-renting.</p>
       <h3>Holdover</h3><p>If the Tenant remains in possession of the Leased Property after the Termination Date without the Landlord's written consent, the Tenant shall pay use and occupancy at a rate of one hundred fifty percent (150%) of the prorated daily Rent for each day of holdover, in addition to any other damages the Landlord may recover.</p>
+      <h3>Bed Bugs</h3><p>The Landlord represents that, to the Landlord's knowledge, the Leased Property is not currently infested with bed bugs. The Tenant shall promptly notify the Landlord in writing or electronically upon knowing or reasonably suspecting the presence of bed bugs. The Tenant shall cooperate with inspection and treatment, including reasonable preparation of the Leased Property, and the Landlord will provide at least forty-eight (48) hours' notice before entry for bed bug inspection or treatment as provided by Colorado law. The parties' rights and obligations regarding bed bugs are governed by C.R.S. §§ 38-12-1001 to -1009.</p>
+      <h3>Mold and Moisture</h3><p>The Tenant shall use reasonable ventilation, promptly report in writing any water intrusion, leak, or visible mold, and shall not block ventilation or allow standing moisture caused by the Tenant's use. The Landlord will address reported moisture and mold conditions as required by Colorado's warranty of habitability.</p>
+      <h3>Locks and Keys</h3><p>The Tenant shall not change, add, or re-key any lock without the Landlord's prior written consent, except as expressly permitted by Colorado law, and shall provide the Landlord a working key to any approved lock change. Lost keys or lockouts may be charged at the Landlord's documented, actual cost.</p>
+      <h3>Rules and Regulations</h3><p>The Tenant shall comply with reasonable written rules and regulations adopted by the Landlord for the safety, care, and cleanliness of the property and the comfort of other occupants, provided such rules are lawful, apply to all tenants, and do not materially modify the economic terms of this Lease. Rules may be updated with reasonable advance written notice.</p>
+      <h3>Damage or Destruction</h3><p>If the Leased Property is damaged by fire or other casualty not caused by the Tenant so as to be rendered uninhabitable, either party may terminate this Lease upon written notice, and Rent shall be prorated to the date the Leased Property became uninhabitable. If only partially damaged, the Landlord shall repair with reasonable diligence and Rent shall abate proportionately for the portion rendered unusable, as provided by law. Nothing in this section limits the Tenant's liability for damage caused by the Tenant, the Tenant's occupants, or guests.</p>
+      <h3>Copy of Lease</h3><p>The Landlord will provide the Tenant with a copy of this signed Lease, electronically or on paper at the Tenant's request, within seven (7) days after it is fully signed.</p>
       ${d.additional ? '<h3>Additional Terms</h3><p>' + esc(d.additional).replace(/\n/g,'<br>') + '</p>' : ''}
+      <h3>Required Colorado and Federal Disclosures</h3>
+      <p style="font-weight:bold;">RADON WARNING: The Colorado Department of Public Health and Environment strongly recommends that ALL tenants have an indoor radon test performed before leasing residential real property and recommends having the radon levels mitigated if elevated radon concentrations are found. Elevated radon concentrations can easily be reduced by a qualified radon mitigation professional. Residential real property may be subject to radon gas, a naturally occurring radioactive gas that, when accumulated in a building in sufficient quantities, may present health risks to persons exposed to it over time. Radon is a Class A human carcinogen and is the leading cause of lung cancer in nonsmokers in the United States and the second leading cause of lung cancer overall. The landlord is required to provide the tenant with any known information on radon test results of the leased premises.</p>
+      <p>${d.radonKnown && d.radonInfo ? 'Landlord\'s known radon information for the Leased Property: ' + esc(d.radonInfo) : 'The Landlord has no records or reports of radon testing, radon concentrations, or radon mitigation for the Leased Property, and no knowledge of elevated radon concentrations at the Leased Property.'} The most recent brochure published by the Colorado Department of Public Health and Environment regarding radon in real estate transactions is available at cdphe.colorado.gov/radon, and the Tenant acknowledges receipt of the radon disclosures required by C.R.S. § 38-12-803 by signing this Lease.</p>
+      ${d.pre1978 ? `<p style="font-weight:bold;">LEAD WARNING STATEMENT: Housing built before 1978 may contain lead-based paint. Lead from paint, paint chips, and dust can pose health hazards if not managed properly. Lead exposure is especially harmful to young children and pregnant women. Before renting pre-1978 housing, lessors must disclose the presence of known lead-based paint and/or lead-based paint hazards in the dwelling. Lessees must also receive a federally approved pamphlet on lead poisoning prevention.</p>
+      <p>The Landlord has no knowledge of lead-based paint and/or lead-based paint hazards in the Leased Property and has no reports or records pertaining to lead-based paint and/or lead-based paint hazards in the Leased Property, except as stated in the Additional Terms of this Lease. The Tenant acknowledges receipt of the federally approved pamphlet "Protect Your Family From Lead in Your Home," available at epa.gov/lead, and of the information above.</p>` : ''}
+      <p><strong>Source of Income:</strong> Under Colorado law (C.R.S. § 24-34-502), it is an unfair housing practice to refuse to rent, or to discriminate in the terms of rental, because of a person's lawful source of income, including income from any government assistance, housing subsidy, or rental assistance program. The Landlord accepts lawful sources of income, including housing vouchers, in accordance with Colorado law.</p>
+      <p style="font-weight:bold;font-size:12pt;">COLORADO WARRANTY OF HABITABILITY NOTICE: Every residential tenant in Colorado has the right to safe and healthy housing. If you believe your home is unsafe or unhealthy, you have the right to request repairs, and your landlord may not retaliate against you for doing so. Deliver written or electronic notice of any uninhabitable or unsafe condition to: ${esc(landlordName)}${d.landlordEmail ? ', ' + esc(d.landlordEmail) : ''}${d.landlordAddr ? ', ' + esc(d.landlordAddr) : ''}.</p>
+      <p style="font-weight:bold;font-size:12pt;">AVISO SOBRE LA GARANT&Iacute;A DE HABITABILIDAD DE COLORADO: Todo inquilino residencial en Colorado tiene derecho a una vivienda segura y saludable. Si usted cree que su vivienda es insegura o insalubre, tiene derecho a solicitar reparaciones, y su arrendador no puede tomar represalias en su contra por hacerlo. Entregue un aviso por escrito o electr&oacute;nico de cualquier condici&oacute;n inhabitable o insegura a: ${esc(landlordName)}${d.landlordEmail ? ', ' + esc(d.landlordEmail) : ''}${d.landlordAddr ? ', ' + esc(d.landlordAddr) : ''}.</p>
       <h3>Notices</h3>
       <p>
-        Landlord: ${esc(landlordName)}${d.landlordEmail ? ' &mdash; ' + esc(d.landlordEmail) : ''}<br>
+        Landlord: ${esc(landlordName)}${d.landlordEmail ? ' &mdash; ' + esc(d.landlordEmail) : ''}${d.landlordAddr ? ' &mdash; ' + esc(d.landlordAddr) : ''}<br>
         Tenant: ${esc(d.tenantName)}${d.tenantPhone ? ' &mdash; ' + esc(d.tenantPhone) : ''}${d.tenantEmail ? ' &mdash; ' + esc(d.tenantEmail) : ''}
         ${d.tenantName2 ? '<br>Tenant: ' + esc(d.tenantName2) + (d.tenantPhone2 ? ' &mdash; ' + esc(d.tenantPhone2) : '') + (d.tenantEmail2 ? ' &mdash; ' + esc(d.tenantEmail2) : '') : ''}
       </p>
+      <p>Except where a specific method of service is required by statute, the parties agree that written notices under this Lease may be delivered personally, by mail to the addresses above, or electronically by email${d.tenantPhone ? ' or text message' : ''} to the contacts listed above, and that electronic delivery constitutes written notice.</p>
       <h3>No Waiver</h3><p>The Landlord's failure to enforce any provision of this Lease, or acceptance of a partial or late payment, does not waive the Landlord's right to enforce that provision or any other provision later, and does not waive any right to pursue possession or damages for the default.</p>
       <h3>Governing Law and Venue</h3><p>This Lease shall be construed in accordance with the laws of the State of Colorado. Venue for any legal proceeding arising from this Lease shall be the county in which the Leased Property is located. This Lease contains the entire agreement of the parties and may be modified only in writing signed by both parties. If any provision of this Lease is found invalid or unenforceable, the remaining provisions remain in full force and effect.</p>
       <h3>Electronic Signatures and Identity</h3><p>The parties agree that this Lease may be signed electronically, and that an electronic signature has the same legal effect and enforceability as a handwritten signature under applicable federal and Colorado law. By signing, the Tenant certifies that the Tenant is the person named in this Lease, that any identification or supporting documents provided in connection with signing are the Tenant's own, genuine, and unaltered, and that the Tenant signs voluntarily. The parties agree that providing false identity information or falsified documents to induce this Lease is a material misrepresentation, and the Landlord's execution of this Lease relies on the truth of the Tenant's certification.</p>
