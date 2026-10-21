@@ -413,9 +413,81 @@
       return;
     }
     if (hash === '#/receipt') { if (!landlordAuthed()) { renderGate('#/receipt'); return; } renderReceiptForm(); return; }
-    if (!landlordAuthed()) { renderGate(''); return; }
-    renderForm();
+    if (hash === '#/new') { if (!landlordAuthed()) { renderGate('#/new'); return; } renderForm(); return; }
+    if (hash === '#/continue') { renderTenantStatus(); return; }
+    if (hash === '#/start') { renderTenantIntake(); return; }
+    if (hash === '#/staff') { if (!landlordAuthed()) { renderGate('#/staff'); return; } renderStaffMenu(); return; }
+    renderHome();
   }
+
+  function goHash(hsh) { if (location.hash === hsh || (hsh === '' && !location.hash)) route(); else location.hash = hsh; }
+  window.goHash = goHash;
+
+  // ---------- WELCOME PAGE ----------
+  function renderHome() {
+    const tile = (hsh, title, sub, primary) => `
+      <button class="btn ${primary ? 'btn-primary' : 'btn-ghost'}" style="width:100%;text-align:left;display:block;padding:0.9rem 1rem;" onclick="goHash('${hsh}')">
+        <strong style="display:block;">${title}</strong><span style="font-size:0.82rem;opacity:.85;font-weight:normal;">${sub}</span>
+      </button>`;
+    const link = (url, title, sub) => `
+      <a class="btn btn-ghost" style="width:100%;text-align:left;display:block;padding:0.9rem 1rem;text-decoration:none;" href="${url}" target="_blank" rel="noopener">
+        <strong style="display:block;">${title}</strong><span style="font-size:0.82rem;opacity:.85;">${sub}</span>
+      </a>`;
+    app.innerHTML = header(true) + `
+      <div style="max-width:520px;margin:1.5rem auto;">
+        <h1 style="text-align:center;margin-bottom:0.25rem;">Welcome</h1>
+        <p class="subhead" style="text-align:center;margin-bottom:1.5rem;">What are you here to do?</p>
+
+        <div class="card">
+          <div class="section-label">I'm a tenant</div>
+          <div style="display:flex;flex-direction:column;gap:0.6rem;">
+            ${tile('#/continue', 'Continue my lease', 'Sign or view your lease. You\'ll need your name and the last 4 digits of your cell.', true)}
+            ${tile('#/start', 'I\'m a new tenant', 'Send your landlord your info so they can prepare your lease.', false)}
+          </div>
+        </div>
+
+        <div class="card">
+          <div class="section-label">Looking for a place</div>
+          <div style="display:flex;flex-direction:column;gap:0.6rem;">
+            ${link('https://tldrleaseagreement.netlify.app', 'See available studios', 'Photos, pricing, and details for 411 Troy Ave.')}
+            ${link('https://my.innago.com/a/M2P3Rl0S1bT', 'Apply for a unit', 'Opens the rental application.')}
+          </div>
+        </div>
+
+        <div class="card">
+          <div class="section-label">Landlord or staff</div>
+          <div style="display:flex;flex-direction:column;gap:0.6rem;">
+            ${tile('#/new', 'Create a lease', 'Fill out the terms and get the tenant\'s signing link. Pending tenants show at the top.', false)}
+            ${tile('#/receipt', 'Create a receipt', 'Any tenant: full rent, partial payment, deposit, or installment.', false)}
+          </div>
+          ${landlordAuthed() ? '' : '<p class="hint" style="margin-top:0.5rem;">Both ask for your landlord code.</p>'}
+        </div>
+      </div>`;
+    window.scrollTo(0, 0);
+  }
+
+  function renderStaffMenu() {
+    const tile = (hsh, title, sub, primary) => `
+      <button class="btn ${primary ? 'btn-primary' : 'btn-ghost'}" style="width:100%;text-align:left;display:block;padding:0.9rem 1rem;" onclick="goHash('${hsh}')">
+        <strong style="display:block;">${title}</strong><span style="font-size:0.82rem;opacity:.85;font-weight:normal;">${sub}</span>
+      </button>`;
+    app.innerHTML = header() + `
+      <div style="max-width:520px;margin:1.5rem auto;">
+        <h1 style="text-align:center;margin-bottom:1.25rem;">Landlord tools</h1>
+        <div class="card"><div style="display:flex;flex-direction:column;gap:0.6rem;">
+          ${tile('#/new', 'Create a new lease', 'Fill out the terms, check it, and get the tenant\'s signing link. Pending tenants show at the top.', true)}
+          ${tile('#/receipt', 'Record a payment receipt', 'Rent, prorated rent, deposit, or deposit installment.', false)}
+        </div></div>
+        <p style="text-align:center;"><a href="#" style="font-size:0.82rem;" onclick="lockDevice();return false;">Sign out on this device</a></p>
+      </div>`;
+    window.scrollTo(0, 0);
+  }
+  function lockDevice() {
+    try { localStorage.removeItem('ld_landlord'); } catch (e) {}
+    window.__ldAuth = false;
+    goHash('');
+  }
+  window.lockDevice = lockDevice;
 
   // ---------- LANDING GATE ----------
   const LANDLORD_CODES = ['1208', '6040'];
@@ -427,50 +499,24 @@
     window.__ldAuth = true;
   }
   function renderGate(dest) {
-    app.innerHTML = header() + `
-      <div class="card" style="max-width:480px;margin:2rem auto;text-align:center;">
-        <div class="section-label">Welcome to Lease Desk</div>
-        <p style="margin-bottom:1.25rem;">Who's here?</p>
-        <div class="btn-row" style="justify-content:center;flex-direction:column;gap:0.75rem;">
-          <button class="btn btn-primary" id="gate-tenant" style="width:100%;">I'm a tenant — here to sign my lease</button>
-          <button class="btn btn-brass" id="gate-landlord" style="width:100%;">I'm the landlord / staff</button>
+    app.innerHTML = header(true) + `
+      <div class="card" style="max-width:420px;margin:2rem auto;text-align:center;">
+        <div class="section-label">Landlord / staff sign-in</div>
+        <div class="field" style="max-width:220px;margin:0.75rem auto 0;">
+          <label>Access code</label>
+          <input type="password" inputmode="numeric" id="gate-code" placeholder="&bull;&bull;&bull;&bull;" style="text-align:center;letter-spacing:0.3em;font-size:1.1rem;">
         </div>
-        <div id="gate-landlord-panel" style="display:none;margin-top:1.25rem;">
-          <div class="field" style="max-width:220px;margin:0 auto;">
-            <label>Access code</label>
-            <input type="password" inputmode="numeric" id="gate-code" placeholder="&bull;&bull;&bull;&bull;" style="text-align:center;letter-spacing:0.3em;font-size:1.1rem;">
-          </div>
-          <p class="error-text" id="gate-error" style="display:none;">That code isn't right.</p>
-          <div class="btn-row" style="justify-content:center;margin-top:0.75rem;">
-            <button class="btn btn-primary" id="gate-enter">Enter</button>
-          </div>
+        <p class="error-text" id="gate-error" style="display:none;">That code isn't right.</p>
+        <div class="btn-row" style="justify-content:center;margin-top:0.75rem;">
+          <button class="btn btn-ghost" onclick="goHash('')">&larr; Back</button>
+          <button class="btn btn-primary" id="gate-enter">Enter</button>
         </div>
-        <div id="gate-tenant-panel" style="display:none;margin-top:1.25rem;text-align:left;">
-          <p style="margin-bottom:0.75rem;">If you were <strong>texted or emailed a lease link</strong>, open that link to review and sign.</p>
-          <div class="btn-row" style="flex-direction:column;gap:0.6rem;">
-            <button class="btn btn-primary" style="width:100%;" onclick="renderTenantIntake()">New tenant &mdash; fill out my info to get started</button>
-            <button class="btn btn-ghost" style="width:100%;" onclick="renderTenantStatus()">Continue my lease (name + last 4 of my cell)</button>
-          </div>
-        </div>
-      </div>
-    `;
-    document.getElementById('gate-tenant').addEventListener('click', () => {
-      document.getElementById('gate-tenant-panel').style.display = '';
-      document.getElementById('gate-landlord-panel').style.display = 'none';
-    });
-    document.getElementById('gate-landlord').addEventListener('click', () => {
-      document.getElementById('gate-landlord-panel').style.display = '';
-      document.getElementById('gate-tenant-panel').style.display = 'none';
-      document.getElementById('gate-code').focus();
-    });
+      </div>`;
+    document.getElementById('gate-code').focus();
     const tryCode = () => {
       const v = document.getElementById('gate-code').value.trim();
-      if (LANDLORD_CODES.includes(v)) {
-        setLandlordAuthed(v);
-        if (dest === '#/receipt') { renderReceiptForm(); } else { renderForm(); }
-      } else {
-        document.getElementById('gate-error').style.display = '';
-      }
+      if (LANDLORD_CODES.includes(v)) { setLandlordAuthed(v); route(); }
+      else document.getElementById('gate-error').style.display = '';
     };
     document.getElementById('gate-enter').addEventListener('click', tryCode);
     document.getElementById('gate-code').addEventListener('keydown', (e) => { if (e.key === 'Enter') tryCode(); });
@@ -479,6 +525,7 @@
   // ---------- TENANT SELF-SERVICE INTAKE ----------
   function renderTenantIntake() {
     app.innerHTML = header() + `
+      <button class="step-back" onclick="goHash('')">&larr; Back</button>
       <div class="card" style="max-width:520px;margin:2rem auto;">
         <div class="section-label">Tell us about you</div>
         <p class="hint" style="margin-bottom:1rem;">Fill this out and your landlord will prepare your lease. You'll come back with your <strong>name + the last 4 of your cell number</strong> to sign once it's ready.</p>
@@ -522,6 +569,7 @@
 
   function renderTenantStatus() {
     app.innerHTML = header() + `
+      <button class="step-back" onclick="goHash('')">&larr; Back</button>
       <div class="card" style="max-width:420px;margin:2rem auto;">
         <div class="section-label">Continue my lease</div>
         <div class="field"><label>Full legal name</label><input type="text" id="st-name" placeholder="Exactly as you entered it"></div>
@@ -630,8 +678,9 @@
         <div class="letterhead-tagline">Colorado residential lease preparation and execution</div>
       </div>
       ${hideNav ? '' : `<div class="letterhead-nav no-print">
-        <a class="step-back" style="margin:0 0 0 1rem;display:inline-flex;" href="#" onclick="location.hash='#/receipt';return false;">New receipt</a>
-        <a class="step-back" style="margin:0;display:inline-flex;" href="#" onclick="location.hash='';return false;">Start a new lease</a>
+        <a class="step-back" style="margin:0 0 0 1rem;display:inline-flex;" href="#" onclick="goHash('');return false;">Home</a>
+        ${landlordAuthed() ? `<a class="step-back" style="margin:0 0 0 1rem;display:inline-flex;" href="#" onclick="goHash('#/receipt');return false;">New receipt</a>
+        <a class="step-back" style="margin:0;display:inline-flex;" href="#" onclick="goHash('#/new');return false;">Start a new lease</a>` : ''}
       </div>`}`;
   }
 
@@ -2005,7 +2054,7 @@
   function renderReceiptForm(prefill) {
     const pre = prefill || {};
     app.innerHTML = header() + `
-      <button class="step-back" onclick="location.hash='';return false;">&larr; Back to lease</button>
+      <button class="step-back" onclick="goHash('#/new');return false;">&larr; Back to lease</button>
       <h1>New receipt</h1>
       <p class="subhead">Record what was actually collected today — full rent, prorated rent, a security deposit, or any mix. This isn't part of the lease; it's its own record.</p>
       <form id="receipt-form">
@@ -2037,7 +2086,25 @@
           <div class="section-label">What was collected</div>
           <p class="hint" style="margin-bottom:0.75rem;">Add a line for each item — full rent, prorated rent, security deposit, late fee, whatever actually changed hands today.</p>
           <div id="receipt-rows"></div>
+          <datalist id="receipt-labels">
+            <option value="Rent"><option value="Rent (prorated)"><option value="Rent (partial payment)">
+            <option value="Security deposit"><option value="Security deposit installment"><option value="Pet deposit">
+            <option value="Late fee"><option value="Returned payment charge"><option value="Storage unit">
+            <option value="Utility reimbursement"><option value="Repair charge">
+          </datalist>
           <button type="button" class="btn btn-ghost" id="add-receipt-row" style="padding:0.5rem 0.75rem;font-size:0.8125rem;">+ Add another line</button>
+        </div>
+        <div class="card">
+          <div class="section-label">Partial payment</div>
+          <label style="display:flex;align-items:center;gap:0.5rem;font-size:0.875rem;">
+            <input type="checkbox" id="r-partial" style="width:auto;"> This is a partial payment (tenant still owes a balance)
+          </label>
+          <div id="r-partial-fields" style="display:none;margin-top:0.75rem;">
+            <div class="field"><label>Total amount owed for this period</label><input type="number" min="0" step="0.01" id="r-owed" placeholder="805"></div>
+            <div class="field"><label>Remaining balance due by (optional)</label><input type="date" id="r-balancedue"></div>
+            <div class="field full"><label>What the balance is for (optional)</label><input type="text" id="r-balancefor" placeholder="e.g. November 2026 rent"></div>
+            <p class="hint" id="r-balance-preview"></p>
+          </div>
         </div>
         <div class="card">
           <div class="section-label">Acknowledgment</div>
@@ -2067,7 +2134,7 @@
       const wrap = document.getElementById('receipt-rows');
       wrap.innerHTML = rows.map((row, i) => `
         <div class="deposit-row" data-idx="${i}" style="grid-template-columns:1.6fr 1fr auto;">
-          <input type="text" placeholder="Label (e.g. Security Deposit)" value="${esc(row.label)}" data-field="label">
+          <input type="text" list="receipt-labels" placeholder="Label (e.g. Rent, Security deposit)" value="${esc(row.label)}" data-field="label">
           <input type="number" min="0" step="1" placeholder="Amount" value="${esc(row.amount)}" data-field="amount">
           <button type="button" class="row-remove" title="Remove" ${rows.length===1?'disabled style="opacity:.3;cursor:default;"':''}>&times;</button>
         </div>
@@ -2092,10 +2159,32 @@
       rows.push({ label: '', amount: '' });
       renderRows();
     });
+    const partialBox = document.getElementById('r-partial');
+    const refreshBalance = () => {
+      const owed = parseFloat(document.getElementById('r-owed').value) || 0;
+      const paid = rows.reduce((s, r) => s + (parseFloat(r.amount) || 0), 0);
+      const prev = document.getElementById('r-balance-preview');
+      if (!owed) { prev.textContent = 'Enter the total owed to see the remaining balance.'; return; }
+      const bal = Math.round((owed - paid) * 100) / 100;
+      prev.textContent = bal > 0 ? 'Paid ' + fmtMoney(paid) + ' of ' + fmtMoney(owed) + '. Remaining balance: ' + fmtMoney(bal) + '.'
+        : 'Paid ' + fmtMoney(paid) + ' covers the full ' + fmtMoney(owed) + '. Uncheck "partial payment" if nothing is still owed.';
+    };
+    partialBox.addEventListener('change', () => { document.getElementById('r-partial-fields').style.display = partialBox.checked ? '' : 'none'; refreshBalance(); });
+    document.getElementById('r-owed').addEventListener('input', refreshBalance);
+    document.getElementById('receipt-rows').addEventListener('input', refreshBalance);
     document.getElementById('receipt-form').addEventListener('submit', (e) => {
       e.preventDefault();
       const items = rows.filter(r => r.label.trim() !== '' && parseFloat(r.amount) > 0).map(r => ({ label: r.label.trim(), amount: r.amount }));
       if (items.length === 0) { alert('Add at least one line with an amount.'); return; }
+      let partial = null;
+      if (partialBox.checked) {
+        const owed = parseFloat(document.getElementById('r-owed').value) || 0;
+        const paid = items.reduce((s, it) => s + (parseFloat(it.amount) || 0), 0);
+        if (!owed) { alert('Enter the total amount owed, or uncheck "partial payment."'); return; }
+        if (owed <= paid) { alert('The amount paid covers everything owed. Uncheck "partial payment," or fix the total owed.'); return; }
+        partial = { owed: owed, balance: Math.round((owed - paid) * 100) / 100,
+          dueBy: document.getElementById('r-balancedue').value, forWhat: document.getElementById('r-balancefor').value.trim() };
+      }
       receiptDraft = {
         propertyAddress: document.getElementById('r-address').value.trim(),
         tenantName: document.getElementById('r-tenant').value.trim(),
@@ -2103,6 +2192,7 @@
         receivedBy: document.getElementById('r-receivedby').value.trim(),
         method: document.getElementById('r-method').value,
         items: items,
+        partial: partial,
         needsTenantSign: document.getElementById('r-tenantsign').checked,
         needsLandlordSign: document.getElementById('r-landlordsign').checked,
       };
@@ -2121,7 +2211,10 @@
       <table style="width:100%;border-collapse:collapse;margin:1.5rem 0;">
         ${d.items.map(it => `<tr><td style="padding:0.4rem 0;border-bottom:1px solid var(--paper-line);">${esc(it.label)}</td><td style="padding:0.4rem 0;border-bottom:1px solid var(--paper-line);text-align:right;">${fmtMoney(it.amount)}</td></tr>`).join('')}
         <tr><td style="padding:0.6rem 0;font-weight:600;">Total received</td><td style="padding:0.6rem 0;font-weight:600;text-align:right;">${fmtMoney(total)}</td></tr>
+        ${d.partial ? `<tr><td style="padding:0.4rem 0;">Total owed${d.partial.forWhat ? ' (' + esc(d.partial.forWhat) + ')' : ''}</td><td style="padding:0.4rem 0;text-align:right;">${fmtMoney(d.partial.owed)}</td></tr>
+        <tr><td style="padding:0.6rem 0;font-weight:600;color:#b3261e;">Remaining balance${d.partial.dueBy ? ', due by ' + fmtDate(d.partial.dueBy) : ''}</td><td style="padding:0.6rem 0;font-weight:600;text-align:right;color:#b3261e;">${fmtMoney(d.partial.balance)}</td></tr>` : ''}
       </table>
+      ${d.partial ? `<p style="font-size:0.85rem;"><strong>Partial payment.</strong> This receipt acknowledges a partial payment only. A balance of ${fmtMoney(d.partial.balance)} remains owed${d.partial.dueBy ? ' and is due by ' + fmtDate(d.partial.dueBy) : ''}. As provided in the lease, the Landlord's acceptance of a partial payment does not waive the remaining balance or any of the Landlord's rights or remedies under the lease or Colorado law.</p>` : ''}
       <p style="font-family:'Inter',sans-serif;font-size:0.8125rem;color:var(--slate);">Received by: ${esc(d.receivedBy || 'Landlord')}</p>
     `;
   }
