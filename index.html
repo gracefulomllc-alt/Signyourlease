@@ -445,8 +445,11 @@
           </div>
         </div>
         <div id="gate-tenant-panel" style="display:none;margin-top:1.25rem;text-align:left;">
-          <p style="margin-bottom:0.75rem;">Your lease has its own private link, sent to you by text or email. Open <strong>that link</strong> to review and sign your lease &mdash; this page can't look it up for you.</p>
-          <p class="hint">Can't find your link, or it says it expired? Contact your landlord and they'll send you a fresh one.</p>
+          <p style="margin-bottom:0.75rem;">If you were <strong>texted or emailed a lease link</strong>, open that link to review and sign.</p>
+          <div class="btn-row" style="flex-direction:column;gap:0.6rem;">
+            <button class="btn btn-primary" style="width:100%;" onclick="renderTenantIntake()">New tenant &mdash; fill out my info to get started</button>
+            <button class="btn btn-ghost" style="width:100%;" onclick="renderTenantStatus()">Open my lease (name + last 4 of my cell)</button>
+          </div>
         </div>
       </div>
     `;
@@ -470,6 +473,144 @@
     };
     document.getElementById('gate-enter').addEventListener('click', tryCode);
     document.getElementById('gate-code').addEventListener('keydown', (e) => { if (e.key === 'Enter') tryCode(); });
+  }
+
+  // ---------- TENANT SELF-SERVICE INTAKE ----------
+  function renderTenantIntake() {
+    app.innerHTML = header() + `
+      <div class="card" style="max-width:520px;margin:2rem auto;">
+        <div class="section-label">Tell us about you</div>
+        <p class="hint" style="margin-bottom:1rem;">Fill this out and your landlord will prepare your lease. You'll come back with your <strong>name + the last 4 of your cell number</strong> to sign once it's ready.</p>
+        <div class="field"><label>Full legal name</label><input type="text" id="in-name" placeholder="First and last name"></div>
+        <div class="field"><label>Phone</label><input type="tel" id="in-phone" placeholder="(719) 555-0100"></div>
+        <div class="field"><label>Email</label><input type="email" id="in-email" placeholder="name@email.com"></div>
+        <div class="field"><label>Which property / unit are you renting?</label><input type="text" id="in-unit" placeholder="e.g. 411 Troy Ave, Unit 3"></div>
+        <div class="field"><label>Anything your landlord should know? (optional)</label><textarea id="in-note" rows="2" placeholder="Move-in date you're hoping for, pets, etc."></textarea></div>
+        <p class="hint"><strong>Your access code is the last 4 digits of your cell number.</strong> Come back anytime with your name + those 4 digits to open your lease.</p>
+        <p class="error-text" id="in-error" style="display:none;"></p>
+        <div class="btn-row"><button class="btn btn-primary" id="in-submit">Submit my info</button></div>
+      </div>`;
+    document.getElementById('in-submit').addEventListener('click', async function () {
+      const name = document.getElementById('in-name').value.trim();
+      const phoneVal = document.getElementById('in-phone').value.trim();
+      const err = document.getElementById('in-error');
+      if (!name) { err.textContent = 'Enter your full legal name.'; err.style.display = ''; return; }
+      if (phoneVal.replace(/\D/g, '').length < 4) { err.textContent = 'Enter your cell number — its last 4 digits are your access code.'; err.style.display = ''; return; }
+      err.style.display = 'none';
+      this.disabled = true; this.textContent = 'Submitting…';
+      try {
+        const resp = await fetch('/api/intake', { method: 'POST', headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ action: 'create', name,
+            phone: phoneVal,
+            email: document.getElementById('in-email').value.trim(),
+            unitInterest: document.getElementById('in-unit').value.trim(),
+            note: document.getElementById('in-note').value.trim() }) });
+        if (!resp.ok) throw new Error('save failed');
+        app.innerHTML = header() + `
+          <div class="card" style="max-width:520px;margin:2rem auto;text-align:center;">
+            <div class="banner banner-success">You're all set, ${esc(name)}!</div>
+            <p style="margin:1rem 0;">Your landlord will prepare your lease and attach your unit. When it's ready, you'll get the signing link by text or email &mdash; or come back here anytime, choose <strong>"Check if my lease is ready"</strong>, and enter your name + the last 4 digits of your cell number.</p>
+          </div>`;
+      } catch (e) {
+        err.textContent = 'Could not submit — check your connection and try again.'; err.style.display = '';
+        this.disabled = false; this.textContent = 'Submit my info';
+      }
+    });
+  }
+  window.renderTenantIntake = renderTenantIntake;
+
+  function renderTenantStatus() {
+    app.innerHTML = header() + `
+      <div class="card" style="max-width:420px;margin:2rem auto;">
+        <div class="section-label">Check my lease</div>
+        <div class="field"><label>Full legal name</label><input type="text" id="st-name" placeholder="Exactly as you entered it"></div>
+        <div class="field" style="max-width:260px;"><label>Last 4 digits of your cell number</label><input type="password" inputmode="numeric" maxlength="4" id="st-pin" style="text-align:center;letter-spacing:0.3em;"></div>
+        <p class="error-text" id="st-error" style="display:none;"></p>
+        <div class="btn-row"><button class="btn btn-primary" id="st-go">Check status</button></div>
+      </div>`;
+    document.getElementById('st-go').addEventListener('click', async function () {
+      const name = document.getElementById('st-name').value.trim();
+      const pin = document.getElementById('st-pin').value.trim();
+      const err = document.getElementById('st-error');
+      this.disabled = true; this.textContent = 'Checking…';
+      try {
+        const resp = await fetch('/api/intake?name=' + encodeURIComponent(name) + '&pin=' + encodeURIComponent(pin));
+        if (resp.status === 404) { err.textContent = 'No match for that name + last 4. Check the spelling of your name and try again.'; err.style.display = ''; }
+        else if (!resp.ok) { throw new Error('bad'); }
+        else {
+          const out = await resp.json();
+          if (out.status === 'ready' && out.leaseId) { location.href = '/l/' + out.leaseId; return; }
+          err.style.display = 'none';
+          app.innerHTML = header() + `
+            <div class="card" style="max-width:420px;margin:2rem auto;text-align:center;">
+              <div class="banner banner-brass">Hi ${esc(out.name || name)} — your lease isn't ready yet.</div>
+              <p style="margin-top:1rem;">Your landlord has your info and is preparing it. Check back soon, or watch for a text or email with your signing link.</p>
+            </div>`;
+          return;
+        }
+      } catch (e) { err.textContent = 'Could not check right now — try again in a moment.'; err.style.display = ''; }
+      this.disabled = false; this.textContent = 'Check status';
+    });
+  }
+  window.renderTenantStatus = renderTenantStatus;
+
+  // ---------- LANDLORD PENDING QUEUE ----------
+  function staffKey() { try { return localStorage.getItem('ld_landlord') || ''; } catch (e) { return '1208'; } }
+  async function loadPendingIntakes() {
+    const wrap = document.getElementById('pending-intakes');
+    if (!wrap) return;
+    try {
+      const resp = await fetch('/api/intake?list=1&key=' + encodeURIComponent(staffKey()));
+      if (!resp.ok) return;
+      const out = await resp.json();
+      const items = (out.items || []);
+      if (!items.length) { wrap.innerHTML = ''; return; }
+      wrap.innerHTML = `
+        <div class="card" style="margin-bottom:1.5rem;border-left:4px solid var(--brass, #a8803c);">
+          <div class="section-label">Pending tenants (${items.length})</div>
+          ${items.map(it => `
+            <div style="display:flex;justify-content:space-between;align-items:flex-start;gap:0.75rem;padding:0.6rem 0;border-bottom:1px solid rgba(0,0,0,0.08);flex-wrap:wrap;">
+              <div style="min-width:0;">
+                <strong>${esc(it.name)}</strong> ${it.status === 'ready' ? '<span style="color:green;font-size:0.78rem;">· lease sent</span>' : '<span style="color:#8a6d1a;font-size:0.78rem;">· waiting</span>'}<br>
+                <span style="font-size:0.82rem;opacity:.8;">${esc(it.phone || 'no phone')} · ${esc(it.email || 'no email')}</span><br>
+                <span style="font-size:0.82rem;">${esc(it.unitInterest || 'no unit given')}${it.note ? ' — ' + esc(it.note) : ''}</span>
+              </div>
+              <div style="display:flex;gap:0.4rem;">
+                ${it.status !== 'ready' ? `<button type="button" class="btn btn-primary" style="padding:0.35rem 0.8rem;font-size:0.82rem;" onclick="useIntake('${it.id}','${esc(it.name).replace(/'/g, "\\'")}','${esc(it.phone)}','${esc(it.email)}')">Prepare lease</button>` : ''}
+                <button type="button" class="btn btn-ghost" style="padding:0.35rem 0.6rem;font-size:0.82rem;" onclick="removeIntake('${it.id}')">&times;</button>
+              </div>
+            </div>`).join('')}
+          <p class="hint" style="margin-top:0.5rem;">"Prepare lease" fills the tenant fields below — add the unit and terms, then create their signing link. Their name + last 4 of their cell will open it automatically.</p>
+        </div>`;
+    } catch (e) { /* queue is best-effort */ }
+  }
+  window.useIntake = function (id, name, phone, email) {
+    window.__intakeId = id;
+    const set = (fid, v) => { const el = document.getElementById(fid); if (el && v) el.value = v; };
+    set('f-tenant', name); set('f-phone', phone); set('f-email', email);
+    const form = document.getElementById('lease-form');
+    if (form) form.scrollIntoView({ behavior: 'smooth' });
+  };
+  window.removeIntake = async function (id) {
+    if (!confirm('Remove this pending tenant?')) return;
+    try { await fetch('/api/intake', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ action: 'remove', id, key: staffKey() }) }); } catch (e) {}
+    loadPendingIntakes();
+  };
+  async function registerIntakeLease(d, leaseId) {
+    if (window.__intakeId) return; // tenant-first flow: attach handles it
+    if (!d || !d.tenantName || !d.tenantPhone) return;
+    try {
+      await fetch('/api/intake', { method: 'POST', headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ action: 'register', name: d.tenantName, phone: d.tenantPhone, email: d.tenantEmail || '', leaseId, key: staffKey() }) });
+    } catch (e) { /* non-fatal */ }
+  }
+  async function attachIntakeLease(leaseId) {
+    if (!window.__intakeId || !leaseId) return;
+    try {
+      await fetch('/api/intake', { method: 'POST', headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ action: 'attach', id: window.__intakeId, leaseId, key: staffKey() }) });
+      window.__intakeId = null;
+    } catch (e) { /* non-fatal */ }
   }
   window.addEventListener('hashchange', route);
   route();
@@ -502,6 +643,7 @@
     app.innerHTML = header() + `
       <h1>New lease</h1>
       <p class="subhead">Fill in the details, sign as landlord, and you'll get a link to email your tenant. They open it, review, and sign on their own device — nothing is stored anywhere except in that link.</p>
+      <div id="pending-intakes" class="no-print"></div>
       <form id="lease-form">
         <div class="card">
           <div class="section-label">Landlord</div>
@@ -916,6 +1058,7 @@
       };
       renderSendToTenant(landlordDraft);
     });
+    loadPendingIntakes();
   }
 
   // ---------- LEASE TEXT ----------
@@ -1237,6 +1380,7 @@
       const out = await resp.json();
       if (!out.id) throw new Error('no id returned');
       const shortUrl = location.origin + '/l/' + out.id;
+      if (linkElId === 'tenant-link') { attachIntakeLease(out.id); registerIntakeLease(d, out.id); }
       codeEl.textContent = shortUrl;
       btn.textContent = 'Short link ready ✓';
       if (navigator.clipboard) navigator.clipboard.writeText(shortUrl).catch(() => {});
