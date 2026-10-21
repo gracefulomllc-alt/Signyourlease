@@ -1392,6 +1392,20 @@
       state.phoneOk = true;
     });
 
+    const tceCorrect = document.getElementById('tce-correct');
+    const tceIncorrect = document.getElementById('tce-incorrect');
+    const tceEdit = document.getElementById('tce-edit');
+    if (tceCorrect) {
+      tceCorrect.addEventListener('click', () => {
+        tceCorrect.classList.add('active'); tceIncorrect.classList.remove('active');
+        tceEdit.style.display = 'none';
+      });
+      tceIncorrect.addEventListener('click', () => {
+        tceIncorrect.classList.add('active'); tceCorrect.classList.remove('active');
+        tceEdit.style.display = '';
+      });
+    }
+
     // ----- Terms toggle -----
     const ltCorrect = document.getElementById('lt-correct');
     const ltIncorrect = document.getElementById('lt-incorrect');
@@ -1425,6 +1439,8 @@
       if (nm) d.tenantName = nm.value.trim() || d.tenantName;
       const ph = document.getElementById('tc-phone');
       if (ph) d.tenantPhone = ph.value.trim();
+      const em = document.getElementById('tc-email');
+      if (em && em.value.trim()) d.tenantEmail = em.value.trim();
       d.tenantSignerName = result.name;
       d.tenantSignedAt = result.signedAt;
       if (result.attested) d.tenantAttested = true;
