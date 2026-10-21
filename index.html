@@ -158,7 +158,8 @@
 
   const PROPERTIES = (() => {
     const base = [
-      { street: '2043 East 4th Street', cityZip: 'Pueblo, Colorado 81001', entity: 'TLDR Enterprise LLC' },
+      { street: '2043 East 4th Street', unit: 'Unit A', cityZip: 'Pueblo, Colorado 81001', entity: 'TLDR Enterprise LLC' },
+      { street: '2043 East 4th Street', unit: 'Unit B', cityZip: 'Pueblo, Colorado 81001', entity: 'TLDR Enterprise LLC' },
       { street: '2045 East 4th Street', cityZip: 'Pueblo, CO 81001', entity: 'TLDR Enterprise LLC' },
       { street: '310 Catalina Court', cityZip: 'Colorado Springs, CO 80906', entity: 'Catalina 310 LLC' },
       { street: '312 Catalina Court', cityZip: 'Colorado Springs, Colorado 80906', entity: 'DiOrio House LLC' },
@@ -177,7 +178,7 @@
       { street: '4206 Loomis Ave', cityZip: 'Colorado Springs, CO 80906', entity: 'Trumaine Hughes' },
       { street: '544 E Platte Ave', cityZip: 'Colorado Springs, CO 80903', entity: 'Leslie French' },
     ];
-    const list = base.map(p => ({ ...p, unit: '', label: p.street + ' — ' + p.cityZip }));
+    const list = base.map(p => ({ ...p, unit: p.unit || '', label: p.street + (p.unit ? ', ' + p.unit : '') + ' — ' + p.cityZip }));
     for (let i = 1; i <= 11; i++) {
       list.push({ street: '411 Troy Ave', unit: 'Unit ' + i, cityZip: 'Pueblo, Colorado 81001', entity: 'TLDR Enterprise LLC', label: '411 Troy Ave, Unit ' + i + ' — Pueblo, CO 81001' });
     }
@@ -1251,6 +1252,7 @@
     if (!d.entity) errors.push('The landlord entity is missing.');
     if (!d.propertyAddress) errors.push('The property address is missing.');
     if (isTroy && !d.unitLabel) warns.push('No unit number. 411 Troy Ave has several units, so add which one.');
+    if (/2043/.test(d.propertyAddress || '') && !d.unitLabel) warns.push('No unit. 2043 East 4th Street has Unit A and Unit B, so add which one.');
     if (!d.landlordAddr) warns.push('The landlord notice address is blank. Colorado leases must include it.');
     if (!d.tenantName) errors.push('The tenant name is missing.');
     else if (d.tenantName.trim().split(/\s+/).length < 2) warns.push('"' + d.tenantName + '" looks like only one name. Use their full legal name.');
