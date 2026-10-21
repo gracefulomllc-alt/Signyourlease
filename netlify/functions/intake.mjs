@@ -21,6 +21,8 @@ const json = (obj, status = 200) =>
   new Response(JSON.stringify(obj), { status, headers: { ...cors, 'Content-Type': 'application/json' } });
 
 const norm = (s) => String(s || '').trim().toLowerCase().replace(/\s+/g, ' ');
+const STAGES = ['tenant_to_sign', 'landlord_to_sign', 'complete'];
+const cleanStage = (s) => (STAGES.includes(s) ? s : '');
 const last4 = (phone) => { const d = String(phone || '').replace(/\D/g, ''); return d.length >= 4 ? d.slice(-4) : ''; };
 
 async function allIntakes(store) {
@@ -83,7 +85,8 @@ export default async (req) => {
       const id = makeId();
       await store.setJSON(id, { name, nameKey: norm(name), pin,
         phone: String(body.phone || '').trim().slice(0, 40), email: String(body.email || '').trim().slice(0, 160),
-        unitInterest: '', note: '', status: 'ready', leaseId, createdAt: Date.now(), readyAt: Date.now() },
+        unitInterest: '', note: '', status: 'ready', leaseId, createdAt: Date.now(), readyAt: Date.now(),
+        stage: cleanStage(body.stage) || 'tenant_to_sign', property: String(body.property || '').slice(0, 200) },
         { metadata: { expiresAt: Date.now() + EXPIRY_DAYS * 86400000 } });
       return json({ id });
     }
@@ -98,7 +101,7 @@ export default async (req) => {
       if (!rec) return json({ ok: true, matched: false });
       const entry = await store.getWithMetadata(rec.id, { type: 'json' }).catch(() => null);
       if (!entry || entry.data == null) return json({ ok: true, matched: false });
-      await store.setJSON(rec.id, { ...entry.data, leaseId: to, updatedAt: Date.now() },
+      await store.setJSON(rec.id, { ...entry.data, leaseId: to, updatedAt: Date.now(), ...(cleanStage(body.stage) ? { stage: cleanStage(body.stage) } : {}) },
         { metadata: { expiresAt: Date.now() + EXPIRY_DAYS * 86400000 } });
       return json({ ok: true, matched: true });
     }
@@ -110,7 +113,8 @@ export default async (req) => {
       if (body.action === 'remove') { try { await store.delete(id); } catch (e) {} return json({ ok: true }); }
       const entry = await store.getWithMetadata(id, { type: 'json' }).catch(() => null);
       if (!entry || entry.data == null) return json({ error: 'not found' }, 404);
-      const record = { ...entry.data, leaseId: String(body.leaseId || '').trim(), status: 'ready', readyAt: Date.now() };
+      const record = { ...entry.data, leaseId: String(body.leaseId || '').trim(), status: 'ready', readyAt: Date.now(),
+        stage: cleanStage(body.stage) || 'tenant_to_sign', property: String(body.property || entry.data.property || '').slice(0, 200) };
       await store.setJSON(id, record, { metadata: entry.metadata || {} });
       return json({ ok: true });
     }
@@ -133,7 +137,7 @@ export default async (req) => {
       const items = await allIntakes(store);
       const match = items.find((r) => r.nameKey === norm(name) && r.pin === String(pin).trim());
       if (!match) return json({ error: 'not found' }, 404);
-      return json({ status: match.status, leaseId: match.status === 'ready' ? match.leaseId : '', name: match.name });
+      return json({ status: match.status, stage: match.stage || '', leaseId: match.status !== 'pending' ? (match.leaseId || '') : '', name: match.name });
     }
 
     return json({ error: 'bad request' }, 400);

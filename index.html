@@ -446,6 +446,7 @@
     if (hash === '#/new') { if (!landlordAuthed()) { renderGate('#/new'); return; } renderNewLeaseChooser(); return; }
     if (hash === '#/continue') { renderTenantStatus(); return; }
     if (hash === '#/start') { renderTenantIntake(); return; }
+    if (hash === '#/status') { if (!landlordAuthed()) { renderGate('#/status'); return; } renderLeaseStatus(); return; }
     if (hash === '#/staff') { if (!landlordAuthed()) { renderGate('#/staff'); return; } renderStaffMenu(); return; }
     renderHome();
   }
@@ -494,9 +495,36 @@
           <div style="display:flex;flex-direction:column;gap:0.6rem;">
             ${tile('#/new', 'Create a lease', 'Start blank, or pick up a tenant who already sent their info.', false)}
             ${tile('#/receipt', 'Create a receipt', 'Any tenant: full rent, partial payment, deposit, or installment.', false)}
+            ${tile('#/status', 'Lease status', 'See who still needs to sign, countersign, and download completed leases.', false)}
           </div>
           ${landlordAuthed() ? '' : '<p class="hint" style="margin-top:0.5rem;">Both ask for your landlord code.</p>'}
         </div>
+      </div>`;
+    window.scrollTo(0, 0);
+  }
+
+  async function renderLeaseStatus() {
+    app.innerHTML = header() + `<p class="hint" style="text-align:center;padding:2rem 0;">Loading&hellip;</p>`;
+    let items = [];
+    try { const r = await fetch('/api/intake?list=1&key=' + encodeURIComponent(staffKey())); if (r.ok) items = ((await r.json()).items || []).filter(it => it.leaseId); } catch (e) {}
+    const label = { tenant_to_sign: ['Waiting on tenant', '#8a5a00', '#FFF4DB'], landlord_to_sign: ['Needs your signature', '#A8372D', '#FDECEA'], complete: ['Complete', '#256B45', '#E7F4EC'] };
+    const order = { landlord_to_sign: 0, tenant_to_sign: 1, complete: 2 };
+    items.sort((a, b) => (order[a.stage] ?? 1) - (order[b.stage] ?? 1) || (b.updatedAt || b.readyAt || 0) - (a.updatedAt || a.readyAt || 0));
+    app.innerHTML = header() + `
+      <div style="max-width:620px;margin:1rem auto;">
+        <h1 style="text-align:center;margin-bottom:1.25rem;">Lease status</h1>
+        <div class="card">
+          ${items.length ? items.map(it => { const s = label[it.stage] || label.tenant_to_sign; return `
+            <div style="display:flex;justify-content:space-between;align-items:center;gap:0.75rem;padding:0.75rem 0;border-bottom:1px solid #F1E4D8;flex-wrap:wrap;">
+              <div style="min-width:0;">
+                <strong>${esc(it.name)}</strong><br>
+                <span style="font-size:0.85rem;color:var(--ink-soft);">${esc(it.property || '')}</span><br>
+                <span style="display:inline-block;margin-top:0.3rem;font-size:0.78rem;font-weight:700;padding:0.15rem 0.6rem;border-radius:999px;color:${s[1]};background:${s[2]};">${s[0]}</span>
+              </div>
+              <a class="btn ${it.stage === 'landlord_to_sign' ? 'btn-primary' : 'btn-ghost'}" style="text-decoration:none;" href="/l/${esc(it.leaseId)}">${it.stage === 'landlord_to_sign' ? 'Sign now' : it.stage === 'complete' ? 'View / download' : 'View'}</a>
+            </div>`; }).join('') : '<p class="hint" style="margin:0;">No leases yet. Leases you send to a tenant portal show up here.</p>'}
+        </div>
+        <p class="hint" style="text-align:center;">Leases stay here for 30 days. Download completed ones and upload them to Innago.</p>
       </div>`;
     window.scrollTo(0, 0);
   }
@@ -512,6 +540,7 @@
         <div class="card"><div style="display:flex;flex-direction:column;gap:0.6rem;">
           ${tile('#/new', 'Create a new lease', 'Start blank, or pick up a tenant who already sent their info.', true)}
           ${tile('#/receipt', 'Record a payment receipt', 'Rent, prorated rent, deposit, or deposit installment.', false)}
+          ${tile('#/status', 'Lease status', 'Who still needs to sign, and completed leases to download.', false)}
         </div></div>
         <p style="text-align:center;"><a href="#" style="font-size:0.82rem;" onclick="lockDevice();return false;">Sign out on this device</a></p>
       </div>`;
@@ -623,7 +652,7 @@
         else if (!resp.ok) { throw new Error('bad'); }
         else {
           const out = await resp.json();
-          if (out.status === 'ready' && out.leaseId) { location.href = '/l/' + out.leaseId; return; }
+          if (out.leaseId) { location.href = '/l/' + out.leaseId; return; }
           err.style.display = 'none';
           app.innerHTML = header() + `
             <div class="card" style="max-width:420px;margin:2rem auto;text-align:center;">
@@ -680,19 +709,21 @@
     try { await fetch('/api/intake', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ action: 'remove', id, key: staffKey() }) }); } catch (e) {}
     renderNewLeaseChooser();
   };
+  function leaseStage(d) { return d.tenantSignerName && d.landlordSignerName ? 'complete' : d.tenantSignerName ? 'landlord_to_sign' : 'tenant_to_sign'; }
+  function propertyLine(d) { return (d.propertyAddress || '') + (d.unitLabel ? ', ' + d.unitLabel : ''); }
   async function registerIntakeLease(d, leaseId) {
     if (window.__intakeId) return; // tenant-first flow: attach handles it
     if (!d || !d.tenantName || !d.tenantPhone) return;
     try {
       await fetch('/api/intake', { method: 'POST', headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ action: 'register', name: d.tenantName, phone: d.tenantPhone, email: d.tenantEmail || '', leaseId, key: staffKey() }) });
+        body: JSON.stringify({ action: 'register', name: d.tenantName, phone: d.tenantPhone, email: d.tenantEmail || '', leaseId, key: staffKey(), stage: leaseStage(d), property: propertyLine(d) }) });
     } catch (e) { /* non-fatal */ }
   }
-  async function attachIntakeLease(leaseId) {
+  async function attachIntakeLease(leaseId, d) {
     if (!window.__intakeId || !leaseId) return;
     try {
       await fetch('/api/intake', { method: 'POST', headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ action: 'attach', id: window.__intakeId, leaseId, key: staffKey() }) });
+        body: JSON.stringify({ action: 'attach', id: window.__intakeId, leaseId, key: staffKey(), stage: d ? leaseStage(d) : '', property: d ? propertyLine(d) : '' }) });
       window.__intakeId = null; window.__intakeName = ''; window.__intakeUnit = '';
     } catch (e) { /* non-fatal */ }
   }
@@ -715,7 +746,8 @@
       ${hideNav ? '' : `<div class="letterhead-nav no-print">
         <a class="step-back" style="margin:0 0 0 1rem;display:inline-flex;" href="#" onclick="goHash('');return false;">Home</a>
         ${landlordAuthed() ? `<a class="step-back" style="margin:0 0 0 1rem;display:inline-flex;" href="#" onclick="goHash('#/receipt');return false;">New receipt</a>
-        <a class="step-back" style="margin:0;display:inline-flex;" href="#" onclick="goHash('#/new');return false;">Start a new lease</a>` : ''}
+        <a class="step-back" style="margin:0;display:inline-flex;" href="#" onclick="goHash('#/new');return false;">Start a new lease</a>
+        <a class="step-back" style="margin:0;display:inline-flex;" href="#" onclick="goHash('#/status');return false;">Lease status</a>` : ''}
       </div>`}`;
   }
 
@@ -1544,7 +1576,7 @@ ${steps(1, LL_STEPS)}
           </div>
         </div>
         <label class="checkbox-row"><input type="checkbox" id="${idPrefix}-agree"> By signing, I intend this as my legal electronic signature on this lease.</label>
-        ${idPrefix.startsWith('ts') ? `<label class="checkbox-row"><input type="checkbox" id="${idPrefix}-attest"> I certify under penalty of perjury that I am the person named above, that any identification or documents I provide with this signature are my own, genuine, and unaltered, and that I am signing this lease voluntarily on my own behalf.</label>` : ''}
+        ${idPrefix === 'sig' ? `<label class="checkbox-row"><input type="checkbox" id="${idPrefix}-attest"> I certify under penalty of perjury that I am the person named above, that any identification or documents I provide with this signature are my own, genuine, and unaltered, and that I am signing this lease voluntarily on my own behalf.</label>` : ''}
         <p class="error-text" id="${idPrefix}-error" style="display:none;"></p>
       </div>
     `;
@@ -1624,47 +1656,86 @@ ${steps(1, LL_STEPS)}
   }
 
   // ---------- FLOW: form -> send to tenant -> tenant signs -> send to landlord -> landlord signs -> completed ----------
+  async function publishToPortal(d) {
+    const resp = await fetch('/api/lease', { method: 'POST', headers: { 'Content-Type': 'text/plain' }, body: JSON.stringify(d) });
+    if (!resp.ok) throw new Error('save failed (' + resp.status + ')');
+    const out = await resp.json();
+    if (!out.id) throw new Error('no id returned');
+    window.__currentLeaseId = out.id;
+    if (window.__intakeId) await attachIntakeLease(out.id, d); else await registerIntakeLease(d, out.id);
+    return out.id;
+  }
+
   function renderSendToTenant(d) {
-    const link = baseUrl() + '#lease=' + encodeState(d);
-    const subject = 'Lease for signature — ' + d.propertyAddress;
-    const msg = 'Please review and sign your lease for ' + d.propertyAddress + (d.unitLabel ? ', ' + d.unitLabel : '') + ' here: ' + link;
-    const emailBody = 'Hi ' + (d.tenantName || '') + ',\n\n' + msg.replace('here:', 'here:\n\n') + '\n\nThanks,\n' + d.entity;
-    const mailto = 'mailto:' + encodeURIComponent(d.tenantEmail) + '?subject=' + encodeURIComponent(subject) + '&body=' + encodeURIComponent(emailBody);
-    const sms = d.tenantPhone ? 'sms:' + encodeURIComponent(d.tenantPhone.replace(/[^\d+]/g, '')) + '?body=' + encodeURIComponent(msg) : '';
-    const linkTooLong = link.length > 1800;
+    const digits = String(d.tenantPhone || '').replace(/\D/g, '');
+    const code = digits.length >= 4 ? digits.slice(-4) : '';
     app.innerHTML = header() + `
       <button class="step-back" onclick="editDraft()">&larr; Edit details</button>
 ${steps(2, LL_STEPS)}
-      <div class="banner banner-brass">Review the lease below, then have your tenant sign.</div>
+      <div class="banner banner-brass">Last step: sign as landlord, then the lease goes into ${esc(d.tenantName || 'the tenant')}'s portal for her signature.</div>
       <div class="paper">${leaseBody(d)}</div>
-      <div class="card no-print" style="margin-top:1.5rem;">
-        <div class="section-label">Signing in person</div>
-        <p class="hint" style="margin-bottom:0.75rem;">If the tenant is with you now, skip email or text — hand them this device to sign directly.</p>
-        <div class="btn-row" style="margin-top:0;">
-          <button class="btn btn-primary" id="btn-go-direct-tenant">Hand device to tenant to sign now</button>
+      <div id="publish-area">
+        ${signPanelHtml('llpre', 'Sign as landlord', d.agent || '')}
+        <div class="btn-row">
+          <button class="btn btn-primary" id="btn-sign-publish">Sign &amp; send to tenant portal</button>
         </div>
-      </div>
-      <div class="card no-print">
-        <div class="section-label">Signing remotely</div>
-        <div class="link-box"><code id="tenant-link">${esc(link)}</code></div>
-        <div class="btn-row" style="margin-top:0;">
-          <button class="btn btn-brass" id="btn-shorten-tenant">Create short link to send</button>
-          ${linkTooLong
-            ? `<button class="btn" onclick="copyLink('tenant-link')">Copy link</button>`
-            : `<a class="btn" href="${mailto}" style="text-decoration:none;display:inline-flex;align-items:center;">Email to tenant</a>
-               ${sms ? `<button class="btn" id="btn-text-tenant">Text to tenant</button>` : ''}
-               <button class="btn" onclick="copyLink('tenant-link')">Copy link</button>`
-          }
+        <p class="hint" style="margin-top:0.5rem;">Once ${esc(d.tenantName || 'she')} signs in her portal, the lease is complete. No links to pass back and forth.</p>
+        <div class="card no-print" style="margin-top:1.25rem;">
+          <div class="section-label">Other ways</div>
+          <div class="btn-row" style="margin-top:0;flex-direction:column;align-items:stretch;gap:0.5rem;">
+            <button class="btn btn-ghost" id="btn-publish-nosign" style="text-align:left;">Send to portal without my signature (she signs first, I countersign later)</button>
+            <button class="btn btn-ghost" id="btn-go-direct-tenant" style="text-align:left;">Tenant is with me: hand her this device to sign now</button>
+          </div>
         </div>
-        <p class="hint" style="margin-top:1rem;">Tip: tap <strong>Create short link to send</strong> first — it makes a short link that texts and emails reliably, then send that. ${linkTooLong ? '' : (sms ? '' : 'Add a tenant phone number on the previous step to also enable texting. ')}Once they sign, they'll send it back to ${esc(d.landlordEmail)}${d.landlordPhone ? ' or text it to ' + esc(d.landlordPhone) : ''} for your signature.</p>
+        <p class="error-text" id="publish-error" style="display:none;"></p>
       </div>
     `;
-    document.getElementById('btn-go-direct-tenant').addEventListener('click', () => {
+    setupSignPanel('llpre');
+    const area = document.getElementById('publish-area');
+    const errEl = document.getElementById('publish-error');
+    const showDone = (id) => {
+      const shortUrl = location.origin + '/l/' + id;
+      const portal = location.origin + '/';
+      const msg = 'Hi ' + (d.tenantName || '').split(' ')[0] + ', your lease for ' + propertyLine(d) + ' is ready to sign. Go to ' + portal + ', tap "Continue my lease," and enter your name and the last 4 digits of your cell number.' + (d.landlordSignerName ? '' : '') + ' Or open it directly: ' + shortUrl;
+      const sms = d.tenantPhone ? 'sms:' + encodeURIComponent(d.tenantPhone.replace(/[^\d+]/g, '')) + '?body=' + encodeURIComponent(msg) : '';
+      area.innerHTML = `
+        <div class="card" style="border-top-color:var(--success);">
+          <div class="section-label" style="color:var(--success);">&#10003; In ${esc(d.tenantName || 'the tenant')}'s portal</div>
+          <p>${d.landlordSignerName ? 'You signed. ' : ''}She can sign now: <strong>lease-desk.netlify.app &rarr; Continue my lease</strong>, then her name and ${code ? 'access code <strong>' + code + '</strong> (last 4 of her cell)' : 'the last 4 of her cell'}.</p>
+          <p class="hint">${d.landlordSignerName ? 'When she signs, the lease is complete and you\'ll see it under Lease status.' : 'When she signs, it shows under Lease status for your countersignature.'}</p>
+          <div class="btn-row" style="flex-wrap:wrap;">
+            ${sms ? '<a class="btn btn-primary" style="text-decoration:none;" href="' + sms + '">Text her</a>' : ''}
+            <button class="btn btn-ghost" id="btn-copy-msg">Copy message</button>
+            <button class="btn btn-ghost" onclick="goHash('#/status')">Lease status</button>
+            <button class="btn btn-ghost" onclick="goHash('#/new')">Start another lease</button>
+          </div>
+        </div>`;
+      document.getElementById('btn-copy-msg').addEventListener('click', function () { copyLinkText(msg, this); });
+    };
+    const publish = async (btn, withSig) => {
+      if (withSig) {
+        const r = readSignPanel('llpre');
+        if (!r) return;
+        d.landlordSignerName = r.name; d.landlordSignedAt = r.signedAt;
+        if (r.image) d.landlordSignatureImage = r.image;
+      }
+      const orig = btn.textContent; btn.disabled = true; btn.textContent = 'Sending…'; errEl.style.display = 'none';
+      try { const id = await publishToPortal(d); showDone(id); window.scrollTo(0, document.body.scrollHeight); }
+      catch (e) {
+        if (withSig) { delete d.landlordSignerName; delete d.landlordSignedAt; delete d.landlordSignatureImage; }
+        errEl.textContent = 'Could not send to the portal. Check your connection and try again.'; errEl.style.display = '';
+        btn.disabled = false; btn.textContent = orig;
+      }
+    };
+    document.getElementById('btn-sign-publish').addEventListener('click', function () { publish(this, true); });
+    document.getElementById('btn-publish-nosign').addEventListener('click', function () { publish(this, false); });
+    document.getElementById('btn-go-direct-tenant').addEventListener('click', async function () {
+      const r = (() => { const n = document.getElementById('llpre-name'); return n && n.value.trim() ? readSignPanel('llpre') : null; })();
+      if (r) { d.landlordSignerName = r.name; d.landlordSignedAt = r.signedAt; if (r.image) d.landlordSignatureImage = r.image; }
+      this.disabled = true; this.textContent = 'Opening…';
+      try { await publishToPortal(d); } catch (e) { /* still allow in-person signing */ }
       goToLease(d);
     });
-    document.getElementById('btn-shorten-tenant').addEventListener('click', function () { createShortLink(d, 'tenant-link', this); });
-    const textTenantBtn = document.getElementById('btn-text-tenant');
-    if (textTenantBtn) textTenantBtn.addEventListener('click', () => trySmsOrCopy(sms, msg, textTenantBtn));
   }
 
   window.copyLink = function (elId) {
@@ -1692,7 +1763,7 @@ ${steps(2, LL_STEPS)}
       const out = await resp.json();
       if (!out.id) throw new Error('no id returned');
       const shortUrl = location.origin + '/l/' + out.id;
-      if (linkElId === 'tenant-link') { attachIntakeLease(out.id); registerIntakeLease(d, out.id); }
+      if (linkElId === 'tenant-link') { attachIntakeLease(out.id, d); registerIntakeLease(d, out.id); }
       codeEl.textContent = shortUrl;
       btn.textContent = 'Short link ready ✓';
       if (navigator.clipboard) navigator.clipboard.writeText(shortUrl).catch(() => {});
@@ -1791,7 +1862,7 @@ ${steps(1, TN_STEPS)}
       const from = window.__currentLeaseId;
       if (from) {
         await fetch('/api/intake', { method: 'POST', headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({ action: 'advance', fromLeaseId: from, toLeaseId: out.id }) }).catch(() => {});
+          body: JSON.stringify({ action: 'advance', fromLeaseId: from, toLeaseId: out.id, stage: leaseStage(d) }) }).catch(() => {});
       }
       window.__currentLeaseId = out.id;
       return out.id;
@@ -1984,7 +2055,7 @@ ${steps(0, TN_STEPS)}
       window.location.href = 'mailto:' + encodeURIComponent(to) + '?subject=' + encodeURIComponent(subject) + '&body=' + encodeURIComponent(body);
     });
 
-    document.getElementById('btn-submit-tenant-sign').addEventListener('click', () => {
+    document.getElementById('btn-submit-tenant-sign').addEventListener('click', async () => {
       if (!state.nameOk) { alert('Please confirm your name above (Correct or Needs a fix).'); return; }
       if (!state.phoneOk) { alert('Please confirm your phone number above (Correct or Needs a fix).'); return; }
       if (!state.termsOk) { alert('Please confirm the lease terms are correct before signing. If something is wrong, tap "Tell the landlord" so they can send a corrected lease.'); return; }
@@ -2004,7 +2075,8 @@ ${steps(0, TN_STEPS)}
       if (uploads.idphoto) d.tenantIdImage = uploads.idphoto;
       if (uploads.paystub) d.tenantPayStubImage = uploads.paystub;
       celebrate();
-      saveAndAdvance(d);
+      await saveAndAdvance(d);
+      if (d.landlordSignerName) { goToLease(d); return; }
       renderTenantSentToLandlord(d);
     });
   }
@@ -2085,14 +2157,14 @@ ${steps(1, TN_STEPS)}
         renderLandlordSignFromLink(d);
       }
     });
-    document.getElementById('btn-submit-landlord-sign').addEventListener('click', () => {
+    document.getElementById('btn-submit-landlord-sign').addEventListener('click', async () => {
       const result = readSignPanel('lsig');
       if (!result) return;
       d.landlordSignerName = result.name;
       d.landlordSignedAt = result.signedAt;
       if (result.image) d.landlordSignatureImage = result.image;
       celebrate();
-      saveAndAdvance(d);
+      await saveAndAdvance(d);
       goToLease(d);
     });
   }

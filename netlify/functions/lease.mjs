@@ -1,7 +1,7 @@
 import { getStore } from '@netlify/blobs';
 import { randomBytes } from 'node:crypto';
 
-const EXPIRY_DAYS = 7;
+const EXPIRY_DAYS = 30;
 const MAX_BYTES = 6 * 1024 * 1024; // 6 MB ceiling to keep photos sane
 
 function makeId() {
