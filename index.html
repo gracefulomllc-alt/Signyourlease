@@ -449,7 +449,7 @@
           <p style="margin-bottom:0.75rem;">If you were <strong>texted or emailed a lease link</strong>, open that link to review and sign.</p>
           <div class="btn-row" style="flex-direction:column;gap:0.6rem;">
             <button class="btn btn-primary" style="width:100%;" onclick="renderTenantIntake()">New tenant &mdash; fill out my info to get started</button>
-            <button class="btn btn-ghost" style="width:100%;" onclick="renderTenantStatus()">Open my lease (name + last 4 of my cell)</button>
+            <button class="btn btn-ghost" style="width:100%;" onclick="renderTenantStatus()">Continue my lease (name + last 4 of my cell)</button>
           </div>
         </div>
       </div>
@@ -523,11 +523,11 @@
   function renderTenantStatus() {
     app.innerHTML = header() + `
       <div class="card" style="max-width:420px;margin:2rem auto;">
-        <div class="section-label">Check my lease</div>
+        <div class="section-label">Continue my lease</div>
         <div class="field"><label>Full legal name</label><input type="text" id="st-name" placeholder="Exactly as you entered it"></div>
         <div class="field" style="max-width:260px;"><label>Last 4 digits of your cell number</label><input type="password" inputmode="numeric" maxlength="4" id="st-pin" style="text-align:center;letter-spacing:0.3em;"></div>
         <p class="error-text" id="st-error" style="display:none;"></p>
-        <div class="btn-row"><button class="btn btn-primary" id="st-go">Check status</button></div>
+        <div class="btn-row"><button class="btn btn-primary" id="st-go">Continue</button></div>
       </div>`;
     document.getElementById('st-go').addEventListener('click', async function () {
       const name = document.getElementById('st-name').value.trim();
@@ -550,7 +550,7 @@
           return;
         }
       } catch (e) { err.textContent = 'Could not check right now — try again in a moment.'; err.style.display = ''; }
-      this.disabled = false; this.textContent = 'Check status';
+      this.disabled = false; this.textContent = 'Continue';
     });
   }
   window.renderTenantStatus = renderTenantStatus;
@@ -1871,7 +1871,7 @@
     app.innerHTML = header(true) + `
       <button class="step-back" id="btn-back-to-tenant-resign">&larr; Re-do my signature</button>
       <div class="banner banner-success">Signed. If your landlord is here, hand them the device now.</div>
-      <p class="hint" style="margin:0.5rem 0 1rem;">Need to get back in later? Go to the lease site, tap <strong>I'm a tenant &rarr; Open my lease</strong>, and enter your name + the last 4 digits of your cell.</p>
+      <p class="hint" style="margin:0.5rem 0 1rem;">Need to get back in later? Go to the lease site, tap <strong>I'm a tenant &rarr; Continue my lease</strong>, and enter your name + the last 4 digits of your cell.</p>
       <div class="card">
         <div class="section-label">Landlord signing in person</div>
         <div class="btn-row" style="margin-top:0;">
