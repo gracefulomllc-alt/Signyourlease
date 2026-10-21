@@ -411,8 +411,65 @@
       renderReceiptFinal(state);
       return;
     }
-    if (hash === '#/receipt') { renderReceiptForm(); return; }
+    if (hash === '#/receipt') { if (!landlordAuthed()) { renderGate('#/receipt'); return; } renderReceiptForm(); return; }
+    if (!landlordAuthed()) { renderGate(''); return; }
     renderForm();
+  }
+
+  // ---------- LANDING GATE ----------
+  const LANDLORD_CODE = '1208';
+  function landlordAuthed() {
+    try { return localStorage.getItem('ld_landlord') === LANDLORD_CODE; } catch (e) { return window.__ldAuth === true; }
+  }
+  function setLandlordAuthed() {
+    try { localStorage.setItem('ld_landlord', LANDLORD_CODE); } catch (e) {}
+    window.__ldAuth = true;
+  }
+  function renderGate(dest) {
+    app.innerHTML = header() + `
+      <div class="card" style="max-width:480px;margin:2rem auto;text-align:center;">
+        <div class="section-label">Welcome to Lease Desk</div>
+        <p style="margin-bottom:1.25rem;">Who's here?</p>
+        <div class="btn-row" style="justify-content:center;flex-direction:column;gap:0.75rem;">
+          <button class="btn btn-primary" id="gate-tenant" style="width:100%;">I'm a tenant — here to sign my lease</button>
+          <button class="btn btn-brass" id="gate-landlord" style="width:100%;">I'm the landlord / staff</button>
+        </div>
+        <div id="gate-landlord-panel" style="display:none;margin-top:1.25rem;">
+          <div class="field" style="max-width:220px;margin:0 auto;">
+            <label>Access code</label>
+            <input type="password" inputmode="numeric" id="gate-code" placeholder="&bull;&bull;&bull;&bull;" style="text-align:center;letter-spacing:0.3em;font-size:1.1rem;">
+          </div>
+          <p class="error-text" id="gate-error" style="display:none;">That code isn't right.</p>
+          <div class="btn-row" style="justify-content:center;margin-top:0.75rem;">
+            <button class="btn btn-primary" id="gate-enter">Enter</button>
+          </div>
+        </div>
+        <div id="gate-tenant-panel" style="display:none;margin-top:1.25rem;text-align:left;">
+          <p style="margin-bottom:0.75rem;">Your lease has its own private link, sent to you by text or email. Open <strong>that link</strong> to review and sign your lease &mdash; this page can't look it up for you.</p>
+          <p class="hint">Can't find your link, or it says it expired? Contact your landlord and they'll send you a fresh one.</p>
+        </div>
+      </div>
+    `;
+    document.getElementById('gate-tenant').addEventListener('click', () => {
+      document.getElementById('gate-tenant-panel').style.display = '';
+      document.getElementById('gate-landlord-panel').style.display = 'none';
+    });
+    document.getElementById('gate-landlord').addEventListener('click', () => {
+      document.getElementById('gate-landlord-panel').style.display = '';
+      document.getElementById('gate-tenant-panel').style.display = 'none';
+      document.getElementById('gate-code').focus();
+    });
+    const tryCode = () => {
+      const v = document.getElementById('gate-code').value.trim();
+      if (v === LANDLORD_CODE) {
+        setLandlordAuthed();
+        if (dest === '#/receipt') { renderReceiptForm(); } else { renderForm(); }
+      } else {
+        document.getElementById('gate-error').style.display = '';
+      }
+    };
+    document.getElementById('gate-enter').addEventListener('click', tryCode);
+    document.getElementById('gate-code').addEventListener('keydown', (e) => { if (e.key === 'Enter') tryCode(); });
   }
   window.addEventListener('hashchange', route);
   route();
