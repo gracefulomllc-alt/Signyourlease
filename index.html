@@ -925,7 +925,11 @@
       if (showing) { document.getElementById('f-tenant2').value = ''; document.getElementById('f-phone2').value = ''; document.getElementById('f-email2').value = ''; }
     });
 
-    let depositRows = [{ label: 'Security Deposit', amount: '', status: 'due' }];
+    const __restoring = !!(window.__restoreDraft && landlordDraft);
+    window.__restoreDraft = false;
+    let depositRows = (__restoring && Array.isArray(landlordDraft.deposits) && landlordDraft.deposits.length)
+      ? JSON.parse(JSON.stringify(landlordDraft.deposits)).map(r => ({ ...r, plan: r.plan || [], down: r.down || '' }))
+      : [{ label: 'Security Deposit', amount: '', status: 'due' }];
     function renderDepositRows() {
       const wrap = document.getElementById('deposit-rows');
       wrap.innerHTML = depositRows.map((row, i) => `
@@ -1057,9 +1061,169 @@
         additional: document.getElementById('f-additional').value.trim(),
         createdDate: new Date().toISOString().slice(0,10),
       };
-      renderSendToTenant(landlordDraft);
+      renderReview(landlordDraft);
     });
+    if (__restoring) restoreFormFrom(landlordDraft);
     loadPendingIntakes();
+  }
+
+  function editDraft() { window.__restoreDraft = true; renderForm(); window.scrollTo(0, 0); }
+  window.editDraft = editDraft;
+
+  function restoreFormFrom(d) {
+    const byId = (id) => document.getElementById(id);
+    const setVal = (id, v) => { const el = byId(id); if (el && v != null) el.value = v; };
+    const setChk = (id, v) => { const el = byId(id); if (el) { el.checked = !!v; el.dispatchEvent(new Event('change')); } };
+    const setSelectOrOther = (selId, inputId, v) => {
+      const sel = byId(selId), inp = byId(inputId);
+      if (!sel || !inp) return;
+      const has = Array.from(sel.options).some(o => o.value === v);
+      if (has) { sel.value = v; } else if (v) { sel.value = '__other__'; }
+      sel.dispatchEvent(new Event('change'));
+      if (!has && v) inp.value = v;
+    };
+    setSelectOrOther('f-entity-select', 'f-entity', d.entity);
+    setSelectOrOther('f-landlordemail-select', 'f-landlordemail', d.landlordEmail);
+    if (d.landlordPhone) setSelectOrOther('f-landlordphone-select', 'f-landlordphone', d.landlordPhone);
+    ['agent','landlordaddr'].forEach(k => setVal('f-' + k, d[k === 'landlordaddr' ? 'landlordAddr' : k]));
+    setVal('f-address', d.propertyAddress); setVal('f-unit', d.unitLabel); setVal('f-cityzip', d.cityZip);
+    setVal('f-tenant', d.tenantName); setVal('f-phone', d.tenantPhone); setVal('f-email', d.tenantEmail);
+    setVal('f-tenant2', d.tenantName2); setVal('f-phone2', d.tenantPhone2); setVal('f-email2', d.tenantEmail2);
+    const tt = document.querySelector('input[name="f-termtype"][value="' + (d.termType || 'fixed') + '"]');
+    if (tt) { tt.checked = true; tt.dispatchEvent(new Event('change')); }
+    setVal('f-start', d.startDate); setVal('f-end', d.endDate);
+    setChk('f-supersede', d.supersede); setVal('f-priorterm', d.priorTerm);
+    setVal('f-rent', d.rent); setVal('f-dueday', d.dueDay);
+    setChk('f-haspetrent', d.hasPetRent); setVal('f-petrentamount', d.petRentAmount); setVal('f-petcount', d.petCount);
+    setVal('f-latefee', d.lateFee); setVal('f-pets', d.pets);
+    setChk('f-sharedutils', d.hasSharedUtilities);
+    if (byId('f-utilmode') && d.utilMode) byId('f-utilmode').value = d.utilMode;
+    setChk('f-pre1978', d.pre1978);
+    setChk('f-radonknown', d.radonKnown); setVal('f-radoninfo', d.radonInfo);
+    setVal('f-additional', d.additional);
+    setChk('f-prorate', d.prorateFirst);
+  }
+
+  // ---------- PRE-SEND CHECK ----------
+  function parseISO(s) { if (!s) return null; const [y, m, dd] = s.split('-').map(Number); return new Date(y, m - 1, dd); }
+  function addMonths(dt, n) { const r = new Date(dt.getFullYear(), dt.getMonth() + n, dt.getDate()); if (r.getDate() !== dt.getDate()) r.setDate(0); return r; }
+  function sameDay(a, b) { return a && b && a.getFullYear() === b.getFullYear() && a.getMonth() === b.getMonth() && a.getDate() === b.getDate(); }
+  function isoOf(dt) { return dt.getFullYear() + '-' + String(dt.getMonth() + 1).padStart(2, '0') + '-' + String(dt.getDate()).padStart(2, '0'); }
+
+  function checkLease(d) {
+    const errors = [], warns = [], notes = [];
+    const today = new Date(); today.setHours(0, 0, 0, 0);
+    const rent = parseFloat(d.rent) || 0;
+    const start = parseISO(d.startDate), end = parseISO(d.endDate);
+    const isTroy = /troy/i.test(d.propertyAddress || '');
+
+    // Who / where
+    if (!d.entity) errors.push('The landlord entity is missing.');
+    if (!d.propertyAddress) errors.push('The property address is missing.');
+    if (isTroy && !d.unitLabel) warns.push('No unit number. 411 Troy Ave has several units, so add which one.');
+    if (!d.landlordAddr) warns.push('The landlord notice address is blank. Colorado leases must include it.');
+    if (!d.tenantName) errors.push('The tenant name is missing.');
+    else if (d.tenantName.trim().split(/\s+/).length < 2) warns.push('"' + d.tenantName + '" looks like only one name. Use their full legal name.');
+    const digits = String(d.tenantPhone || '').replace(/\D/g, '');
+    if (!digits && !d.tenantEmail) errors.push('There is no tenant phone or email, so there is no way to send the link.');
+    if (digits && digits.length < 10) warns.push('The tenant phone has only ' + digits.length + ' digits. Their access code is the last 4, so a wrong number locks them out.');
+    if (!digits) warns.push('No tenant phone. They won\'t have a last-4 access code to get back in.');
+    if (d.tenantEmail && !/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(d.tenantEmail)) warns.push('The tenant email "' + d.tenantEmail + '" doesn\'t look valid.');
+
+    // Dates
+    if (!start) errors.push('The start date is missing.');
+    if (start && start < today && !d.supersede) warns.push('The start date (' + fmtDate(d.startDate) + ') is in the past.');
+    if (start && (start - today) / 86400000 > 90) warns.push('The start date is more than 90 days away (' + fmtDate(d.startDate) + ').');
+    if (d.termType !== 'mtm' && start) {
+      if (!end) errors.push('The end date is missing.');
+      else if (end <= start) errors.push('The end date (' + fmtDate(d.endDate) + ') is on or before the start date.');
+      else {
+        let months = null;
+        for (let n = 1; n <= 36; n++) { const exp = addMonths(start, n); exp.setDate(exp.getDate() - 1); if (sameDay(exp, end)) { months = n; break; } }
+        if (months) { notes.push('Term: ' + months + ' month' + (months === 1 ? '' : 's') + ' (' + fmtDate(d.startDate) + ' to ' + fmtDate(d.endDate) + ').'); if (months > 24) warns.push('That is a ' + months + '-month term. Make sure that\'s intended.'); }
+        else {
+          const twelve = addMonths(start, 12); twelve.setDate(twelve.getDate() - 1);
+          warns.push('The end date (' + fmtDate(d.endDate) + ') doesn\'t line up with the start. A 12-month lease starting ' + fmtDate(d.startDate) + ' would end ' + fmtDate(isoOf(twelve)) + '.');
+        }
+      }
+    }
+    if (d.supersede && !d.priorTerm) warns.push('"Replaces a prior lease" is checked but the prior term is blank.');
+
+    // Money
+    if (rent <= 0) errors.push('Monthly rent is missing or $0.');
+    else if (rent < 300 || rent > 5000) warns.push('Rent of ' + fmtMoney(rent) + ' looks unusual. Check for a typo.');
+    const due = parseInt(d.dueDay, 10) || 1;
+    if (due > 28) warns.push('Rent is due on the ' + due + ordinalSuffix(due) + ', which some months don\'t have.');
+    if (start) {
+      if (start.getDate() !== 1 && !d.prorateFirst) warns.push('Move-in is on the ' + start.getDate() + ordinalSuffix(start.getDate()) + ' but proration is off. Did you mean to prorate the first month?');
+      if (d.prorateFirst && start.getDate() === 1) notes.push('Move-in is on the 1st, so no proration applies.');
+      if (d.prorateFirst && start.getDate() !== 1 && !(d.prorate && d.prorate.amount)) errors.push('The proration couldn\'t be calculated. Check the rent and start date.');
+    }
+    if (isTroy && d.utilMode !== 'included') warns.push('Troy Ave studios include utilities, but Utilities is set to "' + (d.utilMode === 'landlord' ? 'Landlord pays' : 'Tenant pays') + '".');
+    if (d.lateFee && !/(seven|\b7\b)/i.test(d.lateFee)) warns.push('The late fee text doesn\'t mention the 7-day grace period Colorado requires.');
+
+    (d.deposits || []).forEach(dep => {
+      const amt = parseFloat(dep.amount) || 0;
+      const label = dep.label || 'Deposit';
+      if (amt <= 0) warns.push(label + ' is $0.');
+      if (rent > 0 && amt > rent * 2) warns.push(label + ' of ' + fmtMoney(amt) + ' is more than twice the rent. Check for a typo.');
+      if (dep.status === 'plan') {
+        const plan = dep.plan || [];
+        const scheduled = (parseFloat(dep.down) || 0) + plan.reduce((s, p) => s + (parseFloat(p.amount) || 0), 0);
+        if (Math.abs(scheduled - amt) > 0.005) errors.push(label + ' payment plan schedules ' + fmtMoney(scheduled) + ', but the deposit is ' + fmtMoney(amt) + '.');
+        plan.forEach(p => {
+          const pd = parseISO(p.date);
+          if (pd && pd < today) warns.push(label + ' installment of ' + fmtMoney(p.amount) + ' is dated ' + fmtDate(p.date) + ', which is already past.');
+          if (pd && end && d.termType !== 'mtm' && pd > end) warns.push(label + ' installment on ' + fmtDate(p.date) + ' falls after the lease ends.');
+        });
+      }
+    });
+    return { errors, warns, notes };
+  }
+
+  function renderReview(d) {
+    const { errors, warns, notes } = checkLease(d);
+    const rent = parseFloat(d.rent) || 0;
+    const petTotal = d.hasPetRent ? (parseFloat(d.petRentAmount) || 0) * (parseInt(d.petCount, 10) || 0) : 0;
+    const firstMonth = (d.prorateFirst && d.prorate && d.prorate.amount) ? d.prorate.amount : rent + petTotal;
+    const depAtSigning = (d.deposits || []).reduce((s, dep) => s + (dep.status === 'plan' ? (parseFloat(dep.down) || 0) : dep.status === 'carried' ? 0 : (parseFloat(dep.amount) || 0)), 0);
+    const digits = String(d.tenantPhone || '').replace(/\D/g, '');
+    const row = (k, v) => `<div class="confirm-row"><span class="clabel">${k}</span><span class="cval">${v}</span></div>`;
+    const list = (items, color, mark) => items.map(t => `<li style="color:${color};margin-bottom:0.4rem;list-style:none;"><strong>${mark}</strong> ${esc(t)}</li>`).join('');
+    const clean = !errors.length && !warns.length;
+    const deposits = (d.deposits || []).map(dep => {
+      if (dep.status === 'plan') return esc(dep.label) + ': ' + fmtMoney(dep.amount) + ' on a plan (' + [ (parseFloat(dep.down) || 0) ? fmtMoney(dep.down) + ' at signing' : '' ].concat((dep.plan || []).map(p => fmtMoney(p.amount) + ' by ' + fmtDate(p.date))).filter(Boolean).join(', ') + ')';
+      return esc(dep.label) + ': ' + fmtMoney(dep.amount) + (dep.status === 'carried' ? ' (already held)' : dep.status === 'nonrefundable' ? ' (non-refundable fee)' : ' (due at signing)');
+    }).join('<br>') || 'None';
+    app.innerHTML = header() + `
+      <button class="step-back" onclick="editDraft()">&larr; Go back and fix</button>
+      <h1>Check before sending</h1>
+      <div class="card" style="border-left:4px solid ${errors.length ? '#b3261e' : warns.length ? '#a8803c' : 'green'};">
+        ${clean ? `<p style="color:green;margin:0;"><strong>&#10003; Everything checks out.</strong> Give the summary below one last look.</p>` : `
+          <div class="section-label">${errors.length ? errors.length + ' problem' + (errors.length === 1 ? '' : 's') : ''}${errors.length && warns.length ? ' &middot; ' : ''}${warns.length ? warns.length + ' thing' + (warns.length === 1 ? '' : 's') + ' to double-check' : ''}</div>
+          <ul style="padding:0;margin:0.5rem 0 0;">${list(errors, '#b3261e', '&#10007;')}${list(warns, '#8a6d1a', '!')}</ul>`}
+        ${notes.length ? `<ul style="padding:0;margin:0.75rem 0 0;">${list(notes, 'inherit', '&#8226;')}</ul>` : ''}
+      </div>
+      <div class="card">
+        <div class="section-label">Summary</div>
+        ${row('Tenant', esc([d.tenantName, d.tenantName2].filter(Boolean).join(' and ') || '—'))}
+        ${row('Phone', esc(d.tenantPhone || '—') + (digits.length >= 4 ? ' &middot; access code <strong>' + digits.slice(-4) + '</strong>' : ''))}
+        ${row('Email', esc(d.tenantEmail || '—'))}
+        ${row('Property', esc(d.propertyAddress + (d.unitLabel ? ', ' + d.unitLabel : '') + (d.cityZip ? ', ' + d.cityZip : '')))}
+        ${row('Landlord', esc(d.entity || '—'))}
+        ${row('Term', d.termType === 'mtm' ? 'Month-to-month from ' + fmtDate(d.startDate) : fmtDate(d.startDate) + ' to ' + fmtDate(d.endDate))}
+        ${row('Monthly rent', fmtMoney(rent + petTotal) + (petTotal ? ' (includes ' + fmtMoney(petTotal) + ' pet rent)' : '') + ', due the ' + (parseInt(d.dueDay, 10) || 1) + ordinalSuffix(parseInt(d.dueDay, 10) || 1))}
+        ${row('First month', fmtMoney(firstMonth) + (d.prorateFirst && d.prorate && d.prorate.amount ? ' (prorated, ' + d.prorate.remaining + ' of ' + d.prorate.daysInMonth + ' days)' : ''))}
+        ${row('Deposits', deposits)}
+        ${row('Deposit due at signing', fmtMoney(depAtSigning))}
+        ${row('Utilities', d.utilMode === 'included' ? 'Included (flat fee in rent)' : d.utilMode === 'landlord' ? 'Landlord pays' : 'Tenant pays')}
+      </div>
+      <div class="btn-row">
+        <button class="btn btn-ghost" onclick="editDraft()">&larr; Go back and fix</button>
+        <button class="btn ${errors.length ? 'btn-brass' : 'btn-primary'}" id="review-continue">${clean ? 'Looks right, continue' : 'Send anyway'}</button>
+      </div>`;
+    window.scrollTo(0, 0);
+    document.getElementById('review-continue').addEventListener('click', () => renderSendToTenant(d));
   }
 
   // ---------- LEASE TEXT ----------
@@ -1323,7 +1487,7 @@
     const sms = d.tenantPhone ? 'sms:' + encodeURIComponent(d.tenantPhone.replace(/[^\d+]/g, '')) + '?body=' + encodeURIComponent(msg) : '';
     const linkTooLong = link.length > 1800;
     app.innerHTML = header() + `
-      <button class="step-back" onclick="renderForm()">&larr; Edit details</button>
+      <button class="step-back" onclick="editDraft()">&larr; Edit details</button>
       <div class="banner banner-brass">Review the lease below, then have your tenant sign.</div>
       <div class="paper">${leaseBody(d)}</div>
       <div class="card no-print" style="margin-top:1.5rem;">
