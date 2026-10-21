@@ -1,5 +1,5 @@
 import { getStore } from '@netlify/blobs';
-import { ARCHIVE_STORE, archiveIfComplete } from '../lib/archive-lib.mjs';
+import { ARCHIVE_STORE, archiveIfComplete, markDeleted } from '../lib/archive-lib.mjs';
 
 const STAFF_CODES = ['1208', '6040'];
 const cors = {
@@ -53,6 +53,7 @@ export default async (req) => {
     if (!STAFF_CODES.includes(String(body.key || ''))) return json({ error: 'unauthorized' }, 401);
     if (body.action === 'delete') {
       if (!body.id) return json({ error: 'missing id' }, 400);
+      await markDeleted(String(body.id)).catch(() => {});
       await archive.delete(String(body.id)).catch(() => {});
       return json({ ok: true });
     }

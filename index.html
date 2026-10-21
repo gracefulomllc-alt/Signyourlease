@@ -526,6 +526,7 @@
         <div class="btn-row" style="margin-top:0.6rem;flex-wrap:wrap;">
           <button class="btn btn-primary" onclick="archivePdf('${esc(it.id)}', this)">Download PDF</button>
           <button class="btn btn-ghost" onclick="openArchived('${esc(it.id)}')">Open</button>
+          <button class="btn btn-ghost" style="color:#A8372D;" onclick="deleteArchived('${esc(it.id)}', '${esc(it.tenant || 'this tenant').replace(/&#39;/g, "\\&#39;")}', this)">Delete</button>
         </div>
       </div>`).join('') : '<p class="hint" style="margin:0.5rem 0 0;">No matches.</p>';
     app.innerHTML = header() + `
@@ -544,6 +545,15 @@
     });
     window.scrollTo(0, 0);
   }
+  window.deleteArchived = async function (id, name, btn) {
+    if (!confirm('Permanently delete the signed lease for ' + name + '?\n\nMake sure you have the PDF saved (for example in Innago). This can\'t be undone.')) return;
+    btn.disabled = true; btn.textContent = 'Deleting…';
+    try {
+      const r = await fetch('/api/archive', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ action: 'delete', id, key: staffKey() }) });
+      if (!r.ok) throw new Error('failed');
+    } catch (e) { btn.disabled = false; btn.textContent = 'Delete'; alert('Could not delete. Check your connection and try again.'); return; }
+    renderArchive();
+  };
   async function fetchArchived(id) {
     const r = await fetch('/api/archive?id=' + encodeURIComponent(id) + '&key=' + encodeURIComponent(staffKey()));
     if (!r.ok) throw new Error('not found');
@@ -581,6 +591,19 @@
     window.scrollTo(0, 0);
   };
 
+  window.deleteInProgress = async function (id, name, stage, btn) {
+    const msg = stage === 'complete'
+      ? 'Remove ' + name + '\'s lease from Lease status and the tenant portal?\n\nThe signed copy stays in Completed leases until you delete it there.'
+      : 'Delete ' + name + '\'s lease?\n\nIt will disappear from the tenant\'s portal and any link you sent will stop working. This can\'t be undone.';
+    if (!confirm(msg)) return;
+    btn.disabled = true; btn.textContent = 'Deleting…';
+    try {
+      const r = await fetch('/api/intake', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ action: 'remove', id, key: staffKey() }) });
+      if (!r.ok) throw new Error('failed');
+    } catch (e) { btn.disabled = false; btn.textContent = 'Delete'; alert('Could not delete. Check your connection and try again.'); return; }
+    renderLeaseStatus();
+  };
+
   async function renderLeaseStatus() {
     app.innerHTML = header() + `<p class="hint" style="text-align:center;padding:2rem 0;">Loading&hellip;</p>`;
     let items = [];
@@ -599,7 +622,10 @@
                 <span style="font-size:0.85rem;color:var(--ink-soft);">${esc(it.property || '')}</span><br>
                 <span style="display:inline-block;margin-top:0.3rem;font-size:0.78rem;font-weight:700;padding:0.15rem 0.6rem;border-radius:999px;color:${s[1]};background:${s[2]};">${s[0]}</span>
               </div>
-              <a class="btn ${it.stage === 'landlord_to_sign' ? 'btn-primary' : 'btn-ghost'}" style="text-decoration:none;" href="/l/${esc(it.leaseId)}">${it.stage === 'landlord_to_sign' ? 'Sign now' : it.stage === 'complete' ? 'View / download' : 'View'}</a>
+              <div style="display:flex;gap:0.4rem;flex-wrap:wrap;">
+                <a class="btn ${it.stage === 'landlord_to_sign' ? 'btn-primary' : 'btn-ghost'}" style="text-decoration:none;" href="/l/${esc(it.leaseId)}">${it.stage === 'landlord_to_sign' ? 'Sign now' : it.stage === 'complete' ? 'View / download' : 'View'}</a>
+                <button class="btn btn-ghost" style="color:#A8372D;" onclick="deleteInProgress('${esc(it.id)}', '${esc(it.name).replace(/&#39;/g, "\\&#39;")}', '${esc(it.stage || '')}', this)">Delete</button>
+              </div>
             </div>`; }).join('') : '<p class="hint" style="margin:0;">No leases yet. Leases you send to a tenant portal show up here.</p>'}
         </div>
         <p class="hint" style="text-align:center;">This list covers the last 30 days. Every completed lease is also saved permanently under <a href="#" onclick="goHash('#/archive');return false;">Completed leases</a>.</p>

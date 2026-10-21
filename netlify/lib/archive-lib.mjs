@@ -1,6 +1,8 @@
+import { getStore } from '@netlify/blobs';
 import { createHash } from 'node:crypto';
 
 export const ARCHIVE_STORE = 'archive';
+export const DELETED_STORE = 'archive-deleted';
 
 export function isComplete(d) {
   return !!(d && d.tenantSignerName && d.landlordSignerName && d.tenantSignedAt && d.landlordSignedAt);
@@ -34,8 +36,15 @@ export function summaryOf(d) {
 export async function archiveIfComplete(store, d) {
   if (!isComplete(d)) return null;
   const key = archiveKey(d);
+  // Never bring back a lease the landlord deleted from the archive
+  const deleted = await getStore({ name: DELETED_STORE, consistency: 'strong' }).getMetadata(key).catch(() => null);
+  if (deleted) return null;
   const existing = await store.getMetadata(key).catch(() => null);
   if (existing) return key;
   await store.setJSON(key, stripForArchive(d), { metadata: summaryOf(d) });
   return key;
+}
+
+export async function markDeleted(key) {
+  await getStore({ name: DELETED_STORE, consistency: 'strong' }).setJSON(key, { deletedAt: Date.now() }, { metadata: { deletedAt: Date.now() } });
 }

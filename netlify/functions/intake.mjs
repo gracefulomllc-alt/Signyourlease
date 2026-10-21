@@ -41,6 +41,8 @@ async function allIntakes(store) {
   return out;
 }
 
+const addHist = (rec, id) => { const h = Array.isArray(rec.history) ? rec.history.slice() : []; if (rec.leaseId && !h.includes(rec.leaseId)) h.push(rec.leaseId); if (id && !h.includes(id)) h.push(id); return h; };
+
 export default async (req) => {
   if (req.method === 'OPTIONS') return new Response('', { status: 204, headers: cors });
   const store = getStore({ name: 'intakes', consistency: 'strong' });
@@ -85,7 +87,7 @@ export default async (req) => {
       const id = makeId();
       await store.setJSON(id, { name, nameKey: norm(name), pin,
         phone: String(body.phone || '').trim().slice(0, 40), email: String(body.email || '').trim().slice(0, 160),
-        unitInterest: '', note: '', status: 'ready', leaseId, createdAt: Date.now(), readyAt: Date.now(),
+        unitInterest: '', note: '', status: 'ready', leaseId, history: [leaseId], createdAt: Date.now(), readyAt: Date.now(),
         stage: cleanStage(body.stage) || 'tenant_to_sign', property: String(body.property || '').slice(0, 200) },
         { metadata: { expiresAt: Date.now() + EXPIRY_DAYS * 86400000 } });
       return json({ id });
@@ -101,7 +103,7 @@ export default async (req) => {
       if (!rec) return json({ ok: true, matched: false });
       const entry = await store.getWithMetadata(rec.id, { type: 'json' }).catch(() => null);
       if (!entry || entry.data == null) return json({ ok: true, matched: false });
-      await store.setJSON(rec.id, { ...entry.data, leaseId: to, updatedAt: Date.now(), ...(cleanStage(body.stage) ? { stage: cleanStage(body.stage) } : {}) },
+      await store.setJSON(rec.id, { ...entry.data, leaseId: to, history: addHist(entry.data, to), updatedAt: Date.now(), ...(cleanStage(body.stage) ? { stage: cleanStage(body.stage) } : {}) },
         { metadata: { expiresAt: Date.now() + EXPIRY_DAYS * 86400000 } });
       return json({ ok: true, matched: true });
     }
@@ -110,10 +112,20 @@ export default async (req) => {
       if (!STAFF_CODES.includes(String(body.key || ''))) return json({ error: 'unauthorized' }, 401);
       const id = String(body.id || '');
       if (!id) return json({ error: 'missing id' }, 400);
-      if (body.action === 'remove') { try { await store.delete(id); } catch (e) {} return json({ ok: true }); }
+      if (body.action === 'remove') {
+        // Also delete every saved version of the lease, so old links and the tenant portal stop working
+        const entry = await store.getWithMetadata(id, { type: 'json' }).catch(() => null);
+        if (entry && entry.data) {
+          const leases = getStore({ name: 'leases', consistency: 'strong' });
+          for (const lid of addHist(entry.data, entry.data.leaseId)) { try { await leases.delete(lid); } catch (e) {} }
+        }
+        try { await store.delete(id); } catch (e) {}
+        return json({ ok: true });
+      }
       const entry = await store.getWithMetadata(id, { type: 'json' }).catch(() => null);
       if (!entry || entry.data == null) return json({ error: 'not found' }, 404);
-      const record = { ...entry.data, leaseId: String(body.leaseId || '').trim(), status: 'ready', readyAt: Date.now(),
+      const newLease = String(body.leaseId || '').trim();
+      const record = { ...entry.data, leaseId: newLease, history: addHist(entry.data, newLease), status: 'ready', readyAt: Date.now(),
         stage: cleanStage(body.stage) || 'tenant_to_sign', property: String(body.property || entry.data.property || '').slice(0, 200) };
       await store.setJSON(id, record, { metadata: entry.metadata || {} });
       return json({ ok: true });
