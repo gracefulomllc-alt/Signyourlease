@@ -3,6 +3,8 @@
 <head>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
+<meta name="color-scheme" content="light only">
+<meta name="theme-color" content="#FFF4EE">
 <title>Lease Desk</title>
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
@@ -10,24 +12,11 @@
 <style>
   :root {
     --ink: #1F2430; --ink-soft: #4A5565; --paper: #FFFFFF; --paper-line: #EFE6DC;
-    --slate: #6B6A66; --brass: #C9962E; --brass-dark: #A87A1F; --line: #EEE3D8;
+    --slate: #5E5D59; --brass: #C9962E; --brass-dark: #6E4E0E; --line: #EEE3D8;
     --burgundy: #B23A4E; --burgundy-dark: #8F2B3D;
-    --card: #FFFFFF; --danger: #B0554C; --success: #4A8262;
+    --card: #FFFFFF; --danger: #A8372D; --success: #256B45;
   }
-  @media (prefers-color-scheme: dark) {
-    :root:not([data-theme="light"]) {
-      --ink: #EEEAE1; --ink-soft: #CFC8B9; --paper: #2A2823; --paper-line: #403A30;
-      --slate: #ABA391; --brass: #DCB878; --brass-dark: #ECCB8E; --line: #4A4336;
-      --burgundy: #C77E88; --burgundy-dark: #DE97A0;
-      --card: #33302A; --danger: #E89185; --success: #8FD3AC;
-    }
-  }
-  :root[data-theme="dark"] {
-    --ink: #EEEAE1; --ink-soft: #CFC8B9; --paper: #2A2823; --paper-line: #403A30;
-    --slate: #ABA391; --brass: #DCB878; --brass-dark: #ECCB8E; --line: #4A4336;
-    --burgundy: #C77E88; --burgundy-dark: #DE97A0;
-    --card: #33302A; --danger: #E89185; --success: #8FD3AC;
-  }
+  :root { color-scheme: light only; }
   * { box-sizing: border-box; }
   body { margin: 0; background: var(--paper); color: var(--ink); font-family: 'Inter', sans-serif; font-size: 1.0625rem; -webkit-font-smoothing: antialiased; }
   .app { max-width: 900px; margin: 0 auto; padding: 0 1.25rem 5rem; }
@@ -95,7 +84,7 @@
   .attach-label { font-size: 0.75rem; color: var(--slate); margin: 0.5rem 0 0.25rem; font-family: 'Inter', sans-serif; }
   .deposit-row { display: grid; grid-template-columns: 1.4fr 0.8fr 1.1fr auto; gap: 0.625rem; align-items: center; margin-bottom: 0.625rem; }
   @media (max-width: 620px) { .deposit-row { grid-template-columns: 1fr 1fr; grid-template-areas: "label label" "amount status" "remove remove"; } }
-  .row-remove { background: none; border: none; color: var(--slate); cursor: pointer; font-size: 1.125rem; padding: 0 0.375rem; line-height: 1; }
+  .row-remove { background: none; border: none; color: var(--ink-soft); cursor: pointer; font-size: 1.125rem; padding: 0 0.375rem; line-height: 1; }
   .row-remove:hover { color: var(--danger); }
   .deposit-total { font-size: 0.875rem; color: var(--ink-soft); margin-top: 0.5rem; text-align: right; }
   .confirm-row { display: flex; justify-content: space-between; gap: 1rem; padding: 0.6rem 0; border-bottom: 1px solid var(--paper-line); font-size: 0.95rem; }
@@ -135,7 +124,7 @@
     .paper { border-radius: 14px; box-shadow: 0 8px 24px rgba(31, 36, 48, 0.06); }
     .btn { border-radius: 10px; font-weight: 600; padding: 0.7rem 1.2rem; transition: transform .12s, box-shadow .12s, background .15s; }
     .btn:hover { transform: translateY(-1px); box-shadow: 0 4px 12px rgba(31, 36, 48, 0.10); }
-    .btn-primary { background: linear-gradient(135deg, #C24459, #9E2F43); border-color: #A8344A; color: #fff; }
+    .btn-primary { background: linear-gradient(135deg, #B23A4E, #8F2B3D); border-color: #9E3045; color: #fff; }
     .btn-brass { background: linear-gradient(135deg, #DDAA3C, #C08A22); border-color: #BE8A24; color: #2A1D05; }
     .btn-ghost { background: #FFF6F2; border: 1px solid #F3DCD4; color: var(--ink); }
     .btn-ghost:hover { background: #FFEDE6; }
@@ -144,6 +133,24 @@
     input:focus, select:focus, textarea:focus { outline: none; border-color: var(--burgundy) !important; box-shadow: 0 0 0 3px rgba(178, 58, 78, 0.15); }
     .banner { border-radius: 12px; }
     h1 { color: var(--ink); }
+  }
+
+  @media screen {
+    .step-back { background: #fff; border: 1px solid #EBD9CF; border-radius: 999px; padding: 0.5rem 0.95rem; color: var(--ink); font-size: 0.9rem; font-weight: 600; min-height: 40px; box-shadow: 0 1px 3px rgba(31,36,48,0.06); }
+    .step-back:hover { background: #FFF1EA; color: var(--ink); }
+    .letterhead-nav { display: flex; flex-wrap: wrap; justify-content: center; gap: 0.5rem; text-align: center; margin: -0.5rem 0 1.25rem; }
+    .letterhead-nav .step-back { margin: 0 !important; text-decoration: none; }
+    .steps { display: flex; gap: 0.35rem; margin: 0 auto 1.5rem; max-width: 640px; }
+    .steps .st { flex: 1; text-align: center; font-size: 0.78rem; font-weight: 600; color: var(--ink-soft); }
+    .steps .st .bar { height: 6px; border-radius: 6px; background: #F0E2D8; margin-bottom: 0.4rem; }
+    .steps .st.done .bar { background: #D98C99; }
+    .steps .st.on .bar { background: var(--burgundy); }
+    .steps .st.on { color: var(--burgundy); }
+    .steps .st.done { color: var(--ink); }
+    .sig-tab { font-size: 0.9rem; padding: 0.55rem 1.1rem; border-radius: 999px; color: var(--ink); }
+    .sig-tab.active { background: var(--burgundy); border-color: var(--burgundy); color: #fff; }
+    .ci-btn { border-radius: 10px; }
+    .hint { font-size: 0.875rem; }
   }
 </style>
 </head>
@@ -443,6 +450,11 @@
     renderHome();
   }
 
+  function steps(active, names) {
+    return '<div class="steps no-print">' + names.map((n, i) => '<div class="st ' + (i < active ? 'done' : i === active ? 'on' : '') + '"><div class="bar"></div>' + (i < active ? '&#10003; ' : (i + 1) + '. ') + n + '</div>').join('') + '</div>';
+  }
+  const LL_STEPS = ['Lease details', 'Check it', 'Send to tenant'];
+  const TN_STEPS = ['Review & sign', 'Landlord signs', 'Done'];
   function goHash(hsh) { if (location.hash === hsh || (hsh === '' && !location.hash)) route(); else location.hash = hsh; }
   window.goHash = goHash;
 
@@ -714,8 +726,9 @@
   // ---------- FORM ----------
   function renderForm() {
     app.innerHTML = header() + `
+${steps(0, LL_STEPS)}
       <h1>New lease</h1>
-      <p class="subhead">Fill in the details, sign as landlord, and you'll get a link to email your tenant. They open it, review, and sign on their own device — nothing is stored anywhere except in that link.</p>
+      <p class="subhead">Fill in the details, check them, then send your tenant their signing link. They sign first on their own phone, and you countersign after.</p>
       <div id="pending-intakes" class="no-print">${window.__intakeId && window.__intakeName ? `
         <div class="banner banner-brass" style="display:flex;justify-content:space-between;gap:0.75rem;flex-wrap:wrap;align-items:center;">
           <span>Preparing a lease for pending tenant <strong>${esc(window.__intakeName)}</strong>${window.__intakeUnit ? ' (asked about: ' + esc(window.__intakeUnit) + ')' : ''}.</span>
@@ -1018,7 +1031,7 @@
             <option value="carried" ${row.status==='carried'?'selected':''}>Already held</option>
             <option value="nonrefundable" ${row.status==='nonrefundable'?'selected':''}>Non-refundable fee</option>
           </select>
-          <button type="button" class="row-remove" title="Remove" ${depositRows.length===1?'disabled style="opacity:.3;cursor:default;"':''}>&times;</button>
+          <button type="button" class="row-remove" title="Remove" ${depositRows.length===1?'disabled style="visibility:hidden;"':''}>&times;</button>
         </div>
         ${row.status==='plan' ? `
         <div class="plan-editor" data-idx="${i}" style="margin:0 0 0.75rem 0;padding:0.75rem;border:1px dashed var(--line, #c9b89a);border-radius:6px;">
@@ -1329,6 +1342,7 @@
     }).join('<br>') || 'None';
     app.innerHTML = header() + `
       <button class="step-back" onclick="editDraft()">&larr; Go back and fix</button>
+${steps(1, LL_STEPS)}
       <h1>Check before sending</h1>
       <div class="card" style="border-left:4px solid ${errors.length ? '#b3261e' : warns.length ? '#a8803c' : 'green'};">
         ${clean ? `<p style="color:green;margin:0;"><strong>&#10003; Everything checks out.</strong> Give the summary below one last look.</p>` : `
@@ -1620,6 +1634,7 @@
     const linkTooLong = link.length > 1800;
     app.innerHTML = header() + `
       <button class="step-back" onclick="editDraft()">&larr; Edit details</button>
+${steps(2, LL_STEPS)}
       <div class="banner banner-brass">Review the lease below, then have your tenant sign.</div>
       <div class="paper">${leaseBody(d)}</div>
       <div class="card no-print" style="margin-top:1.5rem;">
@@ -1745,6 +1760,7 @@
 
   function renderAwaitingLandlord(d) {
     app.innerHTML = header(true) + `
+${steps(1, TN_STEPS)}
       <div class="banner banner-success">Signed by ${esc(d.tenantSignerName)} on ${fmtDateTime(d.tenantSignedAt)}. Waiting on your landlord's signature.</div>
       <div class="card">
         <p>You're done for now. Once your landlord countersigns, come back with your <strong>name + the last 4 digits of your cell</strong> and you'll be able to download your fully signed copy.</p>
@@ -1832,6 +1848,7 @@
     const depositLine = deposits.length ? deposits.map(dep => dep.label + ': ' + fmtMoney(dep.amount)).join(', ') : 'None';
 
     app.innerHTML = header(true) + `
+${steps(0, TN_STEPS)}
       <div class="banner banner-brass">Please review the details below, confirm your information, and sign.</div>
       <div class="paper" id="lease-paper">${leaseBody(d)}</div>
 
@@ -2002,6 +2019,7 @@
     const linkTooLong = link.length > 1800;
     app.innerHTML = header(true) + `
       <button class="step-back" id="btn-back-to-tenant-resign">&larr; Re-do my signature</button>
+${steps(1, TN_STEPS)}
       <div class="banner banner-success">Signed. If your landlord is here, hand them the device now.</div>
       <p class="hint" style="margin:0.5rem 0 1rem;">Need to get back in later? Go to the lease site, tap <strong>I'm a tenant &rarr; Continue my lease</strong>, and enter your name + the last 4 digits of your cell.</p>
       <div class="card">
@@ -2053,6 +2071,7 @@
   function renderLandlordSignFromLink(d) {
     app.innerHTML = header() + `
       <button class="step-back" id="btn-back-landlord-sign">&larr; Start this over</button>
+${steps(1, TN_STEPS)}
       <div class="banner banner-brass">${esc(d.tenantSignerName)} has signed. Review and sign below.</div>
       <div class="paper" id="lease-paper">${leaseBody(d)}${sigBlockHtml(d)}${attachmentsPageHtml(d)}</div>
       ${signPanelHtml('lsig', 'Sign as landlord')}
@@ -2082,6 +2101,7 @@
     const link = baseUrl() + '#lease=' + encodeState(d);
     const hasAttachments = !!(d.tenantIdImage || d.tenantPayStubImage);
     app.innerHTML = header() + `
+${steps(3, TN_STEPS)}
       <div class="banner banner-success"><span class="seal"><svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M9 12l2 2 4-4"/><circle cx="12" cy="12" r="9"/></svg></span><span>Fully signed. Tenant on ${fmtDateTime(d.tenantSignedAt)}, landlord on ${fmtDateTime(d.landlordSignedAt)}.</span></div>
       <div class="paper" id="lease-paper">${leaseBody(d)}${sigBlockHtml(d)}${attachmentsPageHtml(d)}</div>
       <div class="card no-print" style="margin-top:1.5rem;">
@@ -2219,7 +2239,7 @@
         <div class="deposit-row" data-idx="${i}" style="grid-template-columns:1.6fr 1fr auto;">
           <input type="text" list="receipt-labels" placeholder="Label (e.g. Rent, Security deposit)" value="${esc(row.label)}" data-field="label">
           <input type="number" min="0" step="1" placeholder="Amount" value="${esc(row.amount)}" data-field="amount">
-          <button type="button" class="row-remove" title="Remove" ${rows.length===1?'disabled style="opacity:.3;cursor:default;"':''}>&times;</button>
+          <button type="button" class="row-remove" title="Remove" ${rows.length===1?'disabled style="visibility:hidden;"':''}>&times;</button>
         </div>
       `).join('') + `<div class="deposit-total">Total collected: ${fmtMoney(rows.reduce((s,r)=>s+(parseFloat(r.amount)||0),0))}</div>`;
       wrap.querySelectorAll('.deposit-row').forEach(rowEl => {
