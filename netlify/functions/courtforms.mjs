@@ -155,7 +155,7 @@ export default async (req) => {
     const p = url.searchParams.get('probe');
     if (p) {
       if (!PAGES[p]) return json({ error: 'unknown form' }, 400);
-      try { const txt = await probe(p, lang, store); txt.split('\n').forEach((l, i) => console.log('P' + String(i).padStart(3, '0') + ' ' + l)); return new Response(txt, { headers: { ...cors, 'Content-Type': 'text/plain; charset=utf-8' } }); }
+      try { const txt = await probe(p, lang, store); return new Response(txt, { headers: { ...cors, 'Content-Type': 'text/plain; charset=utf-8' } }); }
       catch (e) { return json({ error: e.message }, 502); }
     }
     const vf = url.searchParams.get('verify');

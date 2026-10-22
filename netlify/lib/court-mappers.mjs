@@ -43,7 +43,7 @@ export const MAPPERS = {
     const n = d.notice || {};
     return {
       '0.0': d.tenants.join(' and '), '0.1': true,
-      '0.2': mdy(n.moveOut), '0.3': n.moveOut ? '11:59' : '', 'Group4.0': n.moveOut ? /PM/ : '',
+      '0.2': mdy(n.moveOut), '0.3': n.moveOut ? '11:59 p.m.' : '', 'Group4.0': n.moveOut ? /^(PM|p\.? ?m\.?)$/i : '',
       'Group3.0': d.cares ? /CARES/ : /regular residential/i,
       '1A.0': !!n.rentOn, '1A.1': n.rentOn ? money(n.rentTotal) : '', '1A.2': n.rentOn ? dueList(n) : '',
       '1B.0': !!n.violationOn, '1B.1': n.violationTerm, '1B.2': n.violationText,
@@ -59,7 +59,7 @@ export const MAPPERS = {
     const k = kinds.includes('felony') ? /felony/i : kinds.includes('nuisance') ? /180 days/ : kinds.includes('endanger') ? /Endangered/ : '';
     return {
       '0.0': d.tenants.join(' and '), '0.1': true,
-      '1.1': mdy(n.moveOut), '1.2': n.moveOut ? '11:59' : '', 'Group1.0': n.moveOut ? /PM/ : '',
+      '1.1': mdy(n.moveOut), '1.2': n.moveOut ? '11:59 p.m.' : '', 'Group1.0': n.moveOut ? /^(PM|p\.? ?m\.?)$/i : '',
       'Group2.0': n.substantialOn ? /substantial/i : n.repeatOn ? /repeat/i : '',
       '2B.0': n.substantialOn ? k : '',
       '2C.2': n.repeatOn ? mdy(n.repeatPrior) : '', '2C.1': !!(n.repeatOn && d.assisted),
