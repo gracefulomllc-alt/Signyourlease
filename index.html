@@ -932,6 +932,7 @@ ${steps(0, LL_STEPS)}
             <div class="field full"><label>Second tenant email</label><input type="email" id="f-email2" placeholder="name@email.com"></div>
           </div>
           <button type="button" class="btn btn-ghost" id="toggle-tenant2" style="padding:0.5rem 0.75rem;font-size:0.8125rem;">+ Add a second tenant</button>
+          <div class="field full" style="margin-top:0.75rem;"><label>Other approved occupants (optional)</label><input type="text" id="f-occupants" placeholder="e.g. Maria Doe (daughter), age 9"><p class="hint">People who will live there but aren't signing, such as children. Anyone else staying over 14 days counts as unauthorized.</p></div>
         </div>
         <div class="card">
           <div class="section-label">Term</div>
@@ -989,10 +990,10 @@ ${steps(0, LL_STEPS)}
           <div class="field full"><label>Utilities arrangement</label>
             <select id="f-utilmode">
               <option value="tenant">Tenant pays all utilities</option>
-              <option value="included">Utilities included — Rent includes a flat utility fee (Troy Ave style)</option>
+              <option value="included">Utilities included in Rent — landlord furnishes utilities (Troy Ave style)</option>
               <option value="landlord">Landlord pays all utilities (no separate fee)</option>
             </select>
-            <p class="hint">"Utilities included" states that Rent covers a flat utility fee, with a reasonable-use clause protecting the Landlord from excessive consumption.</p>
+            <p class="hint">"Utilities included" makes one all-in Rent (for example $805) that covers utilities, so the whole amount counts as Rent if it goes unpaid. A separately listed utility fee would not count as Rent under Colorado law.</p>
           </div>
           <label style="display:flex;align-items:center;gap:0.5rem;font-size:0.875rem;margin-top:0.5rem;">
             <input type="checkbox" id="f-sharedutils" style="width:auto;"> This unit shares a utility meter with another unit (adds a RUBS disclosure clause)
@@ -1286,6 +1287,8 @@ ${steps(0, LL_STEPS)}
         hasSharedUtilities: document.getElementById('f-sharedutils').checked,
         utilMode: document.getElementById('f-utilmode') ? document.getElementById('f-utilmode').value : 'tenant',
         additional: document.getElementById('f-additional').value.trim(),
+        occupants: document.getElementById('f-occupants') ? document.getElementById('f-occupants').value.trim() : '',
+        templateVersion: LEASE_TEMPLATE,
         createdDate: new Date().toISOString().slice(0,10),
       };
       renderReview(landlordDraft);
@@ -1383,6 +1386,7 @@ ${steps(0, LL_STEPS)}
     setChk('f-pre1978', d.pre1978);
     setChk('f-radonknown', d.radonKnown); setVal('f-radoninfo', d.radonInfo);
     setVal('f-additional', d.additional);
+    setVal('f-occupants', d.occupants);
     setChk('f-prorate', d.prorateFirst);
   }
 
@@ -1445,11 +1449,17 @@ ${steps(0, LL_STEPS)}
     if (isTroy && d.utilMode !== 'included') warns.push('Troy Ave studios include utilities, but Utilities is set to "' + (d.utilMode === 'landlord' ? 'Landlord pays' : 'Tenant pays') + '".');
     if (d.lateFee && !/(seven|\b7\b)/i.test(d.lateFee)) warns.push('The late fee text doesn\'t mention the 7-day grace period Colorado requires.');
 
+    const refundableTotal = (d.deposits || []).filter(dep => dep.status !== 'nonrefundable').reduce((s, dep) => s + (parseFloat(dep.amount) || 0), 0);
+    if (rent > 0 && refundableTotal > rent * 2) errors.push('Deposits total ' + fmtMoney(refundableTotal) + ', which is more than two months\' rent (' + fmtMoney(rent * 2) + '). Colorado caps security deposits at two months\' rent (C.R.S. § 38-12-102.5).');
     (d.deposits || []).forEach(dep => {
       const amt = parseFloat(dep.amount) || 0;
+      if (/pet/i.test(dep.label || '')) {
+        if (dep.status === 'nonrefundable') warns.push((dep.label || 'Pet deposit') + ' is marked non-refundable. Colorado requires pet deposits to be refundable (C.R.S. § 38-12-106), so a non-refundable one can be thrown out.');
+        if (amt > 300) warns.push((dep.label || 'Pet deposit') + ' of ' + fmtMoney(amt) + ' is over Colorado\'s $300 limit on pet deposits (C.R.S. § 38-12-106).');
+      }
       const label = dep.label || 'Deposit';
       if (amt <= 0) warns.push(label + ' is $0.');
-      if (rent > 0 && amt > rent * 2) warns.push(label + ' of ' + fmtMoney(amt) + ' is more than twice the rent. Check for a typo.');
+      if (rent > 0 && amt > rent * 2 && dep.status === 'nonrefundable') warns.push(label + ' of ' + fmtMoney(amt) + ' is more than twice the rent. Check for a typo.');
       if (dep.status === 'plan') {
         const plan = dep.plan || [];
         const scheduled = (parseFloat(dep.down) || 0) + plan.reduce((s, p) => s + (parseFloat(p.amount) || 0), 0);
@@ -1496,7 +1506,7 @@ ${steps(1, LL_STEPS)}
         ${row('Property', esc(d.propertyAddress + (d.unitLabel ? ', ' + d.unitLabel : '') + (d.cityZip ? ', ' + d.cityZip : '')))}
         ${row('Landlord', esc(d.entity || '—'))}
         ${row('Term', d.termType === 'mtm' ? 'Month-to-month from ' + fmtDate(d.startDate) : fmtDate(d.startDate) + ' to ' + fmtDate(d.endDate))}
-        ${row('Monthly rent', fmtMoney(rent + petTotal) + (petTotal ? ' (includes ' + fmtMoney(petTotal) + ' pet rent)' : '') + ', due the ' + (parseInt(d.dueDay, 10) || 1) + ordinalSuffix(parseInt(d.dueDay, 10) || 1))}
+        ${row('Monthly rent', fmtMoney(rent) + ', due the ' + (parseInt(d.dueDay, 10) || 1) + ordinalSuffix(parseInt(d.dueDay, 10) || 1) + (petTotal ? ' &middot; plus ' + fmtMoney(petTotal) + ' pet rent (a separate charge)' : ''))}
         ${row('First month', fmtMoney(firstMonth) + (d.prorateFirst && d.prorate && d.prorate.amount ? ' (prorated, ' + d.prorate.remaining + ' of ' + d.prorate.daysInMonth + ' days)' : ''))}
         ${row('Deposits', deposits)}
         ${row('Deposit due at signing', fmtMoney(depAtSigning))}
@@ -1511,7 +1521,173 @@ ${steps(1, LL_STEPS)}
   }
 
   // ---------- LEASE TEXT ----------
-  function leaseBody(d) {
+  // Which lease text a lease shows is fixed when it is created, so signed text never changes later.
+  const LEASE_TEMPLATE = 'v2';
+  function leaseBody(d) { return d && d.templateVersion === 'v2' ? leaseBodyV2(d) : leaseBodyV1(d); }
+
+  // ---------- LEASE TEXT, VERSION 2 (Colorado, revised Oct 2026) ----------
+  // Leases created before this version keep rendering with leaseBodyV1 so signed text never changes.
+  function leaseBodyV2(d) {
+    const landlordName = d.entity || 'Landlord';
+    const tenants = [d.tenantName, d.tenantName2].filter(Boolean).join(' and ');
+    const propLine = d.propertyAddress + (d.unitLabel ? ', ' + d.unitLabel : '') + ', ' + d.cityZip;
+    const due = esc(String(d.dueDay || 1)) + ordinalSuffix(d.dueDay || 1);
+    const deposits = Array.isArray(d.deposits) ? d.deposits : [];
+    const planDeps = deposits.filter(dep => dep.status === 'plan');
+    const hasProration = !!(d.prorateFirst && d.prorate && d.prorate.amount);
+    const hasPetRent = !!(d.hasPetRent && parseFloat(d.petRentAmount) > 0);
+    const addenda = [];
+    if (hasProration) addenda.push({ key: 'A', title: 'Prorated First Month' });
+    if (planDeps.length) addenda.push({ key: hasProration ? 'B' : 'A', title: 'Security Deposit Installment Agreement' });
+    const addendumKey = (title) => (addenda.find(a => a.title === title) || {}).key;
+    const H = (t) => '<h3>' + t + '</h3>';
+    const P = (t) => '<p>' + t + '</p>';
+
+    // ----- Term -----
+    const termParagraph = d.termType === 'mtm'
+      ? `This Lease is a month-to-month tenancy beginning on ${fmtDate(d.startDate)} (the "Start Date"). The tenancy continues from month to month until ended by either party as permitted by Colorado law, including the notice periods in C.R.S. &sect; 13-40-107 and, where it applies, the for-cause requirements of C.R.S. &sect;&sect; 38-12-1301 to -1307.`
+      : `This Lease is for a fixed term beginning on ${fmtDate(d.startDate)} (the "Start Date") and ending on ${fmtDate(d.endDate)} (the "Termination Date"). The Tenant is entitled to possession beginning on the Start Date and through the Termination Date unless this Lease is ended earlier as provided in this Lease or by Colorado law.`;
+
+    // ----- Rent -----
+    const rentText = fmtMoney(d.rent);
+    let rentClause = `"Rent" means only the fixed monthly payment for the right to use, possess, and occupy the Leased Property, as provided in C.R.S. &sect; 38-12-801. The Tenant shall pay Rent of ${rentText} per month, in advance, on or before the ${due} day of each month, without demand.`;
+    if (d.utilMode === 'included') rentClause += ` Rent includes the utilities and services that the Landlord furnishes to the Leased Property, as described in the Utilities section.`;
+    rentClause += ` Rent shall be paid by any of the methods the Landlord makes available in writing, at least one of which will be available at no extra cost to the Tenant. Payment is made when the Landlord actually receives it. No other charge under this Lease is Rent, even if it is billed or paid together with Rent.`;
+    if (hasProration) rentClause += ` Rent for the first partial month is set out in Addendum ${addendumKey('Prorated First Month')} (Prorated First Month).`;
+
+    // ----- Pet charges (separate from Rent) -----
+    let petChargeClause = '';
+    if (hasPetRent) {
+      const per = parseFloat(d.petRentAmount) || 0;
+      const count = parseInt(d.petCount) || 0;
+      petChargeClause = H('Pet Rent') + P(`In addition to Rent, the Tenant shall pay pet rent of ${fmtMoney(per)} per approved pet per month for ${count} approved pet${count === 1 ? '' : 's'} (${fmtMoney(per * count)} per month), due on the same day as Rent. Pet rent is a separate charge and is not Rent for purposes of a demand for rent. Pet rent and any pet security deposit are limited to the maximum amounts permitted by C.R.S. &sect; 38-12-106, and pet rent adjusts only if the number of approved pets changes.`);
+    }
+
+    // ----- Security deposit -----
+    let depositParagraph;
+    if (deposits.length === 0) {
+      depositParagraph = P(`No security deposit is required under this Lease.`);
+    } else {
+      const lines = deposits.map(dep => {
+        const amt = fmtMoney(dep.amount);
+        if (dep.status === 'carried') return `The Landlord continues to hold a ${esc(dep.label)} of ${amt} previously paid by the Tenant for the Leased Property, which is carried forward and held under this Lease.`;
+        if (dep.status === 'nonrefundable') return `The Tenant shall pay a non-refundable ${esc(dep.label)} of ${amt}. It is not a security deposit and is not Rent.`;
+        if (dep.status === 'plan') return `The Tenant shall pay a ${esc(dep.label)} of ${amt} on the installment schedule in Addendum ${addendumKey('Security Deposit Installment Agreement')} (Security Deposit Installment Agreement).`;
+        return `On or before signing this Lease, the Tenant shall pay a ${esc(dep.label)} of ${amt}.`;
+      });
+      depositParagraph = lines.map(l => P(l)).join('');
+      if (deposits.some(dep => dep.status !== 'nonrefundable')) {
+        depositParagraph += P(`Each refundable deposit is security for the Tenant's full performance of this Lease and is not a limit on the Tenant's liability. The total security deposit will not exceed the amount permitted by C.R.S. &sect; 38-12-102.5. The Tenant may not apply any deposit to Rent, including the last month's Rent.`)
+          + P(`<strong>Return of deposit.</strong> Within thirty (30) days after this Lease ends or the Tenant surrenders the Leased Property and the Landlord accepts surrender, whichever is later, the Landlord will return the deposit to the Tenant, less lawful deductions, together with a written statement listing the exact reasons for any amount kept, as required by C.R.S. &sect; 38-12-103. The Tenant shall give the Landlord a forwarding address in writing. If the Tenant asks in writing, the Landlord will also provide the documentation supporting any deduction, as provided by law.`)
+          + P(`<strong>Lawful deductions.</strong> The Landlord may deduct only: unpaid Rent; unpaid utility charges the Tenant owes under this Lease; other unpaid amounts the Tenant owes under this Lease; and the actual, reasonable cost of repairing damage to the Leased Property beyond normal wear and tear that did not exist before the tenancy began. As defined by Colorado law, normal wear and tear includes deterioration, damage, and uncleanliness that result from reasonable, ordinary use; the Landlord may charge for cleaning only if the Tenant leaves the Leased Property substantially less clean than it was at the start of the tenancy. Carpet replacement and painting may be charged only to the extent permitted by C.R.S. &sect; 38-12-103. Deductions will be no more than the Landlord's actual damages.`)
+          + P(`<strong>Walk-through.</strong> At either party's request, and if reasonable and practicable, the Landlord and the Tenant will do a walk-through of the Leased Property, in person or by live video, at a mutually convenient time before the tenancy ends and after the Tenant has had a chance to remove furniture, and any damage beyond normal wear and tear will be noted in writing.`)
+          + P(`<strong>Sale or transfer.</strong> If the Landlord's interest in the Leased Property ends, the deposit will be transferred to the successor or returned to the Tenant, less lawful deductions, as required by C.R.S. &sect; 38-12-103.`);
+      }
+    }
+
+    const supersedeParagraph = d.supersede
+      ? P(`This Lease supersedes and replaces any prior lease agreement${d.priorTerm ? ' (Term: ' + esc(d.priorTerm) + ')' : ''} between the Landlord and the Tenant for the Leased Property. Amounts owed and deposits held under the prior agreement carry forward, and on signing the prior agreement ends.`)
+      : '';
+
+    // ----- Utilities -----
+    let utilities;
+    if (d.utilMode === 'included') {
+      utilities = `The Landlord furnishes the utilities and services serving the Leased Property that are held in the Landlord's name, and Rent includes them. The Tenant shall use them reasonably and only for ordinary residential purposes. The Tenant shall not, for example, run space heaters continuously, leave water running, charge or power vehicles, mine cryptocurrency, grow plants under lights, or run commercial equipment. If, after written notice, the Tenant continues to use utilities in a way that materially exceeds ordinary residential use for a unit of this size, that is a violation of this Lease, and the Tenant shall reimburse the Landlord the documented actual cost of the excess use. That reimbursement is not Rent.`;
+    } else if (d.utilMode === 'landlord') {
+      utilities = `The Landlord pays for the utilities serving the Leased Property that are held in the Landlord's name. The Tenant shall use them reasonably and only for ordinary residential purposes, and if, after written notice, the Tenant continues to use utilities in a way that materially exceeds ordinary residential use, the Tenant shall reimburse the Landlord the documented actual cost of the excess use. That reimbursement is not Rent.`;
+    } else {
+      utilities = `The Tenant shall pay for all utilities and services used at the Leased Property and keep each account in the Tenant's name active for the whole tenancy, unless otherwise agreed in writing. If an account the Tenant is responsible for is shut off or reverts to the Landlord's name because of the Tenant's nonpayment or closure, the Tenant shall reimburse the Landlord the actual amount billed, plus any reconnection charge actually imposed by the provider, within fifteen (15) days after the Landlord's written invoice. These reimbursements are not Rent.`;
+    }
+    if (d.hasSharedUtilities) utilities += ` The Leased Property shares one or more utility meters with another unit. Shared utility costs are allocated by a Ratio Utility Billing System (RUBS), and the Landlord will give the Tenant a written explanation of how the allocation is calculated. The Landlord will not charge any markup or fee on a third-party utility bill beyond what C.R.S. &sect; 38-12-801 allows.`;
+
+    const notAddrParts = [esc(landlordName), d.landlordEmail ? esc(d.landlordEmail) : '', d.landlordAddr ? esc(d.landlordAddr) : ''].filter(Boolean).join(', ');
+
+    const body = `
+      <h2>Colorado Residential Lease Agreement</h2>
+      ${P(`This Residential Lease Agreement (the "Lease") is entered into on ${fmtDate(d.createdDate)} between ${esc(landlordName)} (the "Landlord")${d.agent ? ', acting through its authorized agent ' + esc(d.agent) : ''}, and ${esc(tenants || 'Tenant')} (the "Tenant"). If more than one person signs as Tenant, "Tenant" means each of them and all of them.`)}
+      ${supersedeParagraph}
+      ${H('Leased Property')}${P(`The Landlord leases to the Tenant the residential property located at ${esc(propLine)} (the "Leased Property"), for use only as a private residence.`)}
+      ${H('Term')}${P(termParagraph)}
+      ${d.termType !== 'mtm' ? H('Lease Expiration and Month-to-Month Continuation') + P(`If neither party ends the tenancy as allowed below, then on the Termination Date this Lease automatically continues as a month-to-month tenancy on the same terms. The continuation is not a holdover.`) + P(`<strong>Tenant's notice.</strong> If the Tenant does not intend to stay after the Termination Date, the Tenant shall give the Landlord written notice of non-renewal at least thirty (30) days before the Termination Date. If the Tenant fails to do so, the Landlord's remedy is limited to the Landlord's actual losses caused by that failure, as required by C.R.S. &sect; 38-12-801.`) + P(`<strong>Landlord's notice.</strong> The Landlord may decline to renew or continue the tenancy only as Colorado law permits. If the Tenant has been a tenant of the premises for less than twelve (12) months, the Landlord may do so by written notice given at least thirty (30) days before the Termination Date or, during a month-to-month continuation, with the notice required by C.R.S. &sect; 13-40-107. If the Tenant has been a tenant of the premises for at least twelve (12) months, the Landlord may do so only for cause or on a no-fault ground allowed by C.R.S. &sect; 38-12-1303, with the written notice that statute requires (generally at least ninety (90) days for no-fault grounds) and any relocation assistance required by law. One no-fault ground is the Tenant's history of late payment: if the Tenant pays Rent more than two times during the rental period more than ten (10) calendar days after its due date, after being served a proper demand for each, the Landlord may decline to renew under C.R.S. &sect; 38-12-1303(3)(f).`) : ''}
+      ${H('Rent')}${P(rentClause)}
+      ${H('Rent Changes')}${P(`Rent will not change during the fixed term. During any month-to-month continuation, the Landlord may increase Rent only by giving the Tenant at least sixty (60) days' written notice, no more than once in any twelve-month period, and not for a discriminatory or retaliatory purpose, as provided in C.R.S. &sect;&sect; 38-12-701, 38-12-702, and 38-12-1307.`)}
+      ${petChargeClause}
+      ${H('Late Fee')}${P(esc(d.lateFee))}
+      ${H('How Payments Are Applied')}${P(`Each payment the Tenant makes is applied first to Rent then due, and only after all Rent is paid to other lawful charges owed under this Lease. Late fees and other charges are not Rent, and the Landlord will not take them out of a Rent payment.`)}
+      ${H('Partial Payments')}${P(`Before any eviction case is filed, the Landlord may accept or refuse a payment of less than the full amount due. If the Landlord accepts a partial payment, it will be credited to the Tenant's account, the unpaid balance remains due, and acceptance does not waive the Landlord's right to serve a demand for, or to seek possession for, the unpaid balance, as permitted by Colorado law. Writing "paid in full" or similar words on a payment does not change this. After the Landlord files an eviction case for nonpayment, the Landlord will accept payment of all amounts due as required by C.R.S. &sect; 13-40-115, and the Landlord will offer or accept any repayment plan required by law.`)}
+      ${H('Returned Payments')}${P(`If any payment is returned unpaid, the Tenant shall pay a returned-payment charge of twenty dollars ($20.00), which is not Rent. The Rent remains unpaid until good funds are received. After two returned payments, the Landlord may require future payments by certified funds or another guaranteed method, as long as at least one guaranteed method is available at no extra cost to the Tenant.`)}
+      ${H('Security Deposit and Fees')}${depositParagraph}
+      ${H('Move-In Condition Report')}${P(`At or before move-in, the Landlord will record the condition of the Leased Property with a written checklist and/or dated photographs and give the Tenant a copy. Within seven (7) days after the Start Date, the Tenant may give the Landlord, in writing, any damage or condition the record missed. The record, with any timely additions, will be used as the starting condition when the tenancy ends. The Tenant will not be charged for any damage or condition that existed before the tenancy began.`)}
+      ${H('Utilities')}${P(utilities)}
+      ${H('Landlord\'s Duty to Maintain')}${P(`The Tenant is entitled to safe and healthy housing under Colorado's warranty of habitability, C.R.S. &sect; 38-12-503. The Landlord will maintain the Leased Property as that law requires and will respond to and repair reported conditions within the times it sets. Nothing in this Lease waives or limits the warranty of habitability, and the Landlord will not retaliate against the Tenant for requesting repairs or exercising legal rights.`)}
+      ${H('Tenant\'s Care of the Property and Duty to Report')}${P(`The Tenant shall keep the Leased Property clean, safe, and sanitary; use all fixtures, appliances, and systems reasonably and as intended; use reasonable ventilation and not allow standing water or excess moisture caused by the Tenant's use; dispose of trash properly; and not damage the Leased Property or allow anyone else to. The Tenant shall promptly notify the Landlord in writing or electronically of any leak, water intrusion, visible mold, pest activity, broken fixture, malfunctioning smoke or carbon monoxide alarm, or other condition needing repair. The Tenant is responsible for the actual, reasonable cost of repairing damage beyond normal wear and tear caused by the Tenant, any occupant, guest, or pet, including damage made worse by the Tenant's failure to report it promptly. Repair charges are due within fifteen (15) days after the Landlord's written invoice with supporting documentation, and they are not Rent.`)}
+      ${H('Landlord Entry and Inspections')}${P(`The Landlord or the Landlord's agents may enter the Leased Property at reasonable times to inspect, make repairs, show it to prospective tenants, buyers, or lenders, or perform services, after giving the Tenant at least twenty-four (24) hours' notice, except in an emergency, when no notice is required. For bed bug inspection or treatment the Landlord will give at least forty-eight (48) hours' written or electronic notice, as provided in C.R.S. &sect; 38-12-1004. In addition, within thirty (30) days before or after any renewal date the Landlord may do a preventive maintenance inspection with at least forty-eight (48) hours' written notice, and the Tenant shall allow access to plumbing, water shut-offs, the electrical panel, smoke and carbon monoxide alarms, and heating and water-heating equipment. The Tenant shall not unreasonably refuse lawful entry.`)}
+      ${H('Pets and Assistance Animals')}${P(esc(d.pets))}${P(`An approved pet must be kept under control, cleaned up after, and kept from disturbing others, and the Tenant is responsible for any damage or injury it causes. Assistance animals, including service animals and emotional support animals, are not pets. Requests for an assistance animal will be handled under federal and Colorado fair housing law, and no pet rent or pet deposit will be charged for an assistance animal; the Tenant remains responsible for any damage it causes.`)}
+      ${H('Use of the Leased Property')}${P(`The Leased Property shall be used only as a private residence. The Tenant shall not use it for any illegal purpose or commercial business open to the public, and shall not create a nuisance or unreasonably disturb the quiet enjoyment of neighbors or other residents. Harassing, threatening, or violent conduct toward the Landlord, the Landlord's agents, or other residents, and repeated or serious disturbances, are material violations of this Lease.`)}
+      ${H('Occupants and Guests')}${P(`Only the person(s) signing this Lease as Tenant may live at the Leased Property${d.occupants ? ', together with these approved occupants: ' + esc(d.occupants) : ''}. A guest may not stay more than fourteen (14) days in any twelve-month period, consecutive or not, without the Landlord's prior written approval; a guest who stays longer is an unauthorized occupant, and allowing an unauthorized occupant is a material violation of this Lease. The Tenant is responsible for the conduct of every occupant and guest, and a violation of this Lease by an occupant or guest is a violation by the Tenant, except as Colorado law provides otherwise.`)}
+      ${H('Smoking, Vaping, and Marijuana')}${P(`Smoking or vaping any substance, including tobacco and marijuana, is not allowed inside the Leased Property, on any porch, patio, or balcony of the Leased Property, in any shared indoor area, or within fifteen (15) feet of any door, window, or air intake of the building. Growing, processing, or extracting marijuana at the Leased Property is not allowed, as permitted by Colorado Constitution article XVIII, section 16, which allows a property owner to prohibit or regulate marijuana activity on the owner's property. Smoke odor, residue, and burn damage are not normal wear and tear, and the Tenant is responsible for the actual, reasonable cost of removing them.`)}
+      ${H('Vehicles and Parking')}${P(`Only operable, currently registered vehicles of the Tenant and approved occupants may be parked at the property, and only in designated or lawful areas. No vehicle repairs other than minor emergency repairs, and no storage of inoperable vehicles, trailers, boats, or commercial equipment, are allowed without the Landlord's prior written consent. Vehicles in violation may be towed at the owner's expense after any notice required by law.`)}
+      ${H('Trash and Pests')}${P(`The Tenant shall keep the Leased Property clean and sanitary, put trash in the provided containers, and not let trash, debris, or belongings pile up in yards, porches, walkways, or shared areas. If the Tenant's housekeeping causes or attracts pests, the Tenant is responsible for the actual cost of the resulting treatment. The rights and duties of the parties regarding bed bugs are governed by C.R.S. &sect;&sect; 38-12-1001 to -1007, and the Tenant shall cooperate with inspection and treatment, including reasonable preparation of the Leased Property.`)}
+      ${H('Criminal Activity')}${P(`The Tenant, occupants, and guests shall not engage in criminal activity on or near the property, including any act that endangers a person or willfully and substantially endangers property, any violent or drug-related felony, or any criminal nuisance, as described in C.R.S. &sect; 13-40-107.5. Such conduct is a substantial violation of this Lease. Nothing in this Lease penalizes the Tenant for calling the police or emergency services or for being the victim of domestic violence, domestic abuse, sexual assault, or stalking, as protected by C.R.S. &sect;&sect; 38-12-402 and 13-40-107.5.`)}
+      ${H('Assignment and Subletting')}${P(`The Tenant shall not assign this Lease, sublet any part of the Leased Property, or rent it out for short stays without the Landlord's prior written consent. Any assignment or subletting without consent is void and is a material violation of this Lease, and the Tenant remains fully responsible under this Lease.`)}
+      ${H('Alterations and Locks')}${P(`The Tenant shall not paint, alter, install fixtures in, or make structural changes to the Leased Property without the Landlord's prior written consent. Approved alterations become part of the Leased Property unless otherwise agreed in writing, and the Tenant shall restore the Leased Property at the end of the tenancy if the Landlord's written consent required it. This section does not apply to reasonable modifications for a person with a disability, which are governed by fair housing law, including C.R.S. &sect; 24-34-502.2. The Tenant shall not change, add, or re-key any lock without the Landlord's prior written consent, except as Colorado law expressly allows (including for a victim of domestic violence, domestic abuse, sexual assault, or stalking), and the Tenant shall give the Landlord a key to any lock that is changed. Replacing lost keys or providing lockout service is charged at the Landlord's documented actual cost, which is not Rent.`)}
+      ${H('Smoke and Carbon Monoxide Alarms')}${P(`The Landlord has provided working smoke and carbon monoxide alarms as required by Colorado law. The Tenant shall test them regularly, replace batteries as needed, promptly report any malfunction, and not disable, remove, or tamper with any alarm. The Tenant is responsible for damage or injury resulting from an alarm the Tenant or the Tenant's occupants or guests disabled or tampered with.`)}
+      ${H('Renter\'s Insurance and Tenant\'s Belongings')}${P(`The Landlord's insurance does not cover the Tenant's belongings or the Tenant's liability. The Tenant is strongly encouraged to carry renter's insurance with personal liability coverage for the whole tenancy. The Landlord is not responsible for loss of or damage to the Tenant's belongings, except to the extent caused by the Landlord's negligence or intentional misconduct.`)}
+      ${H('Damage or Destruction')}${P(`If the Leased Property is damaged by fire or other casualty not caused by the Tenant, occupants, guests, or pets, and it becomes uninhabitable, either party may end this Lease by written notice, and Rent will be prorated to the date it became uninhabitable. If it is only partly damaged, the Landlord will repair it with reasonable diligence and Rent will be reduced in proportion to the part that cannot be used, as provided by law. This section does not limit the Tenant's responsibility for damage the Tenant, occupants, guests, or pets cause, or the Landlord's duties under C.R.S. &sect; 38-12-503.`)}
+      ${H('Responsibility and Indemnity')}${P(`If more than one person signs as Tenant, each is jointly and severally responsible for all obligations under this Lease, including the full Rent. The Tenant shall indemnify the Landlord against claims by third parties for injury or damage caused by the negligent or intentional acts of the Tenant, occupants, guests, or pets, except to the extent caused by the Landlord's negligence or intentional misconduct. This section does not govern attorney fees in a dispute between the Landlord and the Tenant; those are governed only by the Attorney Fees and Costs section.`)}
+      ${H('Early Move-Out')}${P(`If the Tenant moves out before the end of the term without a legal right to do so, the Tenant remains responsible for Rent as it comes due until the end of the term or until the Leased Property is re-rented, whichever happens first, plus the Landlord's actual, reasonable costs of re-renting, such as advertising. The Landlord will use reasonable efforts to re-rent the Leased Property and will credit Rent received from a new tenant against what the Tenant owes. No fixed early-termination fee is charged. This section does not apply to early termination that Colorado or federal law allows without that liability, including termination by a victim of domestic violence, domestic abuse, sexual assault, or stalking under C.R.S. &sect; 38-12-402, by a servicemember under the Servicemembers Civil Relief Act, 50 U.S.C. &sect; 3955, or on the Tenant's death as provided below.`)}
+      ${H('Death of a Tenant')}${P(`If a Tenant dies during the tenancy, the obligations of the Tenant's estate are limited as provided by Colorado law (House Bill 25-1108). Rent may be charged only through the later of the end of the month or ten (10) business days after the Leased Property is vacated following notice of the death; no liquidated damages, Rent acceleration, early-termination fee, or repayment of concessions will be charged; and the deposit may be applied only as Colorado law allows. The Landlord may retake possession as that law permits. If other Tenants remain, this Lease continues as to them.`)}
+      ${H('Abandonment')}${P(`The Leased Property is considered abandoned if the Tenant has been absent for a substantial period without notice, Rent is unpaid, and the circumstances reasonably show the Tenant does not intend to return, such as the removal of substantially all belongings or the return of keys. After abandonment, the Landlord may retake possession and re-rent the Leased Property in compliance with Colorado law. The Landlord will handle any belongings left behind as required by C.R.S. &sect;&sect; 38-20-102 and 38-20-116, and, after an eviction, as directed under C.R.S. &sect; 13-40-122.`)}
+      ${H('Default and Landlord\'s Remedies')}${P(`Each of the following is a default by the Tenant: failure to pay Rent when due; a substantial violation as described in C.R.S. &sect; 13-40-107.5; any other material violation of this Lease, including allowing unauthorized occupants, subletting, nuisance, unapproved pets, smoking, and refusing lawful entry; a repeat violation after the Tenant received proper notice of an earlier violation of the same term; and holding over after the tenancy has ended. On a default, the Landlord may serve any notice or demand and pursue any remedy that Colorado law allows, including a demand for payment of Rent or possession under C.R.S. &sect; 13-40-104(1)(d), a notice to comply or deliver possession under C.R.S. &sect; 13-40-104(1)(e), a notice to quit for a repeat violation under C.R.S. &sect; 13-40-104(1)(e.5), and a notice to quit for a substantial violation under C.R.S. &sect; 13-40-107.5, and may recover unpaid Rent, other amounts owed, and damages. The Landlord's remedies are cumulative. If the Landlord retakes possession, the Landlord will use reasonable efforts to re-rent and will credit amounts received, and the Tenant remains responsible for the difference and the actual, reasonable costs of re-renting. The Landlord will not charge any penalty or fee for serving a notice or filing an eviction.`)}
+      ${H('Holdover')}${P(`If the tenancy has ended because the Landlord or the Tenant lawfully terminated it, and the Tenant stays without the Landlord's written consent, the Tenant shall pay for each day of holdover an amount equal to the daily Rent (monthly Rent divided by thirty), plus any additional actual damages the holdover causes the Landlord, such as costs owed to an incoming tenant. Accepting payment for holdover days does not create a new tenancy or waive the Landlord's right to possession.`)}
+      ${H('Attorney Fees and Costs')}${P(`In any court action between the Landlord and the Tenant arising out of this Lease, the Leased Property, or the tenancy, the party the court finds to be the prevailing party is entitled to recover its reasonable attorney fees and court costs, in the amount the court finds reasonable, as permitted by C.R.S. &sect;&sect; 13-40-123 and 38-12-801. No attorney fees or costs are owed except as a court awards them under this section, and neither party will be charged the costs of mediation required by C.R.S. &sect; 13-40-110.`)}
+      ${H('Housing Assistance Programs')}${P(`If any part of the Rent is paid by a housing assistance program, such as a Housing Choice Voucher, the Tenant is responsible only for the Tenant's share, no late fee will be charged on the program's share, and the program's required lease addendum (for example, the HUD Tenancy Addendum) controls over any conflicting term of this Lease. Notices to vacate will give at least the time required for assisted tenancies by federal law and Colorado law, including the thirty (30) day notice to vacate required by 15 U.S.C. &sect; 9058(c) and Colorado House Bill 25-1240. The Landlord will cooperate in good faith with the Tenant's requests for documents needed for rental assistance.`)}
+      ${H('Rules')}${P(`The Tenant shall follow reasonable written rules the Landlord adopts for the safety, care, and cleanliness of the property and the comfort of residents, as long as the rules are lawful, apply to all residents, and do not change the Rent or other money terms of this Lease. The Landlord will give reasonable written notice of new or changed rules.`)}
+      ${H('Notices')}${P(`Landlord (name and address for notices): ${notAddrParts || esc(landlordName)}<br>Tenant: ${esc(d.tenantName)}${d.tenantPhone ? ' &mdash; ' + esc(d.tenantPhone) : ''}${d.tenantEmail ? ' &mdash; ' + esc(d.tenantEmail) : ''}${d.tenantName2 ? '<br>Tenant: ' + esc(d.tenantName2) + (d.tenantPhone2 ? ' &mdash; ' + esc(d.tenantPhone2) : '') + (d.tenantEmail2 ? ' &mdash; ' + esc(d.tenantEmail2) : '') : ''}`)}${P(`Except where a statute requires a specific method of service, such as for eviction demands and notices under C.R.S. &sect; 13-40-108, written notices under this Lease may be delivered by hand, by mail to the addresses above, or electronically by email${d.tenantPhone ? ' or text message' : ''} to the contacts above, and electronic delivery counts as written notice. Each party shall give the other written notice of any change of address, email, or phone number.`)}
+      ${H('No Waiver')}${P(`The Landlord's failure or delay in enforcing any term, or acceptance of a late or partial payment, does not waive that term or any later violation, except as Colorado law provides otherwise. A waiver is effective only if it is in writing and signed by the Landlord.`)}
+      ${H('Entire Agreement, Changes, and Severability')}${P(`This Lease, its addenda, and the required disclosures are the entire agreement between the parties. It may be changed only in a writing signed by both parties. If any part of this Lease is found invalid or unenforceable, that part will be enforced to the extent Colorado law permits and the rest of the Lease stays in effect. Nothing in this Lease waives any right the Tenant has under C.R.S. &sect;&sect; 38-12-1301 to -1307 or any other law that cannot be waived.`)}
+      ${H('Governing Law and Venue')}${P(`This Lease is governed by Colorado law. Any court action about this Lease will be brought in the county where the Leased Property is located.`)}
+      ${d.additional ? H('Additional Terms') + P(esc(d.additional).replace(/\n/g, '<br>')) : ''}
+      ${addenda.length ? H('Addenda') + P(`The following addenda are attached to and part of this Lease: ${addenda.map(a => 'Addendum ' + a.key + ' (' + a.title + ')').join('; ')}. If an addendum conflicts with this Lease about its own subject, the addendum controls.`) : ''}
+      ${H('Required Colorado and Federal Disclosures')}
+      <p style="font-weight:bold;">RADON WARNING: The Colorado Department of Public Health and Environment strongly recommends that ALL tenants have an indoor radon test performed before leasing residential real property and recommends having the radon levels mitigated if elevated radon concentrations are found. Elevated radon concentrations can easily be reduced by a qualified radon mitigation professional. Residential real property may be subject to radon gas, a naturally occurring radioactive gas that, when accumulated in a building in sufficient quantities, may present health risks to persons exposed to it over time. Radon is a Class A human carcinogen and is the leading cause of lung cancer in nonsmokers in the United States and the second leading cause of lung cancer overall. The landlord is required to provide the tenant with any known information on radon test results of the leased premises.</p>
+      ${P(`${d.radonKnown && d.radonInfo ? 'Landlord\'s known radon information for the Leased Property: ' + esc(d.radonInfo) : 'The Landlord has no records or reports of radon testing, radon levels, or radon mitigation for the Leased Property, and no knowledge of elevated radon levels at the Leased Property.'} The most recent radon brochure published by the Colorado Department of Public Health and Environment for real estate transactions has been provided to the Tenant with this Lease (and is available at cdphe.colorado.gov/radon). By signing, the Tenant acknowledges receiving the radon disclosures required by C.R.S. &sect; 38-12-803.`)}
+      ${d.pre1978 ? `<p style="font-weight:bold;">LEAD WARNING STATEMENT: Housing built before 1978 may contain lead-based paint. Lead from paint, paint chips, and dust can pose health hazards if not managed properly. Lead exposure is especially harmful to young children and pregnant women. Before renting pre-1978 housing, lessors must disclose the presence of known lead-based paint and/or lead-based paint hazards in the dwelling. Lessees must also receive a federally approved pamphlet on lead poisoning prevention.</p>${P(`The Landlord has no knowledge of lead-based paint or lead-based paint hazards in the Leased Property and has no reports or records about them, except as stated in the Additional Terms. The Tenant acknowledges receiving the federally approved pamphlet "Protect Your Family From Lead in Your Home" (also available at epa.gov/lead) and this disclosure, as required by 42 U.S.C. &sect; 4852d and 40 C.F.R. part 745.`)}` : ''}
+      ${P(`<strong>Source of income:</strong> C.R.S. &sect; 24-34-502(1) makes it an unfair housing practice to discriminate based on a person's source of income, and requires a landlord who is not exempt to accept any lawful and verifiable source of money paid directly, indirectly, or on behalf of a person, including income from any government or private assistance, grant, or loan program. The Landlord accepts lawful sources of income, including housing vouchers.`)}
+      <p style="font-weight:bold;font-size:12pt;">COLORADO WARRANTY OF HABITABILITY NOTICE: Every residential tenant in Colorado has the right to safe and healthy housing. If you believe your home is unsafe or unhealthy, you have the right to request repairs, and your landlord may not retaliate against you for doing so. Deliver written or electronic notice of any uninhabitable or unsafe condition to: ${notAddrParts || esc(landlordName)}.</p>
+      <p style="font-weight:bold;font-size:12pt;">AVISO SOBRE LA GARANT&Iacute;A DE HABITABILIDAD DE COLORADO: Todo inquilino residencial en Colorado tiene derecho a una vivienda segura y saludable. Si usted cree que su vivienda es insegura o insalubre, tiene derecho a solicitar reparaciones, y su arrendador no puede tomar represalias en su contra por hacerlo. Entregue un aviso por escrito o electr&oacute;nico de cualquier condici&oacute;n inhabitable o insegura a: ${notAddrParts || esc(landlordName)}.</p>
+      ${H('Copy of Lease')}${P(`The Landlord will give the Tenant a copy of this fully signed Lease within seven (7) days after the Tenant signs, electronically or on paper if the Tenant asks, as required by C.R.S. &sect; 38-12-801.`)}
+      ${H('Electronic Signatures and Identity')}${P(`The parties agree to sign this Lease electronically, and an electronic signature has the same effect as a handwritten one under the federal E-SIGN Act and the Colorado Uniform Electronic Transactions Act. By signing, the Tenant certifies that the Tenant is the person named in this Lease, that any identification or documents provided with the signature are the Tenant's own, genuine, and unaltered, and that the Tenant is signing voluntarily. Giving false identity information or falsified documents to obtain this Lease is a material misrepresentation, and the Landlord relies on this certification in signing.`)}
+    `;
+
+    // ----- Addenda (only when used) -----
+    let addendaHtml = '';
+    if (hasProration) {
+      const k = addendumKey('Prorated First Month');
+      addendaHtml += `
+      <h2>Addendum ${k}: Prorated First Month</h2>
+      ${P(`This Addendum is part of the Lease between ${esc(landlordName)} and ${esc(tenants || 'Tenant')} for ${esc(propLine)}.`)}
+      ${P(`Because the Start Date (${fmtDate(d.startDate)}) is not the first day of the month, Rent for the first partial month, from ${fmtDate(d.startDate)} through ${fmtDate(d.prorate.periodEnd)} (${d.prorate.remaining} of ${d.prorate.daysInMonth} days), is ${fmtMoney(d.prorate.amount)}, calculated as the monthly Rent of ${rentText} divided by ${d.prorate.daysInMonth} days and multiplied by ${d.prorate.remaining} days. This prorated amount is Rent and is due on or before the Start Date. Full monthly Rent is due beginning on the first day of the following month and on the regular due date each month after that.`)}`;
+    }
+    if (planDeps.length) {
+      const k = addendumKey('Security Deposit Installment Agreement');
+      addendaHtml += `
+      <h2>Addendum ${k}: Security Deposit Installment Agreement</h2>
+      ${P(`This Addendum is part of the Lease between ${esc(landlordName)} and ${esc(tenants || 'Tenant')} for ${esc(propLine)}. It is a special arrangement for this Tenant only.`)}
+      ${planDeps.map(dep => {
+        const sched = [];
+        if ((parseFloat(dep.down) || 0) > 0) sched.push(`${fmtMoney(dep.down)} due on or before signing`);
+        (Array.isArray(dep.plan) ? dep.plan : []).forEach(p => sched.push(`${fmtMoney(p.amount)} due on or before ${fmtDate(p.date)}`));
+        return P(`<strong>${esc(dep.label)} of ${fmtMoney(dep.amount)}:</strong> ${sched.length ? sched.join('; ') : 'on the schedule the parties agree to in writing'}.`);
+      }).join('')}
+      ${P(`Each installment becomes part of the security deposit when the Landlord receives it, and the deposit provisions of the Lease and Colorado law apply to the amount actually received. The full deposit remains owed regardless of this schedule. Installments are not Rent, will not be applied to Rent, and no late fee will be charged on them.`)}
+      ${P(`If an installment is not paid in full within seven (7) days after its due date, that is a violation of this Addendum and the Lease, and the Landlord may serve a notice to pay the installment or deliver possession under C.R.S. &sect; 13-40-104(1)(e), may recover the unpaid amount in court, or both, as Colorado law allows. If any part of this Addendum is found unenforceable, the Lease remains in effect and the unpaid deposit balance remains a debt the Tenant owes.`)}`;
+    }
+    return body + addendaHtml;
+  }
+
+  // ---------- LEASE TEXT, VERSION 1 (frozen: leases created before Oct 21, 2026) ----------
+  function leaseBodyV1(d) {
     const landlordName = d.entity || 'Landlord';
     const tenants = [d.tenantName, d.tenantName2].filter(Boolean).join(' and ');
     const propLine = d.propertyAddress + (d.unitLabel ? ', ' + d.unitLabel : '') + ', ' + d.cityZip;
@@ -2273,6 +2449,14 @@ ${steps(0, TN_STEPS)}
 
       ${uploadBoxHtml('idphoto', 'Photo ID (optional)', 'On a phone, this opens your camera. You can also choose a photo already saved.')}
       ${uploadBoxHtml('paystub', 'Proof of income (optional)', "A pay stub or similar document, for the landlord's records.")}
+      <div class="card no-print">
+        <div class="section-label">Read before signing: required pamphlets</div>
+        <p class="hint" style="margin-bottom:0.75rem;">Colorado and federal law require your landlord to give you these. Open and read them, then sign below.</p>
+        <div style="display:flex;flex-direction:column;gap:0.5rem;">
+          <a class="btn btn-ghost" style="text-decoration:none;text-align:left;" href="https://fcgov.com/airquality/files/cdphe-radon-brochure-2024.pdf" target="_blank" rel="noopener">Colorado radon brochure (Colorado Dept. of Public Health and Environment)</a>
+          ${d.pre1978 ? '<a class="btn btn-ghost" style="text-decoration:none;text-align:left;" href="https://www.epa.gov/lead/protect-your-family-lead-your-home-1" target="_blank" rel="noopener">&ldquo;Protect Your Family From Lead in Your Home&rdquo; (U.S. EPA)</a>' : ''}
+        </div>
+      </div>
       ${signPanelHtml('sig', 'Sign as tenant', d.tenantName)}
       <div class="btn-row no-print">
         <button class="btn btn-brass" id="btn-submit-tenant-sign">Confirm &amp; sign &rarr;</button>
