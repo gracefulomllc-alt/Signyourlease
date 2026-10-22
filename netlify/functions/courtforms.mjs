@@ -1,4 +1,5 @@
 import { getStore } from '@netlify/blobs';
+import { valuesFor } from '../lib/court-mappers.mjs';
 import { PDFDocument, PDFName, PDFTextField, PDFCheckBox, PDFRadioGroup, PDFDropdown, PDFOptionList, StandardFonts } from 'pdf-lib';
 
 // Official Colorado eviction court forms, always pulled from the court's own form pages
@@ -100,21 +101,42 @@ async function probe(form, lang, store) {
   return lines.join('\n');
 }
 
-// values: { fieldName: string | true | false }
-async function fillOne(form, lang, values, store, font) {
-  const { bytes } = await formBytes(form, lang, store);
+const WINANSI_EXTRA = '€‚ƒ„…†‡ˆ‰Š‹ŒŽ‘’“”•–—˜™š›œžŸ';
+const clean = (s) => String(s).replace(/[\u2018\u2019]/g, "'").replace(/[\u201C\u201D]/g, '"').split('').filter(ch => ch.charCodeAt(0) < 256 || WINANSI_EXTRA.includes(ch)).join('');
+const norm = (s) => String(s || '').replace(/\s+/g, ' ').trim();
+
+function findField(form, fields, key) {
+  if (key === '@plaintiff' || key === '@defendant') {
+    const exact = key === '@plaintiff' ? ['\u03C0', '\u03A0', 'π'] : ['\u2206', '\u0394', '∆'];
+    for (const n of exact) { try { return form.getField(n); } catch (e) {} }
+    const re = key === '@plaintiff' ? /names? of the (Landlord|Plaintiff|Petitioner)/i : /names? of the (Tenant|Defendant|Respondent)/i;
+    return fields.find(f => re.test(tooltip(f))) || null;
+  }
+  try { return form.getField(key); } catch (e) { return null; }
+}
+
+async function fillOne(formId, lang, values, store) {
+  const { bytes } = await formBytes(formId, lang, store);
   const doc = await PDFDocument.load(bytes, { ignoreEncryption: true, updateMetadata: false });
   let f = null; try { f = doc.getForm(); } catch (e) {}
   const misses = [];
   if (f && values) {
+    const fields = f.getFields();
     for (const [name, v] of Object.entries(values)) {
       if (v === '' || v == null || v === false) continue;
-      let field; try { field = f.getField(name); } catch (e) { misses.push(name); continue; }
+      const field = findField(f, fields, name);
+      if (!field) { if (!/^(Court|Court_Type|Court County|Court_County|Court Address|Court_Address|Case Number)$/.test(name)) misses.push(name); continue; }
       try {
-        if (field instanceof PDFTextField) { field.setText(String(v)); }
-        else if (field instanceof PDFCheckBox) { field.check(); }
-        else if (field instanceof PDFRadioGroup) { field.select(String(v)); }
-        else if (field instanceof PDFDropdown) { field.select(String(v)); }
+        if (field instanceof PDFTextField) {
+          if (v instanceof RegExp || v === true) continue;
+          let t = clean(v); const max = field.getMaxLength(); if (max && t.length > max) t = t.slice(0, max);
+          field.setText(t);
+        } else if (field instanceof PDFCheckBox) { if (v) field.check(); }
+        else if (field instanceof PDFRadioGroup || field instanceof PDFDropdown) {
+          const opts = field.getOptions();
+          const pick = v instanceof RegExp ? opts.find(o => v.test(norm(o))) : opts.find(o => norm(o) === norm(v));
+          if (pick != null) field.select(pick); else misses.push(name);
+        }
       } catch (e) { misses.push(name); }
     }
     try { f.updateFieldAppearances(await doc.embedFont(StandardFonts.Helvetica)); } catch (e) {}
@@ -136,6 +158,28 @@ export default async (req) => {
       try { const txt = await probe(p, lang, store); txt.split('\n').forEach((l, i) => console.log('P' + String(i).padStart(3, '0') + ' ' + l)); return new Response(txt, { headers: { ...cors, 'Content-Type': 'text/plain; charset=utf-8' } }); }
       catch (e) { return json({ error: e.message }, 502); }
     }
+    const vf = url.searchParams.get('verify');
+    if (vf && PAGES[vf]) {
+      const sample = { tenants: ['Jane Sample', 'John Sample'], street: '411 Troy Ave, Unit 3', city: 'Pueblo', county: 'Pueblo', zip: '81004', rent: '805', landlord: 'TLDR Enterprise LLC', signer: 'Terel',
+        plaintiffAddress: 'PO Box 1, Pueblo, CO 81003', plaintiffPhone: '7193597502', plaintiffEmail: 'tldrenterprise@gmail.com', courtAddress: '501 N. Elizabeth St., Pueblo, CO 81003', returnDate: '11/16/2026 8:30 a.m.',
+        notice: { kind: vf === 'JDF99B' ? 'terminate' : 'demand', moveOut: '2026-11-02', served: '2026-10-22', serviceMethod: 'Posted after 2 failed attempts', posted: true,
+          attempts: [{ date: '2026-10-21', result: 'noanswer' }, { date: '2026-10-22', result: 'noanswer' }], rentOn: vf !== 'JDF99B', rentTotal: '805.00', rentRows: [{ due: '2026-10-01', amount: '805' }],
+          violationOn: true, violationTerm: 'Occupants', violationText: 'Unauthorized occupant since 10/5.', substantialOn: vf === 'JDF99B', substantialKinds: ['endanger'], substantialText: 'Test.' } };
+      try {
+        const values = valuesFor(vf, sample);
+        const { doc, misses } = await fillOne(vf, lang, values, store);
+        const form = doc.getForm(); const lines = ['VERIFY ' + vf + ' misses=' + JSON.stringify(misses)];
+        for (const fl of form.getFields()) {
+          let val = '';
+          try { if (fl instanceof PDFTextField) val = fl.getText() || ''; else if (fl instanceof PDFCheckBox) val = fl.isChecked() ? 'CHECKED' : ''; else if (fl instanceof PDFRadioGroup) val = fl.getSelected() || ''; else if (fl instanceof PDFDropdown) val = (fl.getSelected() || []).join(','); } catch (e) { val = 'ERR ' + e.message; }
+          if (val) lines.push(fl.getName() + ' = ' + String(val).slice(0, 90));
+        }
+        let flat = 'ok'; try { form.flatten(); } catch (e) { flat = 'FAILED ' + e.message; }
+        const out = await PDFDocument.create(); const pgs = await out.copyPages(doc, doc.getPageIndices()); pgs.forEach(p => out.addPage(p));
+        lines.push('flatten=' + flat + ' mergedBytes=' + (await out.save()).length);
+        return new Response(lines.join('\n'), { headers: { ...cors, 'Content-Type': 'text/plain; charset=utf-8' } });
+      } catch (e) { return json({ error: e.message, stack: String(e.stack).slice(0, 400) }, 502); }
+    }
     // list of forms with their current court link
     const out = [];
     for (const form of Object.keys(PAGES)) out.push({ form, url: await currentUrl(form, 'en', store), spanish: SPANISH_OK.has(form) });
@@ -152,7 +196,8 @@ export default async (req) => {
       const misses = {};
       for (const item of list) {
         const lang = item.lang === 'es' ? 'es' : 'en';
-        const { doc, misses: m } = await fillOne(item.form, lang, item.values || {}, store);
+        const data = { tenants: [], ...(body.data || {}) };
+        const { doc, misses: m } = await fillOne(item.form, lang, valuesFor(item.form, data), store);
         if (m.length) misses[item.form] = m;
         try { doc.getForm().flatten(); } catch (e) {}
         const copies = Math.max(1, Math.min(4, parseInt(item.copies, 10) || 1));

@@ -829,6 +829,138 @@
     window.scrollTo(0, 0);
   };
 
+  // ---- official court forms, pre-filled
+  const COURT_FORMS = [
+    { group: 'Notice', forms: [
+      { id: 'JDF99A', name: 'JDF 99A Demand for Compliance', es: true, note: 'Unpaid rent, lease violation, disturbing conduct' },
+      { id: 'JDF99B', name: 'JDF 99B Notice to Terminate Tenancy', es: true, note: 'Repeat or substantial violation' },
+      { id: 'JDF99C', name: 'JDF 99C Notice of No-Fault Eviction', es: true, note: 'Non-renewal or no-fault ground' },
+    ] },
+    { group: 'Filing packet', forms: [
+      { id: 'JDF101', name: 'JDF 101 Eviction Complaint', es: true },
+      { id: 'JDF102', name: 'JDF 102 Eviction Summons', es: true, note: 'The clerk signs it' },
+      { id: 'JDF103', name: 'JDF 103 Eviction Answer (blank, one per tenant)', es: true, perTenant: true },
+      { id: 'JDF108', name: 'JDF 108 Request for Documents (one per tenant)', perTenant: true },
+      { id: 'JDF98', name: 'JDF 98 Affidavit of Service', note: 'For the sheriff or process server' },
+    ] },
+    { group: 'At court', forms: [
+      { id: 'JDF105', name: 'JDF 105 Notice About Remote Participation' },
+      { id: 'JDF106A', name: 'JDF 106A Stipulated Agreement', es: true, note: 'If you and the tenant agree' },
+      { id: 'JDF106B', name: 'JDF 106B Order re Stipulated Agreement' },
+      { id: 'JDF107A', name: 'JDF 107A Motion for Entry of Judgment', note: 'If the tenant does not answer' },
+      { id: 'JDF107B', name: 'JDF 107B Judgment Order' },
+    ] },
+    { group: 'After judgment', forms: [
+      { id: 'JDF109', name: 'JDF 109 Writ of Restitution', note: 'Judge signs; take it to the sheriff' },
+    ] },
+  ];
+  const COURT_PACKETS = {
+    notice: { label: 'Notice only', forms: [] },
+    filing: { label: 'Filing packet', forms: ['JDF101', 'JDF102', 'JDF103', 'JDF108', 'JDF98'] },
+    default: { label: 'Default judgment', forms: ['JDF107A', 'JDF107B'] },
+    stip: { label: 'Settlement', forms: ['JDF106A', 'JDF106B'] },
+    writ: { label: 'Writ', forms: ['JDF109'] },
+  };
+  function noticeFormId(n) { return n ? (n.kind === 'terminate' ? 'JDF99B' : 'JDF99A') : ''; }
+  function courtFormsCard(c) {
+    const notices = (c.notices || []).slice().reverse();
+    const spanish = /span|espa/i.test(c.language || '');
+    return `<div class="card" id="court-forms">
+      <div class="section-label">Official court forms, pre-filled</div>
+      <p style="margin-top:0;">Lease Desk pulls the newest version of each form from the Colorado courts website and fills in what it knows from this file. Pick a packet or individual forms, then download one PDF to print.</p>
+      <div class="field full"><label>Use details from this notice</label><select id="cf-notice">
+        ${notices.map(n => { const st = serviceStatus(c, n); return `<option value="${esc(n.id)}">${n.kind === 'terminate' ? 'Notice to terminate' : 'Demand for compliance'}${st.complete ? ', served ' + esc(fmtDate(st.date)) : ', not served yet'}</option>`; }).join('')}
+        <option value="">None (leave notice details blank)</option></select></div>
+      <div class="btn-row" style="flex-wrap:wrap;margin:0.5rem 0;">
+        ${Object.entries(COURT_PACKETS).map(([k, p]) => `<button type="button" class="btn btn-ghost" style="padding:0.4rem 0.8rem;font-size:0.85rem;" data-packet="${k}">${p.label}</button>`).join('')}
+      </div>
+      ${COURT_FORMS.map(g => `<div style="margin-top:0.6rem;"><strong style="font-size:0.85rem;color:var(--ink-soft);text-transform:uppercase;letter-spacing:0.04em;">${g.group}</strong>
+        ${g.forms.map(f => `<label class="checkbox-row"><input type="checkbox" class="cf-pick" value="${f.id}"><span>${esc(f.name)}${f.note ? `<br><span class="hint">${esc(f.note)}</span>` : ''}</span></label>`).join('')}</div>`).join('')}
+      <div class="grid" style="margin-top:0.75rem;">
+        <div class="field"><label>Language</label><select id="cf-lang"><option value="en">English</option><option value="es" ${spanish ? 'selected' : ''}>Spanish (where the court has one)</option></select></div>
+      </div>
+      <details style="margin-top:0.5rem;"><summary style="cursor:pointer;font-weight:600;">Court and filing details</summary>
+        <div class="grid" style="margin-top:0.5rem;">
+          <div class="field"><label>Court</label><input type="text" id="ct-name" value="${esc(c.courtName || ((c.county || 'Pueblo') + ' County Court'))}"></div>
+          <div class="field"><label>Court address</label><input type="text" id="ct-addr" value="${esc(c.courtAddress || (/pueblo/i.test(c.county || 'Pueblo') ? '501 N. Elizabeth St., Pueblo, CO 81003' : ''))}"></div>
+          <div class="field"><label>Case number (after filing)</label><input type="text" id="ct-case" value="${esc(c.caseNumber || '')}"></div>
+          <div class="field"><label>Return date and time (from the clerk)</label><input type="text" id="ct-return" value="${esc(c.returnDate || '')}" placeholder="e.g. 11/16/2026 8:30 a.m."></div>
+          <div class="field"><label>Your mailing address</label><input type="text" id="ct-paddr" value="${esc(c.plaintiffAddress || '')}"></div>
+          <div class="field"><label>Your phone</label><input type="text" id="ct-pphone" value="${esc(c.plaintiffPhone || '7193597502')}"></div>
+          <div class="field"><label>Your email</label><input type="text" id="ct-pemail" value="${esc(c.plaintiffEmail || 'tldrenterprise@gmail.com')}"></div>
+          <div class="field"><label>Premises ZIP</label><input type="text" id="ct-zip" value="${esc(c.zip || '')}"></div>
+        </div>
+        <p class="hint">Pueblo evictions are heard at the Pueblo Combined Court, 501 N. Elizabeth St. (FED docket Monday and Thursday, 8:30 a.m.). Filing can be done in person or through the court's e-filing system.</p>
+      </details>
+      <p class="error-text" id="cf-err" style="display:none;"></p>
+      <div class="btn-row"><button class="btn btn-primary" id="cf-go">Download pre-filled forms</button></div>
+      <p class="hint">Check every page before you sign. Anything Lease Desk doesn't know (like the clerk's return date) stays blank for you to fill in. Attach the lease and the served notice to the complaint; you can download both from this file.</p>
+    </div>`;
+  }
+  function courtData(c, n) {
+    const st = n ? serviceStatus(c, n) : null;
+    const g = (n && n.grounds) || {};
+    const rentRows = g.rent && g.rent.on ? (g.rent.rows || []) : [];
+    return {
+      tenants: [c.tenantName, c.tenantName2].filter(Boolean),
+      street: c.propertyLine || '', city: c.city || '', county: c.county || '', zip: c.zip || '', state: 'CO',
+      rent: c.rent || '', rentPeriod: 'month', landlord: c.entity || '', signer: (n && n.signerName) || c.signerName || '',
+      plaintiffAddress: c.plaintiffAddress || '', plaintiffPhone: c.plaintiffPhone || '', plaintiffEmail: c.plaintiffEmail || '',
+      courtName: c.courtName || '', courtAddress: c.courtAddress || '', caseNumber: c.caseNumber || '', returnDate: c.returnDate || '',
+      assisted: !!(c.subsidized || c.cares), cares: !!c.cares, subsidized: !!c.subsidized, mediationEligible: !!c.mediationEligible,
+      leaseStart: c.leaseStart || '', leaseEnd: c.leaseEnd || '', tenancyStart: c.tenancyStart || '',
+      notice: n ? {
+        kind: n.kind, moveOut: n.moveOutISO || '', moveOutTime: '11:59 p.m.', days: n.days,
+        served: st && st.complete ? st.date : '', serviceMethod: st && st.complete ? st.method : '',
+        posted: !!(n.service && n.service.posted && n.service.posted.date && st && st.complete && !/Personal/.test(st.method)),
+        attempts: ((n.service || {}).attempts || []).map(a => ({ date: a.date, time: a.time || '', result: a.result, by: a.by || '' })),
+        rentOn: !!(g.rent && g.rent.on), rentTotal: rentRows.reduce((s, r) => s + (parseFloat(r.amount) || 0), 0).toFixed(2),
+        rentRows: rentRows.map(r => ({ due: r.due, amount: r.amount, period: r.period })),
+        violationOn: !!(g.violation && g.violation.on), violationTerm: (g.violation || {}).term || '', violationText: (g.violation || {}).explanation || '',
+        conductOn: !!(g.conduct && g.conduct.on), conductText: g.conduct && g.conduct.on ? (g.conduct.what + ' (disturbing ' + g.conduct.who + ')') : '',
+        repeatOn: !!(g.repeat && g.repeat.on), repeatTerm: (g.repeat || {}).term || '', repeatPrior: (g.repeat || {}).priorServedISO || '', repeatText: (g.repeat || {}).explanation || '',
+        substantialOn: !!(g.substantial && g.substantial.on), substantialKinds: (g.substantial || {}).kinds || [], substantialText: (g.substantial || {}).explanation || '',
+      } : null,
+    };
+  }
+  function bindCourtForms(c) {
+    const card = document.getElementById('court-forms'); if (!card) return;
+    const picks = () => Array.from(card.querySelectorAll('.cf-pick'));
+    const sel = document.getElementById('cf-notice');
+    card.querySelectorAll('[data-packet]').forEach(b => b.addEventListener('click', () => {
+      const p = COURT_PACKETS[b.dataset.packet]; const n = (c.notices || []).find(x => x.id === sel.value);
+      const want = new Set(p.forms); if (b.dataset.packet === 'notice' && n) want.add(noticeFormId(n));
+      picks().forEach(x => { x.checked = want.has(x.value); });
+    }));
+    document.getElementById('cf-go').addEventListener('click', async function () {
+      const err = document.getElementById('cf-err'); err.style.display = 'none';
+      const chosen = picks().filter(x => x.checked).map(x => x.value);
+      if (!chosen.length) { err.textContent = 'Pick at least one form, or tap a packet.'; err.style.display = ''; return; }
+      const v = (id) => document.getElementById(id).value.trim();
+      const updated = { ...c, courtName: v('ct-name'), courtAddress: v('ct-addr'), caseNumber: v('ct-case'), returnDate: v('ct-return'),
+        plaintiffAddress: v('ct-paddr'), plaintiffPhone: v('ct-pphone'), plaintiffEmail: v('ct-pemail'), zip: v('ct-zip') };
+      const btn = this; btn.disabled = true; btn.textContent = 'Getting the newest forms from the court…';
+      try { const sc = await saveCase(updated); window.__case = sc; Object.assign(c, sc); } catch (e) {}
+      const n = (c.notices || []).find(x => x.id === sel.value) || null;
+      const data = courtData(c, n); const lang = v('cf-lang');
+      const meta = {}; COURT_FORMS.forEach(g => g.forms.forEach(f => { meta[f.id] = f; }));
+      const forms = chosen.map(id => ({ form: id, lang: lang === 'es' && meta[id].es ? 'es' : 'en', copies: meta[id].perTenant ? Math.max(1, data.tenants.length) : 1 }));
+      try {
+        const r = await fetch('/api/courtforms', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ key: staffKey(), forms, data, title: 'Eviction forms - ' + c.tenantName }) });
+        if (!r.ok) { let m = ''; try { m = (await r.json()).error; } catch (e) {} throw new Error(m || 'failed'); }
+        const blob = await r.blob();
+        const a = document.createElement('a'); a.href = URL.createObjectURL(blob);
+        a.download = 'Court forms - ' + c.tenantName + ' - ' + chosen.join(', ').replace(/JDF/g, '') + '.pdf';
+        document.body.appendChild(a); a.click(); setTimeout(() => { URL.revokeObjectURL(a.href); a.remove(); }, 1500);
+        btn.textContent = 'Downloaded. Download again';
+      } catch (e) {
+        err.innerHTML = 'Could not get the forms from the court website right now (' + esc(e.message) + '). Try again in a minute, or open them on the <a href="https://www.coloradojudicial.gov/self-help/residential-evictions" target="_blank" rel="noopener">court\'s eviction page</a>.';
+        err.style.display = ''; btn.textContent = 'Download pre-filled forms';
+      }
+      btn.disabled = false;
+    });
+  }
+
   // ---- one tenant file
   function caseWarnings(c) {
     const w = [];
@@ -884,9 +1016,12 @@
           </div>
           <p class="hint">Demand for compliance: unpaid rent, a lease violation, or disturbing conduct, with time to fix it. Notice to terminate: a repeat violation after an earlier demand, or a substantial (criminal) violation, with no time to fix. For non-renewal or no-fault notices, use the court's JDF 99C and talk to an attorney.</p>
         </div>
+        ${courtFormsCard(c)}
+        ${c.archiveId ? `<div class="card"><div class="section-label">Lease for the complaint</div><p style="margin-top:0;">Attach the signed lease to the complaint (Attachment 1), and the served notice (Attachment 2).</p><div class="btn-row"><button class="btn" onclick="archivePdf('${esc(c.archiveId)}', this)">Download signed lease</button></div></div>` : ''}
         <div class="btn-row" style="flex-wrap:wrap;"><button class="btn btn-ghost" onclick="renderCaseForm(window.__case)">Edit file details</button><button class="btn btn-ghost" style="color:#A8372D;" id="case-del">Delete file</button></div>
         <p class="error-text" id="case-del-err" style="display:none;"></p>
       </div>`;
+    bindCourtForms(c);
     document.getElementById('case-del').addEventListener('click', async function () {
       if (this.dataset.confirm !== '1') { this.dataset.confirm = '1'; this.textContent = 'Tap again to delete this file permanently'; return; }
       this.disabled = true;
