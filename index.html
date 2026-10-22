@@ -454,6 +454,7 @@
     if (hash === '#/continue') { renderTenantStatus(); return; }
     if (hash === '#/start') { renderTenantIntake(); return; }
     if (hash === '#/archive') { if (!landlordAuthed()) { renderGate('#/archive'); return; } renderArchive(); return; }
+    if (hash === '#/evict') { if (!landlordAuthed()) { renderGate('#/evict'); return; } renderCases(); return; }
     if (hash === '#/status') { if (!landlordAuthed()) { renderGate('#/status'); return; } renderLeaseStatus(); return; }
     if (hash === '#/staff') { if (!landlordAuthed()) { renderGate('#/staff'); return; } renderStaffMenu(); return; }
     renderHome();
@@ -505,8 +506,9 @@
             ${tile('#/receipt', 'Create a receipt', 'Any tenant: full rent, partial payment, deposit, or installment.', false)}
             ${tile('#/status', 'Lease status', 'See who still needs to sign or countersign.', false)}
             ${tile('#/archive', 'Completed leases', 'Every fully signed lease, saved until you delete it. Download any as a PDF.', false)}
+            ${tile('#/evict', 'Eviction toolkit', 'Demand notices, service log, late-payment and 12-month tracker.', false)}
           </div>
-          ${landlordAuthed() ? '' : '<p class="hint" style="margin-top:0.5rem;">Both ask for your landlord code.</p>'}
+          ${landlordAuthed() ? '' : '<p class="hint" style="margin-top:0.5rem;">These ask for your landlord code.</p>'}
         </div>
       </div>`;
     window.scrollTo(0, 0);
@@ -604,6 +606,550 @@
     renderLeaseStatus();
   };
 
+  // =====================================================================
+  // EVICTION TOOLKIT: tenant files, notices (JDF 99A / 99B content), service log, trackers
+  // =====================================================================
+  const JDF99_INFO = 'https://www.coloradojudicial.gov/media/14512';
+  const JDF99B_ES = 'https://www.coloradojudicial.gov/sites/default/files/2025-08/JDF99B.spanish.pdf';
+
+  // ---- dates: C.R.S. 2-4-108 (skip the service day; a deadline on a weekend or legal holiday moves to the next business day)
+  function nthWeekday(y, m, weekday, n) { const d = new Date(y, m, 1); const add = (weekday - d.getDay() + 7) % 7; return new Date(y, m, 1 + add + (n - 1) * 7); }
+  function lastWeekday(y, m, weekday) { const d = new Date(y, m + 1, 0); const sub = (d.getDay() - weekday + 7) % 7; return new Date(y, m + 1, -sub); }
+  function coHolidays(y) {
+    // Colorado legal holidays, C.R.S. 24-11-101 (plus Cesar Chavez Day, counted conservatively; extra days only add time)
+    const list = [new Date(y, 0, 1), nthWeekday(y, 0, 1, 3), nthWeekday(y, 1, 1, 3), new Date(y, 2, 31), lastWeekday(y, 4, 1), new Date(y, 5, 19),
+      new Date(y, 6, 4), nthWeekday(y, 8, 1, 1), nthWeekday(y, 9, 1, 1), new Date(y, 10, 11), nthWeekday(y, 10, 4, 4), new Date(y, 11, 25)];
+    const out = new Set();
+    list.forEach(d => {
+      out.add(isoOf(d));
+      if (d.getDay() === 0) out.add(isoOf(new Date(d.getFullYear(), d.getMonth(), d.getDate() + 1))); // Sunday holiday observed Monday
+      if (d.getDay() === 6) out.add(isoOf(new Date(d.getFullYear(), d.getMonth(), d.getDate() - 1))); // Saturday: also skip Friday (conservative)
+    });
+    return out;
+  }
+  function isNonBusinessDay(d) { if (d.getDay() === 0 || d.getDay() === 6) return true; return coHolidays(d.getFullYear()).has(isoOf(d)); }
+  function legalDeadline(serviceISO, days) {
+    const s = parseISO(serviceISO); if (!s) return '';
+    const d = new Date(s.getFullYear(), s.getMonth(), s.getDate() + days);
+    while (isNonBusinessDay(d)) d.setDate(d.getDate() + 1);
+    return isoOf(d);
+  }
+  function dayAfter(iso) { const d = parseISO(iso); return d ? isoOf(new Date(d.getFullYear(), d.getMonth(), d.getDate() + 1)) : ''; }
+  function todayISO() { return isoOf(new Date()); }
+  function daysBetween(aISO, bISO) { const a = parseISO(aISO), b = parseISO(bISO); return a && b ? Math.round((b - a) / 86400000) : null; }
+  function addDaysISO(iso, n) { const d = parseISO(iso); return d ? isoOf(new Date(d.getFullYear(), d.getMonth(), d.getDate() + n)) : ''; }
+
+  // ---- notice periods
+  function noticeDays(c, kind, n) {
+    const assisted = c.subsidized || c.cares;
+    if (kind === 'terminate' && n && n.grounds && n.grounds.substantial && n.grounds.substantial.on && !(n.grounds.repeat && n.grounds.repeat.on)) {
+      return assisted ? { days: 30, why: 'Tenant uses a housing subsidy or the property is CARES Act covered: at least 30 days before requiring the tenant to vacate (Colorado HB25-1240; 15 U.S.C. 9058).' }
+                      : { days: 3, why: 'Substantial violation: 3 days after service (C.R.S. 13-40-107.5).' };
+    }
+    if (assisted) return { days: 30, why: 'Tenant uses a housing subsidy or the property is CARES Act covered: 30 days (15 U.S.C. 9058(c); Colorado HB25-1240; JDF 99A/99B).' };
+    return kind === 'terminate'
+      ? { days: 10, why: 'Repeat violation: 10 days after service (C.R.S. 13-40-104(1)(e.5)).' }
+      : { days: 10, why: 'Residential lease: 10 days after service (C.R.S. 13-40-104(1)(d), (e)).' };
+  }
+
+  // ---- service: who was served, and when service was complete
+  function serviceStatus(c, n) {
+    const s = n.service || {}; const attempts = (s.attempts || []).slice().sort((a, b) => (a.date || '').localeCompare(b.date || ''));
+    const need = c.victimNotified ? 3 : 2;
+    const delivered = attempts.find(a => a.result === 'tenant' || a.result === 'household');
+    if (delivered) return { complete: true, date: delivered.date, method: delivered.result === 'tenant' ? 'Personal delivery to tenant' : 'Personal delivery to a household member age 15 or older', warnings: [], need };
+    const failed = attempts.filter(a => a.result === 'noanswer' || a.result === 'refused');
+    const failedDays = new Set(failed.map(a => a.date)).size;
+    const warnings = [];
+    if (s.posted && s.posted.date) {
+      if (failedDays < need) warnings.push('Posting is allowed only after ' + need + ' failed personal service attempts on separate days' + (c.victimNotified ? ' (3 for a tenant who reported being a victim)' : '') + '. You have ' + failedDays + '. Service is not complete.');
+      if (c.victimNotified && !(s.certified && s.certified.date)) warnings.push('This tenant reported being a victim: also send a copy by certified mail, return receipt requested, and record the date.');
+      const lastFail = failed.length ? failed[failed.length - 1].date : '';
+      if (lastFail && s.posted.date < lastFail) warnings.push('The posting date is before the last attempt date. Check the dates.');
+      if (failedDays >= need && !(c.victimNotified && !(s.certified && s.certified.date))) return { complete: true, date: s.posted.date, method: 'Posted in a conspicuous place on the premises after ' + failedDays + ' failed attempts', warnings, need };
+      return { complete: false, warnings, need };
+    }
+    if (failedDays > 0 && failedDays < need) warnings.push('Next: try again on a different day. You may post only after ' + need + ' failed attempts on separate days.');
+    if (failedDays >= need) warnings.push('You may now post the notice on the front door' + (c.victimNotified ? ' and send a copy by certified mail' : '') + '.');
+    return { complete: false, warnings, need };
+  }
+
+  // ---- late-payment history for C.R.S. 38-12-1303(3)(f)
+  function lateHistory(c) {
+    const rows = [];
+    (c.notices || []).forEach(n => {
+      if (n.kind !== 'demand' || !(n.grounds && n.grounds.rent && n.grounds.rent.on)) return;
+      const st = serviceStatus(c, n);
+      const due = (n.grounds.rent.rows || []).map(r => r.due).filter(Boolean).sort()[0] || '';
+      const paid = n.outcome && n.outcome.status === 'paid' ? n.outcome.date : '';
+      const deadline = st.complete ? legalDeadline(st.date, n.days || 10) : '';
+      const qualifies = !!(st.complete && due && paid && daysBetween(due, paid) > 10 && deadline && paid > deadline);
+      rows.push({ n, due, paid, deadline, served: st.complete ? st.date : '', qualifies });
+    });
+    const inPeriod = rows.filter(r => !c.leaseStart || !r.due || r.due >= c.leaseStart); // current lease and its month-to-month continuation
+    return { rows, count: inPeriod.filter(r => r.qualifies).length };
+  }
+  function tenure(c) {
+    if (!c.tenancyStart) return { known: false };
+    const covered = isoOf(addMonths(parseISO(c.tenancyStart), 12));
+    return { known: true, covered, isCovered: todayISO() >= covered };
+  }
+
+  // ---- storage
+  async function fetchCases() {
+    const r = await fetch('/api/cases?key=' + encodeURIComponent(staffKey()));
+    if (!r.ok) throw new Error('load failed');
+    return (await r.json()).items || [];
+  }
+  async function saveCase(c) {
+    const r = await fetch('/api/cases', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ action: 'save', key: staffKey(), case: c }) });
+    if (!r.ok) throw new Error('save failed');
+    return (await r.json()).case;
+  }
+  function newId() { return Math.random().toString(36).slice(2, 10); }
+  const badge = (text, kind) => {
+    const map = { ok: ['#256B45', '#E7F4EC'], warn: ['#7A5410', '#FBF1DC'], bad: ['#A0352C', '#FBE9E6'], info: ['#3B4A6B', '#E8ECF5'] };
+    const [fg, bg] = map[kind] || map.info;
+    return `<span style="display:inline-block;font-size:0.78rem;font-weight:700;padding:0.15rem 0.6rem;border-radius:999px;color:${fg};background:${bg};margin:0.15rem 0.25rem 0 0;">${text}</span>`;
+  };
+  const warnBox = (html) => `<div class="banner" style="background:#FBF1DC;border:1px solid #E9D3A3;color:#5A3E0B;">${html}</div>`;
+  const badBox = (html) => `<div class="banner" style="background:#FBE9E6;border:1px solid #EBB9B2;color:#7A231B;">${html}</div>`;
+
+  // ---- list of tenant files
+  async function renderCases() {
+    app.innerHTML = header() + `<p class="hint" style="text-align:center;padding:2rem 0;">Loading tenant files&hellip;</p>`;
+    let items = [];
+    try { items = await fetchCases(); } catch (e) { app.innerHTML = header() + badBox('Could not load tenant files. Check your connection and try again.'); return; }
+    window.__cases = items;
+    app.innerHTML = header() + `
+      <div style="max-width:680px;margin:1rem auto;">
+        <h1 style="text-align:center;margin-bottom:0.4rem;">Eviction toolkit</h1>
+        <p class="subhead" style="text-align:center;margin:0 auto 1.25rem;">Build notices with the content Colorado requires, log service, and track late payments and the 12-month for-cause rule. Keep one file per tenant.</p>
+        <div class="card"><div class="btn-row" style="margin-top:0;"><button class="btn btn-primary" onclick="newCaseFlow()">New tenant file</button></div></div>
+        <div class="card">
+          ${items.length ? items.map(c => {
+            const t = tenure(c); const lh = lateHistory(c);
+            const open = (c.notices || []).filter(n => !n.outcome || n.outcome.status === 'open');
+            return `<div style="padding:0.85rem 0;border-bottom:1px solid #F1E4D8;">
+              <strong>${esc(c.tenantName)}${c.tenantName2 ? ' and ' + esc(c.tenantName2) : ''}</strong><br>
+              <span style="font-size:0.88rem;color:var(--ink-soft);">${esc(c.propertyLine || '')}</span><br>
+              ${t.known ? (t.isCovered ? badge('For-cause law applies', 'warn') : badge('Under 12 months until ' + esc(fmtDate(t.covered)), 'ok')) : badge('Tenant-since date missing', 'bad')}
+              ${badge(lh.count + ' qualifying late payment' + (lh.count === 1 ? '' : 's'), lh.count > 2 ? 'warn' : 'info')}
+              ${open.length ? badge(open.length + ' open notice' + (open.length === 1 ? '' : 's'), 'bad') : ''}
+              ${c.subsidized || c.cares ? badge('30-day notices', 'info') : ''}
+              <div class="btn-row" style="margin-top:0.5rem;"><button class="btn btn-ghost" onclick="openCase('${esc(c.id)}')">Open file</button></div>
+            </div>`; }).join('') : '<p class="hint" style="margin:0;">No tenant files yet. Start one from a completed lease so the details carry over.</p>'}
+        </div>
+        <p class="hint" style="text-align:center;">Lease Desk is not a lawyer. Use these tools to avoid common procedural mistakes, and talk to a Colorado eviction attorney before filing.</p>
+      </div>`;
+    window.scrollTo(0, 0);
+  }
+  window.openCase = async function (id) {
+    let c = (window.__case && window.__case.id === id) ? window.__case : (window.__cases || []).find(x => x.id === id);
+    if (!c) { try { const r = await fetch('/api/cases?id=' + encodeURIComponent(id) + '&key=' + encodeURIComponent(staffKey())); if (r.ok) c = await r.json(); } catch (e) {} }
+    if (c) renderCase(c); else goHash('#/evict');
+  };
+
+  // ---- new file: from a completed lease or blank
+  window.newCaseFlow = async function () {
+    app.innerHTML = header() + `<p class="hint" style="text-align:center;padding:2rem 0;">Loading completed leases&hellip;</p>`;
+    let items = [];
+    try { const r = await fetch('/api/archive?key=' + encodeURIComponent(staffKey())); if (r.ok) items = (await r.json()).items || []; } catch (e) {}
+    window.__archForCase = items;
+    app.innerHTML = header() + `
+      <button class="step-back" onclick="goHash('#/evict')">&larr; Tenant files</button>
+      <div style="max-width:620px;margin:0 auto;">
+        <h1 style="text-align:center;margin-bottom:1rem;">New tenant file</h1>
+        <div class="card">
+          <div class="section-label">Start from a completed lease</div>
+          ${items.length ? items.map((it, i) => `<div style="display:flex;justify-content:space-between;gap:0.75rem;align-items:center;padding:0.6rem 0;border-bottom:1px solid #F1E4D8;flex-wrap:wrap;">
+            <div style="min-width:0;"><strong>${esc(it.tenant || 'Tenant')}</strong><br><span style="font-size:0.85rem;color:var(--ink-soft);">${esc(it.property || '')}</span></div>
+            <button class="btn btn-ghost" onclick="caseFromArchive(${i}, this)">Use this lease</button></div>`).join('') : '<p class="hint" style="margin:0;">No completed leases yet.</p>'}
+        </div>
+        <div class="card"><button class="btn btn-ghost" onclick="renderCaseForm({notices:[]})">Start a blank file</button></div>
+      </div>`;
+  };
+  window.caseFromArchive = async function (i, btn) {
+    const it = (window.__archForCase || [])[i]; if (!it) return;
+    btn.disabled = true; btn.textContent = 'Loading…';
+    let d = {};
+    try { const r = await fetch('/api/archive?id=' + encodeURIComponent(it.id) + '&key=' + encodeURIComponent(staffKey())); if (r.ok) d = await r.json(); } catch (e) {}
+    const city = (d.cityZip || '').split(',')[0].trim();
+    renderCaseForm({
+      notices: [], archiveId: it.id,
+      tenantName: d.tenantName || it.tenant || '', tenantName2: d.tenantName2 || '',
+      propertyLine: (d.propertyAddress || '') + (d.unitLabel ? ', ' + d.unitLabel : ''), city: city || 'Pueblo',
+      county: /pueblo/i.test(d.cityZip || '') ? 'Pueblo' : '', rent: d.rent || '', entity: d.entity || '', signerName: d.agent || '',
+      tenancyStart: d.startDate || '', leaseStart: d.startDate || '', leaseEnd: d.termType === 'mtm' ? '' : (d.endDate || ''), language: 'English',
+    });
+  };
+
+  // ---- edit file details
+  window.renderCaseForm = function (c) {
+    const f = (id, label, val, type, hint, full) => `<div class="field${full ? ' full' : ''}"><label>${label}</label><input type="${type || 'text'}" id="${id}" value="${esc(val || '')}">${hint ? `<p class="hint">${hint}</p>` : ''}</div>`;
+    const chk = (id, label, val, hint) => `<label class="checkbox-row"><input type="checkbox" id="${id}" ${val ? 'checked' : ''}><span>${label}${hint ? `<br><span class="hint">${hint}</span>` : ''}</span></label>`;
+    app.innerHTML = header() + `
+      <button class="step-back" onclick="${c.id ? `openCase('${esc(c.id)}')` : `goHash('#/evict')`}">&larr; Back</button>
+      <div style="max-width:680px;margin:0 auto;">
+        <h1 style="margin-bottom:1rem;">${c.id ? 'Edit tenant file' : 'Tenant file details'}</h1>
+        <div class="card"><div class="section-label">Tenant and property</div><div class="grid">
+          ${f('cf-tenant', 'Tenant full name', c.tenantName)}${f('cf-tenant2', 'Second tenant (optional)', c.tenantName2)}
+          ${f('cf-prop', 'Street address and unit', c.propertyLine, 'text', '', true)}
+          ${f('cf-city', 'City', c.city || 'Pueblo')}${f('cf-county', 'County', c.county || 'Pueblo')}
+          ${f('cf-rent', 'Monthly rent', c.rent, 'number')}${f('cf-entity', 'Landlord (entity)', c.entity || 'TLDR Enterprise LLC')}
+          ${f('cf-signer', 'Person who signs notices', c.signerName, 'text', 'You or your agent. Notices must be signed by the landlord, the landlord\'s agent, or an attorney.')}
+          ${f('cf-pay', 'How the tenant should pay (for rent demands)', c.payInstructions, 'text', 'For example: Innago online, or money order to TLDR Enterprise LLC.', true)}
+        </div></div>
+        <div class="card"><div class="section-label">Dates</div><div class="grid">
+          ${f('cf-since', 'Tenant since', c.tenancyStart, 'date', 'First day this tenant lived at the property, under any lease. The for-cause law applies after 12 months.')}
+          ${f('cf-lstart', 'Current lease start', c.leaseStart, 'date')}${f('cf-lend', 'Current lease end (blank if month-to-month)', c.leaseEnd, 'date')}
+        </div></div>
+        <div class="card"><div class="section-label">Things that change the rules</div>
+          ${chk('cf-sub', 'Tenant uses a housing voucher or other rent subsidy', c.subsidized, 'Notices give at least 30 days (HB25-1240).')}
+          ${chk('cf-cares', 'Property has a federally backed mortgage (FHA, VA, USDA, Fannie Mae, Freddie Mac) or is in a federal housing program', c.cares, 'CARES Act: 30 days for nonpayment notices.')}
+          ${chk('cf-victim', 'Tenant has told you they are a victim of domestic violence, sexual assault, or stalking', c.victimNotified, 'Service needs a third attempt and certified mail. Repayment plan rules apply.')}
+          ${chk('cf-med', 'Tenant has told you they receive SSI, SSDI, or Colorado Works cash assistance', c.mediationEligible, 'Mediation is required before you file (C.R.S. 13-40-110).')}
+          ${f('cf-lang', 'Tenant\'s primary language', c.language || 'English', 'text', 'Notices must be in the tenant\'s primary language if you know it (C.R.S. 13-40-106(3)).')}
+        </div>
+        <div class="card"><div class="field full"><label>Notes</label><textarea id="cf-notes" rows="3">${esc(c.notes || '')}</textarea></div></div>
+        <p class="error-text" id="cf-err" style="display:none;"></p>
+        <div class="btn-row"><button class="btn btn-primary" id="cf-save">Save file</button></div>
+      </div>`;
+    document.getElementById('cf-save').addEventListener('click', async function () {
+      const v = (id) => document.getElementById(id).value.trim(); const ck = (id) => document.getElementById(id).checked;
+      const next = { ...c, tenantName: v('cf-tenant'), tenantName2: v('cf-tenant2'), propertyLine: v('cf-prop'), city: v('cf-city'), county: v('cf-county'),
+        rent: v('cf-rent'), entity: v('cf-entity'), signerName: v('cf-signer'), payInstructions: v('cf-pay'), tenancyStart: v('cf-since'), leaseStart: v('cf-lstart'), leaseEnd: v('cf-lend'),
+        subsidized: ck('cf-sub'), cares: ck('cf-cares'), victimNotified: ck('cf-victim'), mediationEligible: ck('cf-med'), language: v('cf-lang') || 'English', notes: v('cf-notes') };
+      const err = document.getElementById('cf-err');
+      if (!next.tenantName || !next.propertyLine) { err.textContent = 'Enter the tenant name and the address.'; err.style.display = ''; return; }
+      this.disabled = true; this.textContent = 'Saving…';
+      try { const saved = await saveCase(next); renderCase(saved); }
+      catch (e) { err.textContent = 'Could not save. Check your connection and try again.'; err.style.display = ''; this.disabled = false; this.textContent = 'Save file'; }
+    });
+    window.scrollTo(0, 0);
+  };
+
+  // ---- one tenant file
+  function caseWarnings(c) {
+    const w = [];
+    if (c.language && !/^english$/i.test(c.language.trim())) w.push(badBox(`<strong>Language:</strong> this tenant's primary language is ${esc(c.language)}. Colorado requires notices in the tenant's primary language (C.R.S. 13-40-106(3)). Lease Desk writes notices in English only. Use the court's translated JDF 99A or 99B for ${esc(c.language)} (<a href="${JDF99_INFO}" target="_blank" rel="noopener">court forms</a>${/span|espa/i.test(c.language) ? `, <a href="${JDF99B_ES}" target="_blank" rel="noopener">Spanish 99B</a>` : ''}).`));
+    if (c.mediationEligible) w.push(warnBox('<strong>Mediation required before filing.</strong> This tenant receives SSI, SSDI, or Colorado Works. Request mediation before you file a complaint (C.R.S. 13-40-110). The court\'s form info points to ColoradoODR.org.'));
+    if (c.victimNotified) w.push(warnBox('<strong>Victim protections.</strong> Personal service needs a third attempt and a certified-mail copy before posting. For unpaid rent, you must offer a repayment plan of up to 9 months within 3 business days of serving the demand or receiving the tenant\'s notice (HB25-1168).'));
+    if (c.subsidized || c.cares) w.push(warnBox('<strong>30-day notices.</strong> Every notice in this file gives at least 30 days. Never demand the housing authority\'s share of rent from the tenant.'));
+    if (!c.tenancyStart) w.push(badBox('Add the date this tenant moved in so Lease Desk can tell when the 12-month for-cause rule applies.'));
+    return w.join('');
+  }
+  function renderCase(c) {
+    window.__case = c;
+    const t = tenure(c); const lh = lateHistory(c);
+    const kindName = (n) => n.kind === 'terminate' ? 'Notice to terminate' : 'Demand for compliance';
+    const groundsSummary = (n) => {
+      const g = n.grounds || {}; const out = [];
+      if (g.rent && g.rent.on) out.push('rent ' + fmtMoney((g.rent.rows || []).reduce((s, r) => s + (parseFloat(r.amount) || 0), 0)));
+      if (g.violation && g.violation.on) out.push('lease violation');
+      if (g.conduct && g.conduct.on) out.push('disturbing conduct');
+      if (g.repeat && g.repeat.on) out.push('repeat violation');
+      if (g.substantial && g.substantial.on) out.push('substantial violation');
+      return out.join(', ');
+    };
+    app.innerHTML = header() + `
+      <button class="step-back" onclick="goHash('#/evict')">&larr; Tenant files</button>
+      <div style="max-width:720px;margin:0 auto;">
+        <h1 style="margin-bottom:0.2rem;">${esc(c.tenantName)}${c.tenantName2 ? ' and ' + esc(c.tenantName2) : ''}</h1>
+        <p class="subhead" style="margin-bottom:1rem;">${esc(c.propertyLine || '')}${c.city ? ', ' + esc(c.city) : ''}${c.rent ? ' &middot; ' + fmtMoney(c.rent) + '/month' : ''}</p>
+        ${caseWarnings(c)}
+        <div class="card">
+          <div class="section-label">For-cause law (12 months)</div>
+          <p>${t.known ? (t.isCovered ? `This tenant has lived here at least 12 months (since ${esc(fmtDate(c.tenancyStart))}). You need a legal cause to evict or to refuse renewal, such as nonpayment, a lease violation, or a no-fault ground with 90 days' notice (C.R.S. 38-12-1303).` : `Under 12 months. The for-cause law starts applying on <strong>${esc(fmtDate(t.covered))}</strong>. Until then, you may decline to renew with proper notice and no reason (C.R.S. 38-12-1302(1)(e)).`) : 'Add the tenant-since date to see this.'}</p>
+        </div>
+        <div class="card">
+          <div class="section-label">Late-payment history</div>
+          <p>Qualifying late payments: <strong>${lh.count}</strong>. A payment qualifies when it arrived more than 10 days after the due date, after you properly served a rent demand, and after the demand's deadline passed. ${lh.count > 2 ? '<strong>More than two qualifying late payments during this lease: you may decline to renew on 90 days\' written notice that states the legal and factual basis (C.R.S. 38-12-1303(3)(f), (5)). Use the court\'s JDF 99C, and talk to an attorney.</strong>' : 'More than two during the lease term lets you decline to renew (C.R.S. 38-12-1303(3)(f)).'}</p>
+          ${lh.rows.length ? `<ul style="margin:0.5rem 0 0;padding-left:1.1rem;font-size:0.9rem;">${lh.rows.map(r => `<li>Due ${esc(fmtDate(r.due) || '?')}: ${r.served ? 'demand served ' + esc(fmtDate(r.served)) : 'demand not served yet'}${r.paid ? ', paid ' + esc(fmtDate(r.paid)) : ''} &mdash; ${r.qualifies ? '<strong>counts</strong>' : 'does not count'}</li>`).join('')}</ul>` : ''}
+          <p class="hint" style="margin-top:0.5rem;">To record one: create a rent demand, log its service, then mark it paid with the date the payment arrived.</p>
+        </div>
+        <div class="card">
+          <div class="section-label">Notices</div>
+          ${(c.notices || []).length ? (c.notices || []).slice().reverse().map(n => {
+            const st = serviceStatus(c, n); const dl = st.complete ? legalDeadline(st.date, n.days) : '';
+            const status = n.outcome && n.outcome.status && n.outcome.status !== 'open' ? { paid: 'Paid', complied: 'Complied', moved: 'Moved out', filed: 'Eviction filed', withdrawn: 'Withdrawn' }[n.outcome.status] : '';
+            return `<div style="padding:0.75rem 0;border-bottom:1px solid #F1E4D8;">
+              <strong>${kindName(n)}</strong> <span class="hint">(${esc(groundsSummary(n))})</span><br>
+              ${status ? badge(status + (n.outcome.date ? ' ' + esc(fmtDate(n.outcome.date)) : ''), 'ok') : st.complete ? badge('Served ' + esc(fmtDate(st.date)) + ' · deadline ' + esc(fmtDate(dl)), 'warn') : badge('Not served yet', 'bad')}
+              <div class="btn-row" style="margin-top:0.4rem;"><button class="btn btn-ghost" onclick="openNotice('${esc(n.id)}')">Open</button></div>
+            </div>`; }).join('') : '<p class="hint" style="margin:0 0 0.5rem;">No notices yet.</p>'}
+          <div class="btn-row" style="flex-wrap:wrap;">
+            <button class="btn btn-primary" onclick="buildNotice('demand')">New demand for compliance</button>
+            <button class="btn btn-ghost" onclick="buildNotice('terminate')">New notice to terminate</button>
+          </div>
+          <p class="hint">Demand for compliance: unpaid rent, a lease violation, or disturbing conduct, with time to fix it. Notice to terminate: a repeat violation after an earlier demand, or a substantial (criminal) violation, with no time to fix. For non-renewal or no-fault notices, use the court's JDF 99C and talk to an attorney.</p>
+        </div>
+        <div class="btn-row" style="flex-wrap:wrap;"><button class="btn btn-ghost" onclick="renderCaseForm(window.__case)">Edit file details</button><button class="btn btn-ghost" style="color:#A8372D;" id="case-del">Delete file</button></div>
+        <p class="error-text" id="case-del-err" style="display:none;"></p>
+      </div>`;
+    document.getElementById('case-del').addEventListener('click', async function () {
+      if (this.dataset.confirm !== '1') { this.dataset.confirm = '1'; this.textContent = 'Tap again to delete this file permanently'; return; }
+      this.disabled = true;
+      try { await fetch('/api/cases', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ action: 'delete', id: c.id, key: staffKey() }) }); goHash('#/evict'); }
+      catch (e) { const er = document.getElementById('case-del-err'); er.textContent = 'Could not delete. Try again.'; er.style.display = ''; this.disabled = false; }
+    });
+    window.scrollTo(0, 0);
+  }
+  window.openNotice = function (id) { const c = window.__case; const n = (c.notices || []).find(x => x.id === id); if (n) renderNotice(c, n); };
+
+  // ---- notice builder
+  const SUBST = {
+    endanger: 'Endangered a person, or willfully and substantially endangered the property of the landlord, a co-tenant, or someone living on or near the premises',
+    felony: 'Committed a violent or drug-related felony on or near the premises',
+    nuisance: 'Committed a crime on the premises or in shared areas that can carry 180 days or more in jail and has been declared a public nuisance',
+  };
+  window.buildNotice = function (kind, existingId) {
+    const c = window.__case;
+    const n = existingId ? JSON.parse(JSON.stringify((c.notices || []).find(x => x.id === existingId))) : { id: newId(), kind, createdAt: Date.now(), grounds: {}, service: { attempts: [] }, outcome: { status: 'open' } };
+    const g = n.grounds || (n.grounds = {});
+    const rentRows = (g.rent && g.rent.rows && g.rent.rows.length) ? g.rent.rows : [{ period: '', due: '', amount: c.rent || '' }];
+    const priorDemands = (c.notices || []).filter(x => x.kind === 'demand' && x.id !== n.id).map(x => ({ x, st: serviceStatus(c, x) })).filter(o => o.st.complete);
+    const today = todayISO();
+    const block = (on, id, title, inner) => `<div class="card"><label class="checkbox-row" style="margin-top:0;"><input type="checkbox" id="${id}" ${on ? 'checked' : ''}><span><strong>${title}</strong></span></label><div id="${id}-body" style="${on ? '' : 'display:none;'}">${inner}</div></div>`;
+    const rentInner = `<div id="rent-rows">${rentRows.map((r, i) => rentRowHtml(r, i)).join('')}</div>
+      <button type="button" class="btn btn-ghost" id="rent-add" style="font-size:0.85rem;">+ Add a month</button>
+      <p class="hint" id="rent-total"></p>
+      <p class="hint"><strong>Rent only.</strong> Do not include late fees, utility charges, repair costs, or deposit installments. Those are not rent, and including them can get the case dismissed (C.R.S. 38-12-105, 38-12-801).${c.subsidized ? ' Include only the tenant\'s share, never the housing authority\'s share.' : ''}</p>`;
+    app.innerHTML = header() + `
+      <button class="step-back" onclick="openCase('${esc(c.id)}')">&larr; ${esc(c.tenantName)}</button>
+      <div style="max-width:680px;margin:0 auto;">
+        <h1 style="margin-bottom:0.3rem;">${kind === 'terminate' ? 'Notice to terminate' : 'Demand for compliance'}</h1>
+        <p class="subhead" style="margin-bottom:1rem;">${kind === 'terminate' ? 'Follows the content of the court\'s JDF 99B. No time to fix the problem.' : 'Follows the content of the court\'s JDF 99A. The tenant gets time to fix the problem or move out.'}</p>
+        ${caseWarnings(c)}
+        ${kind === 'demand' ? `
+          ${block(g.rent && g.rent.on || !existingId, 'g-rent', 'Unpaid rent', rentInner)}
+          ${block(g.violation && g.violation.on, 'g-viol', 'Lease violation', `<div class="field full"><label>Lease term violated</label><input type="text" id="v-term" value="${esc((g.violation || {}).term || '')}" placeholder="For example: Occupants and Guests (unauthorized occupant)"></div><div class="field full"><label>What happened (dates, facts)</label><textarea id="v-expl" rows="3">${esc((g.violation || {}).explanation || '')}</textarea></div><p class="hint">The tenant fixes this by correcting the violation before the deadline.</p>`)}
+          ${block(g.conduct && g.conduct.on, 'g-cond', 'Disturbing conduct', `<div class="field full"><label>Who is being disturbed</label><input type="text" id="c-who" value="${esc((g.conduct || {}).who || '')}" placeholder="For example: neighbors in Units 2 and 4"></div><div class="field full"><label>What the conduct is (dates, facts)</label><textarea id="c-what" rows="3">${esc((g.conduct || {}).what || '')}</textarea></div>`)}
+        ` : `
+          ${block(g.repeat && g.repeat.on || !existingId, 'g-rep', 'Repeat violation (10 days)', `<div class="field full"><label>Lease term violated again</label><input type="text" id="r-term" value="${esc((g.repeat || {}).term || '')}"></div>
+            <div class="field full"><label>Earlier demand for the same term</label><select id="r-prior"><option value="">Choose the served demand</option>${priorDemands.map(o => `<option value="${esc(o.x.id)}" ${((g.repeat || {}).priorNoticeId === o.x.id) ? 'selected' : ''}>Served ${esc(fmtDate(o.st.date))}</option>`).join('')}<option value="__other__" ${((g.repeat || {}).priorNoticeId === '__other__') ? 'selected' : ''}>Served outside Lease Desk (enter date)</option></select></div>
+            <div class="field"><label>Date the earlier demand was served</label><input type="date" id="r-priordate" value="${esc((g.repeat || {}).priorServedISO || '')}"></div>
+            <div class="field full"><label>What happened this time (dates, facts)</label><textarea id="r-expl" rows="3">${esc((g.repeat || {}).explanation || '')}</textarea></div>
+            <p class="hint">Only for the same lease term the tenant was already served a demand about (C.R.S. 13-40-104(1)(e.5)).</p>`)}
+          ${block(g.substantial && g.substantial.on, 'g-sub', 'Substantial violation (3 days)', `${Object.entries(SUBST).map(([k, label]) => `<label class="checkbox-row"><input type="checkbox" class="sub-kind" value="${k}" ${((g.substantial || {}).kinds || []).includes(k) ? 'checked' : ''}><span>${label}</span></label>`).join('')}
+            <div class="field full"><label>What happened (dates, facts, police report number if any)</label><textarea id="s-expl" rows="3">${esc((g.substantial || {}).explanation || '')}</textarea></div>
+            <p class="hint">C.R.S. 13-40-107.5. It does not apply if the tenant was a domestic violence victim and the act was part of that abuse, or if a guest did it and the tenant couldn't have known and called police right away.</p>`)}
+        `}
+        <div class="card">
+          <div class="section-label">Dates</div>
+          <div class="grid">
+            <div class="field"><label>Date you will serve it</label><input type="date" id="n-serve" value="${esc(n.plannedServiceISO || today)}"></div>
+            <div class="field"><label>Move-out deadline (filled in for you)</label><input type="date" id="n-move" value="${esc(n.moveOutISO || '')}"><p class="hint" id="n-why"></p></div>
+          </div>
+          <p class="hint">The deadline is counted from the day after service, and moves past weekends and Colorado legal holidays (C.R.S. 2-4-108, 24-11-101). You may give more time, never less. If you end up serving on a later date, Lease Desk will tell you to print a new copy.</p>
+        </div>
+        <div class="card"><div class="field full"><label>Signed by (landlord, agent, or attorney)</label><input type="text" id="n-signer" value="${esc(n.signerName || c.signerName || '')}"></div></div>
+        <p class="error-text" id="n-err" style="display:none;"></p>
+        <div class="btn-row"><button class="btn btn-primary" id="n-save">Save and preview notice</button></div>
+      </div>`;
+    // toggles
+    document.querySelectorAll('[id^="g-"]').forEach(cb => { if (cb.type === 'checkbox') cb.addEventListener('change', () => { const b = document.getElementById(cb.id + '-body'); if (b) b.style.display = cb.checked ? '' : 'none'; recalc(); }); });
+    // rent rows
+    let rows = rentRows.map(r => ({ ...r }));
+    function bindRows() {
+      const wrap = document.getElementById('rent-rows'); if (!wrap) return;
+      wrap.innerHTML = rows.map((r, i) => rentRowHtml(r, i)).join('');
+      wrap.querySelectorAll('[data-rr]').forEach(inp => inp.addEventListener('input', () => { rows[+inp.dataset.i][inp.dataset.rr] = inp.value; totalRent(); }));
+      wrap.querySelectorAll('[data-rm]').forEach(b => b.addEventListener('click', () => { rows.splice(+b.dataset.rm, 1); if (!rows.length) rows.push({ period: '', due: '', amount: c.rent || '' }); bindRows(); }));
+      totalRent();
+    }
+    function totalRent() { const el = document.getElementById('rent-total'); if (el) el.textContent = 'Total rent demanded: ' + fmtMoney(rows.reduce((s, r) => s + (parseFloat(r.amount) || 0), 0)); }
+    const addBtn = document.getElementById('rent-add'); if (addBtn) addBtn.addEventListener('click', () => { rows.push({ period: '', due: '', amount: c.rent || '' }); bindRows(); });
+    bindRows();
+    // deadline math
+    function currentNotice() {
+      const gg = {};
+      if (kind === 'demand') {
+        gg.rent = { on: document.getElementById('g-rent').checked, rows: rows.filter(r => parseFloat(r.amount) > 0) };
+        gg.violation = { on: document.getElementById('g-viol').checked, term: document.getElementById('v-term').value.trim(), explanation: document.getElementById('v-expl').value.trim() };
+        gg.conduct = { on: document.getElementById('g-cond').checked, who: document.getElementById('c-who').value.trim(), what: document.getElementById('c-what').value.trim() };
+      } else {
+        const prior = document.getElementById('r-prior').value;
+        const priorObj = priorDemands.find(o => o.x.id === prior);
+        gg.repeat = { on: document.getElementById('g-rep').checked, term: document.getElementById('r-term').value.trim(), priorNoticeId: prior, priorServedISO: priorObj ? priorObj.st.date : document.getElementById('r-priordate').value, explanation: document.getElementById('r-expl').value.trim() };
+        gg.substantial = { on: document.getElementById('g-sub').checked, kinds: Array.from(document.querySelectorAll('.sub-kind:checked')).map(x => x.value), explanation: document.getElementById('s-expl').value.trim() };
+      }
+      return { ...n, grounds: gg };
+    }
+    function recalc(force) {
+      const cur = currentNotice(); const nd = noticeDays(c, kind, cur);
+      const serve = document.getElementById('n-serve').value;
+      const min = legalDeadline(serve, nd.days);
+      const mv = document.getElementById('n-move');
+      if (force || !mv.value || mv.value < min) mv.value = min;
+      document.getElementById('n-why').textContent = nd.why + (min ? ' Earliest legal deadline: ' + fmtDate(min) + '.' : '');
+    }
+    document.getElementById('n-serve').addEventListener('change', () => recalc(true));
+    if (kind === 'terminate') {
+      document.getElementById('g-sub').addEventListener('change', () => recalc(true));
+      document.getElementById('g-rep').addEventListener('change', () => recalc(true));
+      const pr = document.getElementById('r-prior'); pr.addEventListener('change', () => { const o = priorDemands.find(o => o.x.id === pr.value); if (o) document.getElementById('r-priordate').value = o.st.date; });
+    }
+    recalc(!n.moveOutISO);
+    document.getElementById('n-save').addEventListener('click', async function () {
+      const cur = currentNotice(); const nd = noticeDays(c, kind, cur); const err = document.getElementById('n-err');
+      const serve = document.getElementById('n-serve').value; const move = document.getElementById('n-move').value; const min = legalDeadline(serve, nd.days);
+      const problems = [];
+      const gg = cur.grounds;
+      if (kind === 'demand') {
+        if (!(gg.rent.on || gg.violation.on || gg.conduct.on)) problems.push('Choose at least one reason.');
+        if (gg.rent.on && !gg.rent.rows.length) problems.push('Enter the rent owed.');
+        if (gg.rent.on && gg.rent.rows.some(r => !r.period || !r.due)) problems.push('For each month of rent, enter the period and the due date.');
+        if (gg.violation.on && (!gg.violation.term || !gg.violation.explanation)) problems.push('Name the lease term and explain the violation.');
+        if (gg.conduct.on && (!gg.conduct.who || !gg.conduct.what)) problems.push('Say who is disturbed and describe the conduct.');
+      } else {
+        if (gg.repeat.on && gg.substantial.on) problems.push('Use one reason per notice to terminate: repeat or substantial.');
+        if (!(gg.repeat.on || gg.substantial.on)) problems.push('Choose a reason.');
+        if (gg.repeat.on && (!gg.repeat.term || !gg.repeat.priorServedISO || !gg.repeat.explanation)) problems.push('For a repeat violation, give the lease term, the date the earlier demand was served, and what happened.');
+        if (gg.substantial.on && (!gg.substantial.kinds.length || !gg.substantial.explanation)) problems.push('For a substantial violation, check what happened and describe it.');
+      }
+      if (!serve) problems.push('Enter the date you will serve it.');
+      if (move && min && move < min) problems.push('The move-out deadline is earlier than the legal minimum (' + fmtDate(min) + ').');
+      if (!document.getElementById('n-signer').value.trim()) problems.push('Enter who signs the notice.');
+      if (problems.length) { err.innerHTML = problems.map(esc).join('<br>'); err.style.display = ''; return; }
+      const saved = { ...cur, days: nd.days, daysWhy: nd.why, plannedServiceISO: serve, moveOutISO: move || min, signerName: document.getElementById('n-signer').value.trim() };
+      const next = { ...c, notices: (c.notices || []).filter(x => x.id !== saved.id).concat([saved]) };
+      this.disabled = true; this.textContent = 'Saving…';
+      try { const sc = await saveCase(next); window.__case = sc; renderNotice(sc, sc.notices.find(x => x.id === saved.id)); }
+      catch (e) { err.textContent = 'Could not save. Check your connection and try again.'; err.style.display = ''; this.disabled = false; this.textContent = 'Save and preview notice'; }
+    });
+    window.scrollTo(0, 0);
+  };
+  function rentRowHtml(r, i) {
+    return `<div style="display:grid;grid-template-columns:1.3fr 1fr 0.9fr auto;gap:0.4rem;align-items:end;margin-bottom:0.4rem;">
+      <div class="field" style="margin:0;"><label style="font-size:0.75rem;">Period</label><input type="text" data-rr="period" data-i="${i}" value="${esc(r.period || '')}" placeholder="November 2026"></div>
+      <div class="field" style="margin:0;"><label style="font-size:0.75rem;">Due date</label><input type="date" data-rr="due" data-i="${i}" value="${esc(r.due || '')}"></div>
+      <div class="field" style="margin:0;"><label style="font-size:0.75rem;">Rent owed</label><input type="number" step="0.01" data-rr="amount" data-i="${i}" value="${esc(r.amount || '')}"></div>
+      <button type="button" class="btn btn-ghost" data-rm="${i}" title="Remove" style="padding:0.5rem 0.7rem;">&times;</button></div>`;
+  }
+
+  // ---- the notice document
+  function noticeHtml(c, n) {
+    const g = n.grounds || {}; const st = serviceStatus(c, n);
+    const tenants = [c.tenantName, c.tenantName2].filter(Boolean).map(esc).join(' and ');
+    const premises = esc(c.propertyLine || '') + (c.city ? ', ' + esc(c.city) : '') + ', Colorado' + (c.county ? ' (' + esc(c.county) + ' County)' : '');
+    const deadline = fmtDate(n.moveOutISO) + ' at 11:59 p.m.';
+    const P = (t) => '<p>' + t + '</p>'; const H = (t) => '<h3>' + t + '</h3>';
+    const total = g.rent && g.rent.on ? (g.rent.rows || []).reduce((s, r) => s + (parseFloat(r.amount) || 0), 0) : 0;
+    let body = '';
+    if (n.kind === 'demand') {
+      body += '<h2>Demand for Compliance or Possession</h2>' + P('<strong>Residential eviction notice.</strong> C.R.S. &sect;&sect; 13-40-104 and 13-40-106.');
+      body += P('<strong>To:</strong> ' + tenants + ', and all other occupants.') + P('<strong>Premises:</strong> ' + premises + '. <strong>Rent:</strong> ' + fmtMoney(c.rent) + ' per month.');
+      body += H('Why you are receiving this notice');
+      if (g.rent && g.rent.on) body += P('<strong>Unpaid rent.</strong> You owe past-due rent of <strong>' + fmtMoney(total) + '</strong> for: ' + (g.rent.rows || []).map(r => esc(r.period) + ' (' + fmtMoney(r.amount) + ', due ' + esc(fmtDate(r.due)) + ')').join('; ') + '. This amount is rent only. It does not include late fees or any other charges.' + (c.payInstructions ? ' Pay by: ' + esc(c.payInstructions) + '.' : ''));
+      if (g.violation && g.violation.on) body += P('<strong>Lease violation.</strong> You violated this term of your lease: ' + esc(g.violation.term) + '. What happened: ' + esc(g.violation.explanation));
+      if (g.conduct && g.conduct.on) body += P('<strong>Disturbing conduct.</strong> Your conduct is disturbing ' + esc(g.conduct.who) + '. What happened: ' + esc(g.conduct.what));
+      const fixes = [];
+      if (g.rent && g.rent.on) fixes.push('pay the full past-due rent of ' + fmtMoney(total));
+      if (g.violation && g.violation.on) fixes.push('correct the lease violation described above');
+      if (g.conduct && g.conduct.on) fixes.push('stop the conduct described above');
+      body += H('What you must do') + P('You must ' + fixes.join(', and ') + ', <strong>or</strong> move out and give the Landlord possession of the premises, by <strong>' + deadline + '</strong>. This gives you at least ' + n.days + ' days, counting from the day after this notice is served. If you do neither, the Landlord may start a court case to evict you.');
+    } else {
+      body += '<h2>Notice to Terminate Tenancy</h2>' + P('<strong>Residential notice to quit.</strong> C.R.S. &sect;&sect; 13-40-104, 13-40-106, and 13-40-107.5.');
+      body += P('<strong>To:</strong> ' + tenants + ', and all other occupants.') + P('<strong>Premises:</strong> ' + premises + '.');
+      body += H('Your tenancy is ending') + P('Your tenancy is terminated. You must move out and give the Landlord possession of the premises by <strong>' + deadline + '</strong>. This notice does not give you an option to fix the violation. If you do not leave, the Landlord may start a court case to evict you.');
+      body += H('Why');
+      if (g.repeat && g.repeat.on) body += P('<strong>Repeat violation</strong> (C.R.S. 13-40-104(1)(e.5)). You were served a Demand for Compliance on ' + esc(fmtDate(g.repeat.priorServedISO)) + ' for violating this lease term: ' + esc(g.repeat.term) + '. You have violated the same term again. What happened: ' + esc(g.repeat.explanation));
+      if (g.substantial && g.substantial.on) body += P('<strong>Substantial violation</strong> (C.R.S. 13-40-107.5): ' + (g.substantial.kinds || []).map(k => esc(SUBST[k] || k)).join('; ') + '. What happened: ' + esc(g.substantial.explanation));
+    }
+    body += H('Your rights') + P('<strong>Mediation.</strong> If you receive Supplemental Security Income (SSI), Social Security Disability Insurance (SSDI), or Colorado Works cash assistance, you have a right to mediation before the Landlord files an eviction complaint with the court (C.R.S. 13-40-110). To use this right, tell the Landlord in writing right away.');
+    if (n.kind === 'demand' && g.rent && g.rent.on) body += P('<strong>Repayment plan.</strong> If you missed a rent payment because of unlawful sexual behavior, stalking, domestic violence, or domestic abuse, you may give the Landlord documentation, and you are entitled to a repayment plan to repay the unpaid rent over a period of up to nine months (C.R.S. 13-40-106(4)).');
+    body += H('Signature') + P('Signed by: ______________________________ &nbsp; Date: ______________') + P('Printed name: ' + esc(n.signerName || '') + ', on behalf of ' + esc(c.entity || 'the Landlord') + ' (Landlord, or Landlord\'s agent or attorney).');
+    const atts = ((n.service || {}).attempts || []).filter(a => a.date);
+    body += H('Certificate of service') + (st.complete
+      ? P('I served this notice on ' + esc(fmtDate(st.date)) + ' by: ' + esc(st.method) + '.' + (atts.length ? ' Attempts: ' + atts.map(a => esc(fmtDate(a.date)) + (a.time ? ' ' + esc(a.time) : '') + ' (' + esc({ tenant: 'delivered to tenant', household: 'delivered to household member 15+', noanswer: 'no answer', refused: 'refused' }[a.result] || a.result) + ')').join('; ') + '.' : '') + ((n.service || {}).certified && n.service.certified.date ? ' Copy sent by certified mail on ' + esc(fmtDate(n.service.certified.date)) + '.' : ''))
+      : P('Served on (date): ______________ &nbsp; by: [ ] personal delivery to tenant [ ] delivery to household member age 15+ [ ] posting on the premises after failed attempts on ____________ and ____________'))
+      + P('Signature of person who served: ______________________________');
+    return body;
+  }
+
+  // ---- one notice: preview, service log, outcome
+  function renderNotice(c, n) {
+    const st = serviceStatus(c, n);
+    const legal = st.complete ? legalDeadline(st.date, n.days) : '';
+    const late = st.complete && n.moveOutISO && legal && n.moveOutISO < legal;
+    const atts = ((n.service || {}).attempts || []);
+    const fname = (n.kind === 'terminate' ? 'Notice to Terminate - ' : 'Demand for Compliance - ') + c.tenantName + ' - ' + (c.propertyLine || '') + '.pdf';
+    app.innerHTML = header() + `
+      <button class="step-back" onclick="openCase('${esc(c.id)}')">&larr; ${esc(c.tenantName)}</button>
+      <div style="max-width:760px;margin:0 auto;">
+        ${caseWarnings(c)}
+        ${late ? badBox('<strong>Print a new copy before relying on this notice.</strong> It was served ' + esc(fmtDate(st.date)) + ', so the earliest legal move-out deadline is ' + esc(fmtDate(legal)) + ', but the notice says ' + esc(fmtDate(n.moveOutISO)) + '. Edit the notice, which updates the date, then serve the new copy.') : ''}
+        <div class="card no-print">
+          <div class="btn-row" style="margin-top:0;flex-wrap:wrap;">
+            <button class="btn btn-primary" onclick="window.print()">Print</button>
+            <button class="btn" id="nt-pdf">Download PDF</button>
+            <button class="btn btn-ghost" onclick="buildNotice('${esc(n.kind)}', '${esc(n.id)}')">Edit notice</button>
+          </div>
+          <p class="hint" style="margin-top:0.5rem;">Print it, sign it in ink, and serve it. Keep a copy. The court's own forms (JDF 99A and 99B) are also available on the <a href="${JDF99_INFO}" target="_blank" rel="noopener">Colorado courts website</a>.</p>
+        </div>
+        <div class="paper" id="notice-paper">${noticeHtml(c, n)}</div>
+        <div class="card no-print" style="margin-top:1.5rem;">
+          <div class="section-label">Service log</div>
+          ${atts.length ? `<ul style="margin:0 0 0.75rem;padding-left:1.1rem;">${atts.map((a, i) => `<li>${esc(fmtDate(a.date))}${a.time ? ' ' + esc(a.time) : ''}: ${esc({ tenant: 'Delivered to tenant', household: 'Delivered to household member age 15+', noanswer: 'No answer', refused: 'Refused to answer' }[a.result] || a.result)}${a.by ? ' (by ' + esc(a.by) + ')' : ''} <button class="btn btn-ghost" style="padding:0.1rem 0.5rem;font-size:0.8rem;" onclick="removeAttempt(${i})">&times;</button></li>`).join('')}</ul>` : '<p class="hint">No attempts logged yet.</p>'}
+          <div class="grid">
+            <div class="field"><label>Attempt date</label><input type="date" id="sa-date" value="${todayISO()}"></div>
+            <div class="field"><label>Time</label><input type="time" id="sa-time"></div>
+            <div class="field"><label>Result</label><select id="sa-res"><option value="tenant">Delivered to tenant</option><option value="household">Delivered to household member age 15+</option><option value="noanswer">No answer</option><option value="refused">Refused to answer</option></select></div>
+            <div class="field"><label>Served by</label><input type="text" id="sa-by" value="${esc(n.signerName || '')}"></div>
+          </div>
+          <div class="btn-row"><button class="btn" id="sa-add">Log attempt</button></div>
+          <div class="grid" style="margin-top:0.75rem;">
+            <div class="field"><label>Posted on the door (date)</label><input type="date" id="sp-date" value="${esc(((n.service || {}).posted || {}).date || '')}"></div>
+            ${c.victimNotified ? `<div class="field"><label>Certified mail sent (date)</label><input type="date" id="sc-date" value="${esc(((n.service || {}).certified || {}).date || '')}"></div>` : ''}
+          </div>
+          <div class="btn-row"><button class="btn" id="sp-save">Save posting${c.victimNotified ? ' and mailing' : ''}</button></div>
+          ${st.warnings.map(w => warnBox(esc(w))).join('')}
+          ${st.complete ? `<p style="margin-top:0.75rem;"><strong>Service complete ${esc(fmtDate(st.date))}</strong> (${esc(st.method)}). Legal deadline: <strong>${esc(fmtDate(legal))} at 11:59 p.m.</strong> ${late ? '' : 'The earliest you may file is ' + esc(fmtDate(dayAfter(n.moveOutISO >= legal ? n.moveOutISO : legal))) + ', if the tenant has not complied or moved.'}${c.mediationEligible ? ' Request mediation before filing.' : ''}</p>` : ''}
+        </div>
+        <div class="card no-print">
+          <div class="section-label">Outcome</div>
+          <div class="grid">
+            <div class="field"><label>What happened</label><select id="oc-status">
+              ${[['open', 'Still open'], ['paid', 'Paid in full'], ['complied', 'Complied'], ['moved', 'Moved out'], ['filed', 'Eviction filed'], ['withdrawn', 'Withdrawn']].map(([v, l]) => `<option value="${v}" ${(n.outcome || {}).status === v ? 'selected' : ''}>${l}</option>`).join('')}
+            </select></div>
+            <div class="field"><label>Date</label><input type="date" id="oc-date" value="${esc((n.outcome || {}).date || '')}"><p class="hint">For "Paid in full," use the date the payment actually arrived. It decides whether this counts as a qualifying late payment.</p></div>
+          </div>
+          <div class="btn-row"><button class="btn btn-primary" id="oc-save">Save outcome</button></div>
+          <p class="hint">If the tenant pays everything owed before the court enters judgment, you must accept it (C.R.S. 13-40-115). Never require your attorney fees as a condition of accepting rent. If you accept a partial payment, serve a new demand for the remaining balance.</p>
+        </div>
+        <div class="btn-row no-print"><button class="btn btn-ghost" style="color:#A8372D;" id="nt-del">Delete this notice</button></div>
+      </div>`;
+    const persist = async (mutate, btn) => {
+      const nn = JSON.parse(JSON.stringify(n)); nn.service = nn.service || { attempts: [] }; nn.service.attempts = nn.service.attempts || [];
+      mutate(nn);
+      const next = { ...c, notices: (c.notices || []).map(x => x.id === nn.id ? nn : x) };
+      if (btn) { btn.disabled = true; btn.textContent = 'Saving…'; }
+      try { const sc = await saveCase(next); window.__case = sc; renderNotice(sc, sc.notices.find(x => x.id === nn.id)); }
+      catch (e) { if (btn) { btn.disabled = false; btn.textContent = 'Try again'; } }
+    };
+    window.removeAttempt = (i) => persist(nn => { nn.service.attempts.splice(i, 1); });
+    document.getElementById('sa-add').addEventListener('click', function () {
+      const date = document.getElementById('sa-date').value; if (!date) return;
+      persist(nn => { nn.service.attempts.push({ date, time: document.getElementById('sa-time').value, result: document.getElementById('sa-res').value, by: document.getElementById('sa-by').value.trim() }); }, this);
+    });
+    document.getElementById('sp-save').addEventListener('click', function () {
+      persist(nn => { const pd = document.getElementById('sp-date').value; nn.service.posted = pd ? { date: pd } : null; const sc = document.getElementById('sc-date'); if (sc) nn.service.certified = sc.value ? { date: sc.value } : null; }, this);
+    });
+    document.getElementById('oc-save').addEventListener('click', function () {
+      persist(nn => { nn.outcome = { status: document.getElementById('oc-status').value, date: document.getElementById('oc-date').value }; }, this);
+    });
+    document.getElementById('nt-pdf').addEventListener('click', function () { downloadDocPdf(noticeHtml(c, n), fname, (n.kind === 'terminate' ? 'Notice to terminate: ' : 'Demand for compliance: ') + (c.propertyLine || ''), fname.replace(/\.pdf$/, ''), this); });
+    document.getElementById('nt-del').addEventListener('click', async function () {
+      if (this.dataset.confirm !== '1') { this.dataset.confirm = '1'; this.textContent = 'Tap again to delete this notice'; return; }
+      this.disabled = true;
+      try { const sc = await saveCase({ ...c, notices: (c.notices || []).filter(x => x.id !== n.id) }); renderCase(sc); } catch (e) { this.disabled = false; }
+    });
+    window.scrollTo(0, 0);
+  }
+  window.__evictTest = { legalDeadline, coHolidays, noticeDays, serviceStatus, lateHistory, tenure };
+
+
   async function renderLeaseStatus() {
     app.innerHTML = header() + `<p class="hint" style="text-align:center;padding:2rem 0;">Loading&hellip;</p>`;
     let items = [];
@@ -646,6 +1192,7 @@
           ${tile('#/receipt', 'Record a payment receipt', 'Rent, prorated rent, deposit, or deposit installment.', false)}
           ${tile('#/status', 'Lease status', 'Who still needs to sign or countersign.', false)}
           ${tile('#/archive', 'Completed leases', 'Every fully signed lease. Download any as a PDF.', false)}
+          ${tile('#/evict', 'Eviction toolkit', 'Demand notices, service log, late-payment and 12-month tracker.', false)}
         </div></div>
         <p style="text-align:center;"><a href="#" style="font-size:0.82rem;" onclick="lockDevice();return false;">Sign out on this device</a></p>
       </div>`;
@@ -1870,8 +2417,8 @@ ${steps(1, LL_STEPS)}
     if (line.length) lines.push(line);
     return lines;
   }
-  function leaseToBlocks(d) {
-    const doc = new DOMParser().parseFromString('<div id="r">' + leaseBody(d) + '</div>', 'text/html');
+  function leaseToBlocks(d, htmlOverride) {
+    const doc = new DOMParser().parseFromString('<div id="r">' + (htmlOverride != null ? htmlOverride : leaseBody(d)) + '</div>', 'text/html');
     const blocks = [];
     const para = (el) => { const tokens = htmlToTokens(el); if (tokens.length) blocks.push({ t: 'p', tokens }); };
     const visit = (el) => {
@@ -1914,7 +2461,8 @@ ${steps(1, LL_STEPS)}
     return { bytes: dataUrlToBytes(c.toDataURL('image/jpeg', 0.92)), w: c.width, h: c.height };
   }
 
-  async function leasePdfBlob(d) {
+  async function leasePdfBlob(d, opts) {
+    opts = opts || {};
     const PW = 612, PH = 792, ML = 60, MR = 60, MT = 64, MB = 64, CW = PW - ML - MR;
     const pages = []; let ops = null, y = 0;
     const newPage = () => { ops = []; pages.push(ops); y = PH - MT; };
@@ -1927,7 +2475,7 @@ ${steps(1, LL_STEPS)}
       ops.push('ET');
     };
     newPage();
-    for (const b of leaseToBlocks(d)) {
+    for (const b of leaseToBlocks(d, opts.html)) {
       if (b.t === 'title') {
         const size = 16; ensure(30); const w = textW(b.text, true, size);
         ops.push('BT /F2 ' + size + ' Tf ' + ((PW - w) / 2).toFixed(2) + ' ' + y.toFixed(2) + ' Td ' + pdfStr(b.text) + ' Tj ET'); y -= 28;
@@ -1942,6 +2490,7 @@ ${steps(1, LL_STEPS)}
     }
     // Signatures
     const images = [];
+    if (!opts.noSignatures) {
     const sigs = [
       { label: d.entity || 'Landlord', role: 'Landlord', img: d.landlordSignatureImage, typed: d.landlordSignerName, at: d.landlordSignedAt, extra: '' },
       { label: [d.tenantName, d.tenantName2].filter(Boolean).join(' and ') || 'Tenant', role: 'Tenant', img: d.tenantSignatureImage, typed: d.tenantSignerName, at: d.tenantSignedAt, extra: d.tenantAttested ? 'Identity certified under penalty of perjury at signing' : '' },
@@ -1959,12 +2508,13 @@ ${steps(1, LL_STEPS)}
       for (const ln of wrapTokens(htmlToTokens(span), 9, CW)) { ensure(12); drawLine(ln, ML, 9); y -= 12; }
       y -= 12;
     }
+    }
     // Footers
     const prop = (d.propertyAddress || '') + (d.unitLabel ? ', ' + d.unitLabel : '');
     pages.forEach((p, i) => {
       const t = 'Page ' + (i + 1) + ' of ' + pages.length;
       p.push('BT /F1 8 Tf ' + (PW - MR - textW(t, false, 8)).toFixed(2) + ' 36 Td ' + pdfStr(t) + ' Tj ET');
-      p.push('BT /F1 8 Tf ' + ML + ' 36 Td ' + pdfStr('Lease: ' + prop) + ' Tj ET');
+      p.push('BT /F1 8 Tf ' + ML + ' 36 Td ' + pdfStr(opts.footer || ('Lease: ' + prop)) + ' Tj ET');
     });
     // Assemble the file
     const enc = (s) => { const a = new Uint8Array(s.length); for (let i = 0; i < s.length; i++) a[i] = s.charCodeAt(i) & 255; return a; };
@@ -1990,7 +2540,7 @@ ${steps(1, LL_STEPS)}
     const xref = len;
     push('xref\n0 ' + total + '\n0000000000 65535 f \n');
     for (let n = 1; n < total; n++) push(String(offsets[n]).padStart(10, '0') + ' 00000 n \n');
-    push('trailer\n<< /Size ' + total + ' /Root 1 0 R /Info << /Title ' + pdfStr('Lease - ' + prop) + ' /Producer (Lease Desk) >> >>\nstartxref\n' + xref + '\n%%EOF');
+    push('trailer\n<< /Size ' + total + ' /Root 1 0 R /Info << /Title ' + pdfStr(opts.title || ('Lease - ' + prop)) + ' /Producer (Lease Desk) >> >>\nstartxref\n' + xref + '\n%%EOF');
     return new Blob(parts, { type: 'application/pdf' });
   }
   function leaseFileName(d) {
@@ -2013,6 +2563,20 @@ ${steps(1, LL_STEPS)}
     }
   }
   window.__leasePdfBlob = leasePdfBlob;
+  async function downloadDocPdf(html, filename, footer, title, btn) {
+    const orig = btn ? btn.textContent : '';
+    if (btn) { btn.disabled = true; btn.textContent = 'Making PDF…'; }
+    try {
+      const blob = await leasePdfBlob({}, { html, noSignatures: true, footer, title });
+      const url = URL.createObjectURL(blob);
+      const a = document.createElement('a'); a.href = url; a.download = filename.replace(/[\\/:*?"<>|#]/g, '').replace(/\s+/g, ' ').trim(); document.body.appendChild(a); a.click(); a.remove();
+      setTimeout(() => URL.revokeObjectURL(url), 60000);
+      if (btn) { btn.textContent = 'PDF downloaded ✓'; setTimeout(() => { btn.textContent = orig; btn.disabled = false; }, 1800); }
+    } catch (e) {
+      if (btn) { btn.textContent = orig; btn.disabled = false; }
+      alert('Could not make the PDF. Use Print instead.');
+    }
+  }
 
   function sigBlockHtml(d) {
     return `
