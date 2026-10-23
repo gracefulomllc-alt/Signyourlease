@@ -456,6 +456,7 @@
     if (hash === '#/archive') { if (!landlordAuthed()) { renderGate('#/archive'); return; } renderArchive(); return; }
     if (hash === '#/evict') { if (!landlordAuthed()) { renderGate('#/evict'); return; } renderCases(); return; }
     if (hash === '#/status') { if (!landlordAuthed()) { renderGate('#/status'); return; } renderLeaseStatus(); return; }
+    if (hash === '#/listings') { if (!landlordAuthed()) { renderGate('#/listings'); return; } renderListings(); return; }
     if (hash === '#/staff') { if (!landlordAuthed()) { renderGate('#/staff'); return; } renderStaffMenu(); return; }
     renderHome();
   }
@@ -494,12 +495,12 @@
         <div class="card">
           <div class="section-label">Looking for a place</div>
           <div style="display:flex;flex-direction:column;gap:0.6rem;">
-            ${link('https://tldrleaseagreement.netlify.app', 'See available studios', 'Photos, pricing, and details for 411 Troy Ave.')}
+            ${link('https://tldrleaseagreement.netlify.app/properties.html', 'See available properties', 'Map of our rentals in Pueblo, Colorado Springs, and Fountain.')}
             ${link('https://my.innago.com/a/M2P3Rl0S1bT', 'Apply for a unit', 'Opens the rental application.')}
           </div>
         </div>
 
-        <div class="card">
+        ${landlordAuthed() ? `<div class="card">
           <div class="section-label">Landlord or staff</div>
           <div style="display:flex;flex-direction:column;gap:0.6rem;">
             ${tile('#/new', 'Create a lease', 'Start blank, or pick up a tenant who already sent their info.', false)}
@@ -507,9 +508,10 @@
             ${tile('#/status', 'Lease status', 'See who still needs to sign or countersign.', false)}
             ${tile('#/archive', 'Completed leases', 'Every fully signed lease, saved until you delete it. Download any as a PDF.', false)}
             ${tile('#/evict', 'Eviction toolkit', 'Demand notices, service log, late-payment and 12-month tracker.', false)}
+            ${tile('#/listings', 'Property listings', 'Mark properties available or not for the website map.', false)}
           </div>
-          ${landlordAuthed() ? '' : '<p class="hint" style="margin-top:0.5rem;">These ask for your landlord code.</p>'}
-        </div>
+          <p style="text-align:center;margin:0.75rem 0 0;"><a href="#" style="font-size:0.82rem;" onclick="lockDevice();return false;">Sign out on this device</a></p>
+        </div>` : `<p style="text-align:center;margin-top:1.5rem;"><a href="#" style="font-size:0.85rem;color:var(--ink-soft);" onclick="goHash('#/staff');return false;">Landlord sign-in</a></p>`}
       </div>`;
     window.scrollTo(0, 0);
   }
@@ -1314,6 +1316,106 @@
     window.scrollTo(0, 0);
   }
 
+  // ---------- PROPERTY LISTINGS (feeds the website map) ----------
+  const SITE_PROPERTIES = 'https://tldrleaseagreement.netlify.app/properties.html';
+  async function renderListings() {
+    app.innerHTML = header() + `<p class="hint" style="text-align:center;padding:2rem 0;">Loading properties&hellip;</p>`;
+    let items = [];
+    try { const r = await fetch('/api/listings?key=' + encodeURIComponent(staffKey())); if (!r.ok) throw 0; items = (await r.json()).items || []; }
+    catch (e) { app.innerHTML = header() + `<div class="banner banner-brass">Could not load properties. Check your connection and try again.</div>`; return; }
+    window.__listings = items;
+    drawListings();
+  }
+  function drawListings(msg) {
+    const items = window.__listings || [];
+    const cities = Array.from(new Set(items.map(i => i.city))).filter(Boolean);
+    const avail = items.filter(i => i.show && i.available).length;
+    app.innerHTML = header() + `
+      <div style="max-width:720px;margin:1rem auto;">
+        <h1 style="text-align:center;margin-bottom:0.4rem;">Property listings</h1>
+        <p class="subhead" style="text-align:center;margin:0 auto 1rem;">What you set here shows on the <a href="${SITE_PROPERTIES}" target="_blank" rel="noopener">website map</a>: <strong style="color:#C0392B;">red pins</strong> are available, gray pins are not. ${avail} available right now.</p>
+        ${msg ? `<div class="banner" style="background:#E7F4EC;border:1px solid #BFE0CB;color:#1F5A38;">${msg}</div>` : ''}
+        ${cities.map(city => `<div class="card"><div class="section-label">${esc(city)}</div>
+          ${items.map((it, i) => it.city !== city ? '' : `
+            <div style="display:flex;justify-content:space-between;align-items:center;gap:0.75rem;padding:0.7rem 0;border-bottom:1px solid #F1E4D8;flex-wrap:wrap;">
+              <div style="min-width:0;flex:1;">
+                <strong>${esc(it.address)}${it.unit ? ', ' + esc(it.unit) : ''}</strong>
+                <span class="hint" style="display:block;margin:0;">${esc(it.type || '')}${it.rent ? ' &middot; $' + esc(it.rent) : ''}${it.show ? '' : ' &middot; hidden from website'}${it.lat == null ? ' &middot; pin location pending' : ''}</span>
+              </div>
+              <button class="btn ${it.available ? 'btn-primary' : 'btn-ghost'}" style="padding:0.45rem 0.9rem;font-size:0.85rem;min-width:118px;" onclick="toggleAvail(${i}, this)">${it.available ? 'Available' : 'Not available'}</button>
+              <button class="btn btn-ghost" style="padding:0.45rem 0.9rem;font-size:0.85rem;" onclick="editListing(${i})">Edit</button>
+            </div>`).join('')}
+        </div>`).join('')}
+        <div class="btn-row" style="justify-content:center;flex-wrap:wrap;">
+          <button class="btn btn-ghost" onclick="editListing(-1)">+ Add a property</button>
+          <a class="btn btn-ghost" href="${SITE_PROPERTIES}" target="_blank" rel="noopener">View the website map</a>
+        </div>
+        <p class="hint" style="text-align:center;">Tap Available / Not available to switch a property. It saves right away. Owner and LLC names are never shown on the website.</p>
+      </div>`;
+    window.scrollTo(0, 0);
+  }
+  async function saveListings(btn) {
+    if (btn) { btn.disabled = true; }
+    const r = await fetch('/api/listings', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ key: staffKey(), items: window.__listings }) });
+    if (!r.ok) throw new Error('save failed');
+    window.__listings = (await r.json()).items;
+  }
+  window.toggleAvail = async function (i, btn) {
+    const it = window.__listings[i]; it.available = !it.available;
+    btn.textContent = 'Saving…';
+    try { await saveListings(btn); drawListings(esc(it.address) + (it.unit ? ', ' + esc(it.unit) : '') + ' is now <strong>' + (it.available ? 'available' : 'not available') + '</strong> on the website.'); }
+    catch (e) { it.available = !it.available; drawListings(); alert('Could not save. Try again.'); }
+  };
+  window.editListing = function (i) {
+    const it = i >= 0 ? { ...window.__listings[i] } : { id: '', address: '', unit: '', city: 'Pueblo', state: 'CO', zip: '', type: 'House', beds: '', baths: '', rent: '', rentNote: '', available: false, availableNote: '', show: true, applyUrl: '', notes: '' };
+    const f = (id, label, val, type, hint, full) => `<div class="field${full ? ' full' : ''}"><label>${label}</label><input type="${type || 'text'}" id="${id}" value="${esc(val || '')}">${hint ? `<p class="hint">${hint}</p>` : ''}</div>`;
+    app.innerHTML = header() + `
+      <button class="step-back" onclick="drawListings()">&larr; Property listings</button>
+      <div style="max-width:620px;margin:0 auto;">
+        <h1 style="margin-bottom:1rem;">${i >= 0 ? 'Edit property' : 'Add a property'}</h1>
+        <div class="card"><div class="grid">
+          ${f('pl-addr', 'Street address', it.address, 'text', '', true)}
+          ${f('pl-unit', 'Unit (optional)', it.unit)}${f('pl-type', 'Type', it.type, 'text', 'House, Studio apartments, Duplex unit, Cottage…')}
+          ${f('pl-city', 'City', it.city)}${f('pl-zip', 'ZIP', it.zip)}
+          ${f('pl-beds', 'Beds', it.beds)}${f('pl-baths', 'Baths', it.baths)}
+          ${f('pl-rent', 'Rent per month', it.rent, 'number', 'Shown only when available.')}${f('pl-rentnote', 'Rent note', it.rentNote, 'text', 'e.g. all utilities included')}
+          ${f('pl-availnote', 'Availability note', it.availableNote, 'text', 'e.g. Available December 1, or Limited space', true)}
+          ${f('pl-apply', 'Apply link', it.applyUrl, 'text', 'Innago or other application link. Blank = the Call / Email buttons only.', true)}
+          <div class="field full"><label>Description</label><textarea id="pl-notes" rows="3">${esc(it.notes || '')}</textarea></div>
+        </div>
+        <label class="checkbox-row"><input type="checkbox" id="pl-avail" ${it.available ? 'checked' : ''}><span><strong>Available</strong> (red pin)</span></label>
+        <label class="checkbox-row"><input type="checkbox" id="pl-show" ${it.show !== false ? 'checked' : ''}><span>Show on the website map</span></label>
+        </div>
+        <p class="error-text" id="pl-err" style="display:none;"></p>
+        <div class="btn-row" style="flex-wrap:wrap;">
+          <button class="btn btn-primary" id="pl-save">Save</button>
+          ${i >= 0 ? '<button class="btn btn-ghost" style="color:#A8372D;" id="pl-del">Remove property</button>' : ''}
+        </div>
+      </div>`;
+    const v = (id) => document.getElementById(id).value.trim();
+    document.getElementById('pl-save').addEventListener('click', async function () {
+      const next = { ...it, address: v('pl-addr'), unit: v('pl-unit'), type: v('pl-type'), city: v('pl-city'), zip: v('pl-zip'), beds: v('pl-beds'), baths: v('pl-baths'),
+        rent: v('pl-rent'), rentNote: v('pl-rentnote'), availableNote: v('pl-availnote'), applyUrl: v('pl-apply'), notes: document.getElementById('pl-notes').value.trim(),
+        available: document.getElementById('pl-avail').checked, show: document.getElementById('pl-show').checked };
+      const err = document.getElementById('pl-err');
+      if (!next.address || !next.city) { err.textContent = 'Enter the street address and city.'; err.style.display = ''; return; }
+      if (next.applyUrl && !/^https?:\/\//i.test(next.applyUrl)) next.applyUrl = 'https://' + next.applyUrl;
+      const backup = window.__listings.slice();
+      if (i >= 0) window.__listings[i] = next; else window.__listings.push(next);
+      this.disabled = true; this.textContent = 'Saving…';
+      try { await saveListings(); drawListings('Saved ' + esc(next.address) + '.'); }
+      catch (e) { window.__listings = backup; err.textContent = 'Could not save. Try again.'; err.style.display = ''; this.disabled = false; this.textContent = 'Save'; }
+    });
+    const del = document.getElementById('pl-del');
+    if (del) del.addEventListener('click', async function () {
+      if (this.dataset.confirm !== '1') { this.dataset.confirm = '1'; this.textContent = 'Tap again to remove it'; return; }
+      const backup = window.__listings.slice(); window.__listings.splice(i, 1);
+      try { await saveListings(); drawListings('Removed.'); } catch (e) { window.__listings = backup; alert('Could not remove. Try again.'); }
+    });
+    window.scrollTo(0, 0);
+  };
+  window.drawListings = drawListings;
+
   function renderStaffMenu() {
     const tile = (hsh, title, sub, primary) => `
       <button class="btn ${primary ? 'btn-primary' : 'btn-ghost'}" style="width:100%;text-align:left;display:block;padding:0.9rem 1rem;" onclick="goHash('${hsh}')">
@@ -1327,6 +1429,7 @@
           ${tile('#/receipt', 'Record a payment receipt', 'Rent, prorated rent, deposit, or deposit installment.', false)}
           ${tile('#/status', 'Lease status', 'Who still needs to sign or countersign.', false)}
           ${tile('#/archive', 'Completed leases', 'Every fully signed lease. Download any as a PDF.', false)}
+          ${tile('#/listings', 'Property listings', 'Mark properties available or not for the website map.', false)}
           ${tile('#/evict', 'Eviction toolkit', 'Demand notices, service log, late-payment and 12-month tracker.', false)}
         </div></div>
         <p style="text-align:center;"><a href="#" style="font-size:0.82rem;" onclick="lockDevice();return false;">Sign out on this device</a></p>
