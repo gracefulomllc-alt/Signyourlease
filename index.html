@@ -506,7 +506,7 @@
           <div style="display:flex;flex-direction:column;gap:0.6rem;">
             ${tile('#/new', 'Create a lease', 'Start blank, or pick up a tenant who already sent their info.', false)}
             ${tile('#/receipt', 'Create a receipt', 'Any tenant: full rent, partial payment, deposit, or installment.', false)}
-            ${tile('#/receipts', 'Find a receipt', 'Every receipt you have made. Search by tenant, property, or date.', false)}
+            ${tile('#/receipts', 'Find a receipt', 'Every receipt you have made, listed by property.', false)}
             ${tile('#/status', 'Lease status', 'See who still needs to sign or countersign.', false)}
             ${tile('#/archive', 'Completed leases', 'Every fully signed lease, saved until you delete it. Download any as a PDF.', false)}
             ${tile('#/evict', 'Eviction toolkit', 'Demand notices, service log, late-payment and 12-month tracker.', false)}
@@ -1429,7 +1429,7 @@
         <div class="card"><div style="display:flex;flex-direction:column;gap:0.6rem;">
           ${tile('#/new', 'Create a new lease', 'Start blank, or pick up a tenant who already sent their info.', true)}
           ${tile('#/receipt', 'Record a payment receipt', 'Rent, prorated rent, deposit, or deposit installment.', false)}
-          ${tile('#/receipts', 'Find a receipt', 'Every receipt you have made. Search by tenant, property, or date.', false)}
+          ${tile('#/receipts', 'Find a receipt', 'Every receipt you have made, listed by property.', false)}
           ${tile('#/status', 'Lease status', 'Who still needs to sign or countersign.', false)}
           ${tile('#/archive', 'Completed leases', 'Every fully signed lease. Download any as a PDF.', false)}
           ${tile('#/listings', 'Property listings', 'Mark properties available or not for the website map.', false)}
@@ -3772,44 +3772,39 @@ ${steps(3, TN_STEPS)}
     try { const r = await fetch('/api/receipts?key=' + encodeURIComponent(staffKey())); if (!r.ok) throw 0; items = (await r.json()).items || []; }
     catch (e) { app.innerHTML = header() + `<div class="banner banner-brass">Could not load receipts. Check your connection and try again.</div>`; return; }
     window.__receipts = items;
-    const props = Array.from(new Set(items.map(i => i.property))).filter(Boolean).sort();
+    // one group per property, newest receipt first inside each
+    const groups = {};
+    items.forEach(it => { const key = (it.property || 'No address').replace(/\s+/g, ' ').trim(); const k = key.toLowerCase(); (groups[k] = groups[k] || { name: key, list: [] }).list.push(it); });
+    const order = Object.values(groups).sort((a, b) => a.name.localeCompare(b.name, undefined, { numeric: true }));
+    order.forEach(g => g.list.sort((a, b) => (b.dateReceived || '').localeCompare(a.dateReceived || '') || (b.savedAt || 0) - (a.savedAt || 0)));
+    const row = (it) => `
+      <div style="display:flex;justify-content:space-between;gap:0.75rem;align-items:center;padding:0.7rem 0;border-top:1px solid #F1E4D8;flex-wrap:wrap;">
+        <div style="min-width:0;flex:1;">
+          <strong>${esc(it.tenant || 'Tenant')}</strong> &middot; ${fmtMoney(it.total)}${it.balance ? ` <span style="color:#A0352C;font-size:0.85rem;font-weight:600;">(${fmtMoney(it.balance)} still owed)</span>` : ''}<br>
+          <span style="font-size:0.85rem;color:var(--ink-soft);">${esc(fmtDate(it.dateReceived))}${it.items ? ' &middot; ' + esc(it.items) : ''}${it.method ? ' &middot; ' + esc(it.method) : ''}</span>
+        </div>
+        <div class="btn-row" style="margin:0;">
+          <button class="btn btn-ghost" style="padding:0.4rem 0.8rem;font-size:0.85rem;" onclick="openReceipt('${esc(it.id)}', this)">Open</button>
+          <button class="btn btn-ghost" style="padding:0.4rem 0.8rem;font-size:0.85rem;" onclick="receiptPdf('${esc(it.id)}', this)">PDF</button>
+        </div>
+      </div>`;
     app.innerHTML = header() + `
       <div style="max-width:720px;margin:1rem auto;">
         <h1 style="text-align:center;margin-bottom:0.4rem;">Receipts</h1>
-        <p class="subhead" style="text-align:center;margin:0 auto 1rem;">Every receipt you finish is saved here until you delete it.</p>
-        <div class="card">
-          <div class="grid">
-            <div class="field"><label>Search tenant or address</label><input type="search" id="rc-q" placeholder="e.g. Kevin or Troy"></div>
-            <div class="field"><label>Property</label><select id="rc-prop"><option value="">All properties</option>${props.map(p => `<option>${esc(p)}</option>`).join('')}</select></div>
-            <div class="field"><label>From</label><input type="date" id="rc-from"></div>
-            <div class="field"><label>To</label><input type="date" id="rc-to"></div>
-          </div>
-          <p id="rc-sum" style="margin:0.25rem 0 0;font-weight:600;"></p>
-        </div>
-        <div class="card" id="rc-list"></div>
+        <p class="subhead" style="text-align:center;margin:0 auto 1rem;">Grouped by property. Tap a property to see every receipt for it, newest first.</p>
+        ${order.length ? order.map((g, gi) => {
+          const total = g.list.reduce((s, it) => s + (it.total || 0), 0);
+          return `<details class="card" style="padding:0;" ${order.length === 1 ? 'open' : ''}>
+            <summary style="cursor:pointer;list-style:none;padding:1rem 1.25rem;display:flex;justify-content:space-between;gap:0.75rem;align-items:center;flex-wrap:wrap;">
+              <span><strong style="font-size:1.05rem;">${esc(g.name)}</strong><br><span style="font-size:0.85rem;color:var(--ink-soft);">${g.list.length} receipt${g.list.length === 1 ? '' : 's'} &middot; ${fmtMoney(total)} received &middot; latest ${esc(fmtDate(g.list[0].dateReceived))}</span></span>
+              <span class="btn btn-ghost" style="padding:0.35rem 0.8rem;font-size:0.85rem;">Show</span>
+            </summary>
+            <div style="padding:0 1.25rem 0.5rem;">${g.list.map(row).join('')}</div>
+          </details>`; }).join('') : `<div class="card"><p class="hint" style="margin:0;">No saved receipts yet. Receipts you finish from now on show up here. To add an older receipt, open its emailed link while signed in on this device.</p></div>`}
         <div class="btn-row" style="justify-content:center;"><button class="btn btn-primary" onclick="goHash('#/receipt')">Create a new receipt</button></div>
       </div>`;
-    const draw = () => {
-      const q = document.getElementById('rc-q').value.trim().toLowerCase();
-      const prop = document.getElementById('rc-prop').value;
-      const from = document.getElementById('rc-from').value, to = document.getElementById('rc-to').value;
-      const vis = items.filter(it => (!q || (it.tenant + ' ' + it.property).toLowerCase().includes(q)) && (!prop || it.property === prop) && (!from || it.dateReceived >= from) && (!to || it.dateReceived <= to));
-      const sum = vis.reduce((s, it) => s + (it.total || 0), 0);
-      document.getElementById('rc-sum').textContent = vis.length + ' receipt' + (vis.length === 1 ? '' : 's') + ' · ' + fmtMoney(sum) + ' received';
-      document.getElementById('rc-list').innerHTML = vis.length ? vis.map(it => `
-        <div style="display:flex;justify-content:space-between;gap:0.75rem;align-items:center;padding:0.75rem 0;border-bottom:1px solid #F1E4D8;flex-wrap:wrap;">
-          <div style="min-width:0;flex:1;">
-            <strong>${esc(it.tenant || 'Tenant')}</strong> &middot; ${fmtMoney(it.total)}${it.balance ? ` <span style="color:#A0352C;font-size:0.85rem;font-weight:600;">(${fmtMoney(it.balance)} still owed)</span>` : ''}<br>
-            <span style="font-size:0.85rem;color:var(--ink-soft);">${esc(fmtDate(it.dateReceived))} &middot; ${esc(it.property)}${it.items ? ' &middot; ' + esc(it.items) : ''}${it.method ? ' &middot; ' + esc(it.method) : ''}</span>
-          </div>
-          <div class="btn-row" style="margin:0;">
-            <button class="btn btn-ghost" style="padding:0.4rem 0.8rem;font-size:0.85rem;" onclick="openReceipt('${esc(it.id)}', this)">Open</button>
-            <button class="btn btn-ghost" style="padding:0.4rem 0.8rem;font-size:0.85rem;" onclick="receiptPdf('${esc(it.id)}', this)">PDF</button>
-          </div>
-        </div>`).join('') : `<p class="hint" style="margin:0;">${items.length ? 'No receipts match.' : 'No saved receipts yet. Receipts you finish from now on show up here. To add an older receipt, open its emailed link while signed in on this device.'}</p>`;
-    };
-    ['rc-q', 'rc-prop', 'rc-from', 'rc-to'].forEach(id => document.getElementById(id).addEventListener('input', draw));
-    draw();
+    app.querySelectorAll('details.card').forEach(dt => dt.addEventListener('toggle', () => { const b = dt.querySelector('summary .btn'); if (b) b.textContent = dt.open ? 'Hide' : 'Show'; }));
+    app.querySelectorAll('details.card[open] summary .btn').forEach(b => { b.textContent = 'Hide'; });
     window.scrollTo(0, 0);
   }
   async function fetchReceipt(id) {
