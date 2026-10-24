@@ -456,6 +456,7 @@
     if (hash === '#/archive') { if (!landlordAuthed()) { renderGate('#/archive'); return; } renderArchive(); return; }
     if (hash === '#/evict') { if (!landlordAuthed()) { renderGate('#/evict'); return; } renderCases(); return; }
     if (hash === '#/status') { if (!landlordAuthed()) { renderGate('#/status'); return; } renderLeaseStatus(); return; }
+    if (hash === '#/receipts') { if (!landlordAuthed()) { renderGate('#/receipts'); return; } renderReceipts(); return; }
     if (hash === '#/listings') { if (!landlordAuthed()) { renderGate('#/listings'); return; } renderListings(); return; }
     if (hash === '#/staff') { if (!landlordAuthed()) { renderGate('#/staff'); return; } renderStaffMenu(); return; }
     renderHome();
@@ -505,6 +506,7 @@
           <div style="display:flex;flex-direction:column;gap:0.6rem;">
             ${tile('#/new', 'Create a lease', 'Start blank, or pick up a tenant who already sent their info.', false)}
             ${tile('#/receipt', 'Create a receipt', 'Any tenant: full rent, partial payment, deposit, or installment.', false)}
+            ${tile('#/receipts', 'Find a receipt', 'Every receipt you have made. Search by tenant, property, or date.', false)}
             ${tile('#/status', 'Lease status', 'See who still needs to sign or countersign.', false)}
             ${tile('#/archive', 'Completed leases', 'Every fully signed lease, saved until you delete it. Download any as a PDF.', false)}
             ${tile('#/evict', 'Eviction toolkit', 'Demand notices, service log, late-payment and 12-month tracker.', false)}
@@ -1427,6 +1429,7 @@
         <div class="card"><div style="display:flex;flex-direction:column;gap:0.6rem;">
           ${tile('#/new', 'Create a new lease', 'Start blank, or pick up a tenant who already sent their info.', true)}
           ${tile('#/receipt', 'Record a payment receipt', 'Rent, prorated rent, deposit, or deposit installment.', false)}
+          ${tile('#/receipts', 'Find a receipt', 'Every receipt you have made. Search by tenant, property, or date.', false)}
           ${tile('#/status', 'Lease status', 'Who still needs to sign or countersign.', false)}
           ${tile('#/archive', 'Completed leases', 'Every fully signed lease. Download any as a PDF.', false)}
           ${tile('#/listings', 'Property listings', 'Mark properties available or not for the website map.', false)}
@@ -1636,6 +1639,7 @@
       ${hideNav ? '' : `<div class="letterhead-nav no-print">
         <a class="step-back" style="margin:0 0 0 1rem;display:inline-flex;" href="#" onclick="goHash('');return false;">Home</a>
         ${landlordAuthed() ? `<a class="step-back" style="margin:0 0 0 1rem;display:inline-flex;" href="#" onclick="goHash('#/receipt');return false;">New receipt</a>
+        <a class="step-back" style="margin:0;display:inline-flex;" href="#" onclick="goHash('#/receipts');return false;">Receipts</a>
         <a class="step-back" style="margin:0;display:inline-flex;" href="#" onclick="goHash('#/new');return false;">Start a new lease</a>
         <a class="step-back" style="margin:0;display:inline-flex;" href="#" onclick="goHash('#/status');return false;">Lease status</a>
         <a class="step-back" style="margin:0;display:inline-flex;" href="#" onclick="goHash('#/archive');return false;">Completed leases</a>` : ''}
@@ -3737,6 +3741,117 @@ ${steps(3, TN_STEPS)}
     });
   }
 
+  // ---------- SAVED RECEIPTS ----------
+  async function saveReceiptToServer(d) {
+    const clean = { ...d }; delete clean._id;
+    const r = await fetch('/api/receipts', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ action: 'save', key: staffKey(), receipt: clean }) });
+    if (!r.ok) throw new Error('save failed');
+    return (await r.json()).id;
+  }
+  function receiptPdfHtml(d) {
+    const total = d.items.reduce((s, it) => s + (parseFloat(it.amount) || 0), 0);
+    let h = '<h2>Receipt of Payment</h2><p>' + esc(fmtDate(d.dateReceived)) + '</p>';
+    h += '<p><strong>Property:</strong> ' + esc(d.propertyAddress) + '</p><p><strong>Tenant:</strong> ' + esc(d.tenantName) + '</p><p><strong>Payment method:</strong> ' + esc(d.method) + '</p>';
+    d.items.forEach(it => { h += '<p>' + esc(it.label) + ': ' + fmtMoney(it.amount) + '</p>'; });
+    h += '<p><strong>Total received: ' + fmtMoney(total) + '</strong></p>';
+    if (d.partial) {
+      h += '<p>Total owed' + (d.partial.forWhat ? ' (' + esc(d.partial.forWhat) + ')' : '') + ': ' + fmtMoney(d.partial.owed) + '</p>';
+      h += '<p><strong>Remaining balance' + (d.partial.dueBy ? ', due by ' + esc(fmtDate(d.partial.dueBy)) : '') + ': ' + fmtMoney(d.partial.balance) + '</strong></p>';
+      h += '<p><strong>Partial payment.</strong> This receipt acknowledges a partial payment only. A balance of ' + fmtMoney(d.partial.balance) + ' remains owed' + (d.partial.dueBy ? ' and is due by ' + esc(fmtDate(d.partial.dueBy)) : '') + '. As provided in the lease, the Landlord\'s acceptance of a partial payment does not waive the remaining balance or any of the Landlord\'s rights or remedies under the lease or Colorado law.</p>';
+    }
+    h += '<p>Received by: ' + esc(d.receivedBy || 'Landlord') + '</p>';
+    if (d.needsLandlordSign && d.landlordSignedAt) h += '<p>Signed electronically by ' + esc(d.landlordSignerName || d.receivedBy || 'Landlord') + ' on ' + esc(fmtDateTime(d.landlordSignedAt)) + '.</p>';
+    if (d.needsTenantSign && d.tenantSignedAt) h += '<p>Signed electronically by ' + esc(d.tenantSignerName || d.tenantName) + ' (Tenant) on ' + esc(fmtDateTime(d.tenantSignedAt)) + '.</p>';
+    return h;
+  }
+  function receiptFileName(d) { return 'Receipt - ' + (d.tenantName || 'Tenant') + ' - ' + (d.propertyAddress || '') + ' - ' + (d.dateReceived || '') + '.pdf'; }
+
+  async function renderReceipts() {
+    app.innerHTML = header() + `<p class="hint" style="text-align:center;padding:2rem 0;">Loading receipts&hellip;</p>`;
+    let items = [];
+    try { const r = await fetch('/api/receipts?key=' + encodeURIComponent(staffKey())); if (!r.ok) throw 0; items = (await r.json()).items || []; }
+    catch (e) { app.innerHTML = header() + `<div class="banner banner-brass">Could not load receipts. Check your connection and try again.</div>`; return; }
+    window.__receipts = items;
+    const props = Array.from(new Set(items.map(i => i.property))).filter(Boolean).sort();
+    app.innerHTML = header() + `
+      <div style="max-width:720px;margin:1rem auto;">
+        <h1 style="text-align:center;margin-bottom:0.4rem;">Receipts</h1>
+        <p class="subhead" style="text-align:center;margin:0 auto 1rem;">Every receipt you finish is saved here until you delete it.</p>
+        <div class="card">
+          <div class="grid">
+            <div class="field"><label>Search tenant or address</label><input type="search" id="rc-q" placeholder="e.g. Kevin or Troy"></div>
+            <div class="field"><label>Property</label><select id="rc-prop"><option value="">All properties</option>${props.map(p => `<option>${esc(p)}</option>`).join('')}</select></div>
+            <div class="field"><label>From</label><input type="date" id="rc-from"></div>
+            <div class="field"><label>To</label><input type="date" id="rc-to"></div>
+          </div>
+          <p id="rc-sum" style="margin:0.25rem 0 0;font-weight:600;"></p>
+        </div>
+        <div class="card" id="rc-list"></div>
+        <div class="btn-row" style="justify-content:center;"><button class="btn btn-primary" onclick="goHash('#/receipt')">Create a new receipt</button></div>
+      </div>`;
+    const draw = () => {
+      const q = document.getElementById('rc-q').value.trim().toLowerCase();
+      const prop = document.getElementById('rc-prop').value;
+      const from = document.getElementById('rc-from').value, to = document.getElementById('rc-to').value;
+      const vis = items.filter(it => (!q || (it.tenant + ' ' + it.property).toLowerCase().includes(q)) && (!prop || it.property === prop) && (!from || it.dateReceived >= from) && (!to || it.dateReceived <= to));
+      const sum = vis.reduce((s, it) => s + (it.total || 0), 0);
+      document.getElementById('rc-sum').textContent = vis.length + ' receipt' + (vis.length === 1 ? '' : 's') + ' · ' + fmtMoney(sum) + ' received';
+      document.getElementById('rc-list').innerHTML = vis.length ? vis.map(it => `
+        <div style="display:flex;justify-content:space-between;gap:0.75rem;align-items:center;padding:0.75rem 0;border-bottom:1px solid #F1E4D8;flex-wrap:wrap;">
+          <div style="min-width:0;flex:1;">
+            <strong>${esc(it.tenant || 'Tenant')}</strong> &middot; ${fmtMoney(it.total)}${it.balance ? ` <span style="color:#A0352C;font-size:0.85rem;font-weight:600;">(${fmtMoney(it.balance)} still owed)</span>` : ''}<br>
+            <span style="font-size:0.85rem;color:var(--ink-soft);">${esc(fmtDate(it.dateReceived))} &middot; ${esc(it.property)}${it.items ? ' &middot; ' + esc(it.items) : ''}${it.method ? ' &middot; ' + esc(it.method) : ''}</span>
+          </div>
+          <div class="btn-row" style="margin:0;">
+            <button class="btn btn-ghost" style="padding:0.4rem 0.8rem;font-size:0.85rem;" onclick="openReceipt('${esc(it.id)}', this)">Open</button>
+            <button class="btn btn-ghost" style="padding:0.4rem 0.8rem;font-size:0.85rem;" onclick="receiptPdf('${esc(it.id)}', this)">PDF</button>
+          </div>
+        </div>`).join('') : `<p class="hint" style="margin:0;">${items.length ? 'No receipts match.' : 'No saved receipts yet. Receipts you finish from now on show up here. To add an older receipt, open its emailed link while signed in on this device.'}</p>`;
+    };
+    ['rc-q', 'rc-prop', 'rc-from', 'rc-to'].forEach(id => document.getElementById(id).addEventListener('input', draw));
+    draw();
+    window.scrollTo(0, 0);
+  }
+  async function fetchReceipt(id) {
+    const r = await fetch('/api/receipts?id=' + encodeURIComponent(id) + '&key=' + encodeURIComponent(staffKey()));
+    if (!r.ok) throw new Error('not found');
+    return r.json();
+  }
+  window.openReceipt = async function (id, btn) {
+    if (btn) { btn.disabled = true; btn.textContent = 'Opening…'; }
+    try { const d = await fetchReceipt(id); renderSavedReceipt(d); }
+    catch (e) { if (btn) { btn.disabled = false; btn.textContent = 'Open'; } alert('Could not open that receipt. Try again.'); }
+  };
+  window.receiptPdf = async function (id, btn) {
+    const orig = btn.textContent; btn.disabled = true; btn.textContent = '…';
+    try { const d = await fetchReceipt(id); btn.disabled = false; btn.textContent = orig; await downloadDocPdf(receiptPdfHtml(d), receiptFileName(d), 'Receipt: ' + (d.propertyAddress || ''), 'Receipt - ' + (d.tenantName || ''), btn); }
+    catch (e) { btn.disabled = false; btn.textContent = orig; alert('Could not load that receipt. Try again.'); }
+  };
+  function renderSavedReceipt(d) {
+    const total = d.items.reduce((s, it) => s + (parseFloat(it.amount) || 0), 0);
+    const link = baseUrl() + '#receipt=' + encodeState(Object.assign({}, d, { _id: undefined }));
+    const mailto = 'mailto:?subject=' + encodeURIComponent('Receipt — ' + d.propertyAddress) + '&body=' + encodeURIComponent('Receipt for ' + fmtMoney(total) + ' received ' + fmtDate(d.dateReceived) + ' for ' + d.propertyAddress + ': ' + link);
+    app.innerHTML = header() + `
+      <button class="step-back" onclick="goHash('#/receipts')">&larr; All receipts</button>
+      <div class="paper" id="receipt-paper">${receiptBody(d)}${receiptSigBlockHtml(d)}</div>
+      <div class="card no-print" style="margin-top:1.5rem;">
+        <div class="btn-row" style="margin-top:0;flex-wrap:wrap;">
+          <button class="btn btn-primary" id="sr-pdf">Download PDF</button>
+          <button class="btn" onclick="window.print()">Print</button>
+          <a class="btn btn-brass" href="${mailto}" style="text-decoration:none;display:inline-flex;align-items:center;">Email a copy</a>
+          <button class="btn btn-ghost" style="color:#A8372D;" id="sr-del">Delete receipt</button>
+        </div>
+      </div>`;
+    document.getElementById('sr-pdf').addEventListener('click', function () { downloadDocPdf(receiptPdfHtml(d), receiptFileName(d), 'Receipt: ' + (d.propertyAddress || ''), 'Receipt - ' + (d.tenantName || ''), this); });
+    document.getElementById('sr-del').addEventListener('click', async function () {
+      if (this.dataset.confirm !== '1') { this.dataset.confirm = '1'; this.textContent = 'Tap again to delete permanently'; return; }
+      this.disabled = true;
+      try { await fetch('/api/receipts', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ action: 'delete', id: d._id, key: staffKey() }) }); goHash('#/receipts'); }
+      catch (e) { this.disabled = false; alert('Could not delete. Try again.'); }
+    });
+    window.scrollTo(0, 0);
+  }
+
   function renderReceiptFinal(d) {
     const link = baseUrl() + '#receipt=' + encodeState(d);
     const subject = 'Receipt — ' + d.propertyAddress;
@@ -3744,18 +3859,20 @@ ${steps(3, TN_STEPS)}
     const msg = 'Receipt for ' + fmtMoney(total) + ' received ' + fmtDate(d.dateReceived) + ' for ' + d.propertyAddress + ': ' + link;
     const mailto = 'mailto:?subject=' + encodeURIComponent(subject) + '&body=' + encodeURIComponent(msg);
     app.innerHTML = header() + `
-      <div class="banner banner-success">Receipt recorded — ${fmtMoney(total)} on ${fmtDate(d.dateReceived)}.</div>
+      <div class="banner banner-success">Receipt recorded — ${fmtMoney(total)} on ${fmtDate(d.dateReceived)}.${landlordAuthed() ? ' <span id="rc-saved">Saving to Receipts…</span>' : ''}</div>
       <div class="paper" id="receipt-paper">${receiptBody(d)}${receiptSigBlockHtml(d)}</div>
       <div class="card no-print" style="margin-top:1.5rem;">
         <div class="section-label">Keep a copy</div>
         <div class="btn-row" style="margin-top:0;">
           <a class="btn btn-brass" href="${mailto}" style="text-decoration:none;display:inline-flex;align-items:center;">Email a copy</a>
           <button class="btn btn-primary" onclick="window.print()">Print / save as PDF</button>
-          <button class="btn" id="btn-download-receipt">Download record</button>
+          <button class="btn" id="btn-download-receipt">Download PDF</button>
         </div>
       </div>
     `;
-    document.getElementById('btn-download-receipt').addEventListener('click', () => downloadReceipt(d));
+    document.getElementById('btn-download-receipt').addEventListener('click', function () { downloadDocPdf(receiptPdfHtml(d), receiptFileName(d), 'Receipt: ' + (d.propertyAddress || ''), 'Receipt - ' + (d.tenantName || ''), this); });
+    if (landlordAuthed()) saveReceiptToServer(d).then(() => { const s = document.getElementById('rc-saved'); if (s) s.innerHTML = 'Saved in <a href="#/receipts">Receipts</a>.'; })
+      .catch(() => { const s = document.getElementById('rc-saved'); if (s) s.innerHTML = '<strong>Not saved to Receipts</strong> (connection problem). Reload this page to try again.'; });
   }
 
   async function downloadReceipt(d) {
