@@ -63,6 +63,7 @@ export default async (req) => {
         phone: String(body.phone || '').trim().slice(0, 40),
         email: String(body.email || '').trim().slice(0, 160),
         unitInterest: String(body.unitInterest || '').trim().slice(0, 200),
+        propertyChoice: (body.propertyChoice && typeof body.propertyChoice === 'object') ? { city: String(body.propertyChoice.city || '').slice(0, 60), street: String(body.propertyChoice.street || '').slice(0, 120), unit: String(body.propertyChoice.unit || '').slice(0, 40) } : null,
         note: String(body.note || '').trim().slice(0, 500),
         status: 'pending',
         leaseId: '',

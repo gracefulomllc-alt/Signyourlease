@@ -83,6 +83,10 @@
   .upl-btn { position: relative; overflow: hidden; width: 100%; max-width: 320px; text-align: center; padding: 0.9rem 1rem; font-size: 1rem; cursor: pointer; }
   .upl-input { position: absolute; inset: 0; opacity: 0; cursor: pointer; width: 100%; height: 100%; }
   .card.needs { outline: 3px solid #D9534F; outline-offset: 2px; }
+  .big-form label { font-size: 1.05rem; font-weight: 700; }
+  .big-form input, .big-form select, .big-form textarea { font-size: 1.1rem; padding: 0.8rem 0.85rem; min-height: 52px; }
+  .big-form .field { margin-bottom: 1.1rem; }
+  .qn { display: inline-flex; align-items: center; justify-content: center; width: 1.6rem; height: 1.6rem; border-radius: 50%; background: var(--ink); color: #fff; font-size: 0.9rem; margin-right: 0.35rem; }
   .id-thumb { max-width: 100%; max-height: 220px; border-radius: 4px; border: 1px solid var(--line); display: block; margin: 0.75rem auto 0; }
   .id-remove { font-size: 0.8125rem; color: var(--slate); background: none; border: none; cursor: pointer; margin-top: 0.5rem; text-decoration: underline; padding: 0; }
   .attach-label { font-size: 0.75rem; color: var(--slate); margin: 0.5rem 0 0.25rem; font-family: 'Inter', sans-serif; }
@@ -202,6 +206,22 @@
     }
     return list;
   })();
+
+  function propCity(p) { return String(p.cityZip || '').split(',')[0].trim(); }
+  const PROPERTY_CITIES = Array.from(new Set(PROPERTIES.map(propCity)));
+  function intakeChoice() {
+    const v = (id) => { const el = document.getElementById(id); return el && el.value && el.value !== '__unsure__' ? el.value : ''; };
+    return { city: v('in-city'), street: v('in-prop'), unit: v('in-unitsel') };
+  }
+  function intakeChoiceText() {
+    const c = intakeChoice();
+    if (!c.city) return 'Not sure which place';
+    return [c.street || 'address not chosen', c.unit || ''].filter(Boolean).join(', ') + ' (' + c.city + ')';
+  }
+  function propertyIndexFor(choice) {
+    if (!choice || !choice.street) return -1;
+    return PROPERTIES.findIndex(p => p.street === choice.street && (p.unit || '') === (choice.unit || ''));
+  }
 
   const ENTITIES = (() => {
     const seen = new Set();
@@ -1574,24 +1594,44 @@
   function renderTenantIntake() {
     app.innerHTML = header() + `
       <button class="step-back" onclick="goHash('')">&larr; Back</button>
-      <div class="card" style="max-width:520px;margin:2rem auto;">
-        <div class="section-label">Tell us about you</div>
-        <p class="hint" style="margin-bottom:1rem;">Fill this out and your landlord will prepare your lease. You'll come back with your <strong>name + the last 4 of your cell number</strong> to sign once it's ready.</p>
-        <div class="field"><label>Full legal name</label><input type="text" id="in-name" placeholder="First and last name"></div>
-        <div class="field"><label>Phone</label><input type="tel" id="in-phone" placeholder="(719) 555-0100"></div>
-        <div class="field"><label>Email</label><input type="email" id="in-email" placeholder="name@email.com"></div>
-        <div class="field"><label>Which property / unit are you renting?</label><input type="text" id="in-unit" placeholder="e.g. 411 Troy Ave, Unit 3"></div>
-        <div class="field"><label>Anything your landlord should know? (optional)</label><textarea id="in-note" rows="2" placeholder="Move-in date you're hoping for, pets, etc."></textarea></div>
-        <p class="hint"><strong>Your access code is the last 4 digits of your cell number.</strong> Come back anytime with your name + those 4 digits to open your lease.</p>
-        <p class="error-text" id="in-error" style="display:none;"></p>
-        <div class="btn-row"><button class="btn btn-primary" id="in-submit">Submit my info</button></div>
+      <div class="card big-form" style="max-width:520px;margin:1.5rem auto;">
+        <h1 style="margin-bottom:0.4rem;">Tell us about you</h1>
+        <p style="margin-bottom:1.25rem;">Answer these 5 questions. Your landlord will use them to get your lease ready.</p>
+        <div class="field"><label><span class="qn">1</span> Your full name</label><input type="text" id="in-name" placeholder="First and last name" autocomplete="name"></div>
+        <div class="field"><label><span class="qn">2</span> Your cell phone number</label><input type="tel" id="in-phone" placeholder="(719) 555-0100" autocomplete="tel"></div>
+        <div class="field"><label><span class="qn">3</span> Your email <span style="font-weight:normal;">(if you have one)</span></label><input type="email" id="in-email" placeholder="name@email.com" autocomplete="email"></div>
+        <div class="field"><label><span class="qn">4</span> What city is the place in?</label><select id="in-city"><option value="">Tap to choose a city</option>${PROPERTY_CITIES.map(c => `<option>${esc(c)}</option>`).join('')}<option value="__unsure__">I'm not sure</option></select></div>
+        <div class="field" id="in-prop-wrap" style="display:none;"><label>Which address?</label><select id="in-prop"></select></div>
+        <div class="field" id="in-unitsel-wrap" style="display:none;"><label>Which unit number?</label><select id="in-unitsel"></select></div>
+        <div class="field"><label><span class="qn">5</span> Anything else? <span style="font-weight:normal;">(you can skip this)</span></label><textarea id="in-note" rows="2" placeholder="When you want to move in, pets, questions"></textarea></div>
+        <div class="banner" style="background:#E8ECF5;border:1px solid #C9D2E6;color:#2A3756;"><span><strong>Remember this:</strong> to come back and sign your lease, you will type your name and the <strong>last 4 numbers of your cell phone</strong>.</span></div>
+        <p class="error-text" id="in-error" style="display:none;font-size:1.05rem;"></p>
+        <div class="btn-row"><button class="btn btn-primary" id="in-submit" style="width:100%;font-size:1.15rem;padding:1rem;">Send my info</button></div>
       </div>`;
+    const citySel = document.getElementById('in-city'), propSel = document.getElementById('in-prop'), unitSel = document.getElementById('in-unitsel');
+    citySel.addEventListener('change', () => {
+      const city = citySel.value;
+      document.getElementById('in-error').style.display = 'none';
+      document.getElementById('in-unitsel-wrap').style.display = 'none'; unitSel.innerHTML = '';
+      if (!city || city === '__unsure__') { document.getElementById('in-prop-wrap').style.display = 'none'; propSel.innerHTML = ''; return; }
+      const streets = Array.from(new Set(PROPERTIES.filter(p => propCity(p) === city).map(p => p.street)));
+      propSel.innerHTML = '<option value="">Choose the address</option>' + streets.map(s => `<option>${esc(s)}</option>`).join('') + '<option value="__unsure__">I\'m not sure</option>';
+      document.getElementById('in-prop-wrap').style.display = '';
+    });
+    propSel.addEventListener('change', () => {
+      const units = PROPERTIES.filter(p => p.street === propSel.value && p.unit).map(p => p.unit);
+      if (units.length) {
+        unitSel.innerHTML = '<option value="">Choose the unit</option>' + units.map(u => `<option>${esc(u)}</option>`).join('') + '<option value="__unsure__">Not sure yet</option>';
+        document.getElementById('in-unitsel-wrap').style.display = '';
+      } else { unitSel.innerHTML = ''; document.getElementById('in-unitsel-wrap').style.display = 'none'; }
+    });
     document.getElementById('in-submit').addEventListener('click', async function () {
       const name = document.getElementById('in-name').value.trim();
       const phoneVal = document.getElementById('in-phone').value.trim();
       const err = document.getElementById('in-error');
       if (!name) { err.textContent = 'Enter your full legal name.'; err.style.display = ''; return; }
       if (phoneVal.replace(/\D/g, '').length < 4) { err.textContent = 'Enter your cell number — its last 4 digits are your access code.'; err.style.display = ''; return; }
+      if (!document.getElementById('in-city').value) { err.textContent = 'Choose the city the place is in, or "I\'m not sure".'; err.style.display = ''; return; }
       err.style.display = 'none';
       this.disabled = true; this.textContent = 'Submitting…';
       try {
@@ -1599,7 +1639,8 @@
           body: JSON.stringify({ action: 'create', name,
             phone: phoneVal,
             email: document.getElementById('in-email').value.trim(),
-            unitInterest: document.getElementById('in-unit').value.trim(),
+            unitInterest: intakeChoiceText(),
+            propertyChoice: intakeChoice(),
             note: document.getElementById('in-note').value.trim() }) });
         if (!resp.ok) throw new Error('save failed');
         app.innerHTML = header() + `
@@ -1609,7 +1650,7 @@
           </div>`;
       } catch (e) {
         err.textContent = 'Could not submit — check your connection and try again.'; err.style.display = '';
-        this.disabled = false; this.textContent = 'Submit my info';
+        this.disabled = false; this.textContent = 'Send my info';
       }
     });
   }
@@ -1749,7 +1790,7 @@ ${steps(0, LL_STEPS)}
       <p class="subhead">Fill in the details, check them, then send your tenant their signing link. They sign first on their own phone, and you countersign after.</p>
       <div id="pending-intakes" class="no-print">${window.__intakeId && window.__intakeName ? `
         <div class="banner banner-brass" style="display:flex;justify-content:space-between;gap:0.75rem;flex-wrap:wrap;align-items:center;">
-          <span>Preparing a lease for pending tenant <strong>${esc(window.__intakeName)}</strong>${window.__intakeUnit ? ' (asked about: ' + esc(window.__intakeUnit) + ')' : ''}.</span>
+          <span>Preparing a lease for pending tenant <strong>${esc(window.__intakeName)}</strong>${window.__intakeUnit ? ' (they picked: ' + esc(window.__intakeUnit) + ')' : ''}. If they picked the wrong place, change it under Property below.</span>
           <a href="#" onclick="startBlankLease();return false;" style="font-size:0.85rem;">Start blank instead</a>
         </div>` : ''}</div>
       <form id="lease-form">
@@ -2178,6 +2219,8 @@ ${steps(0, LL_STEPS)}
       const p = window.__intakePrefill; window.__intakePrefill = null;
       const set = (fid, v) => { const el = document.getElementById(fid); if (el && v) el.value = v; };
       set('f-tenant', p.name); set('f-phone', p.phone); set('f-email', p.email);
+      const ps = document.getElementById('f-property-select');
+      if (ps && p.propIndex >= 0) { ps.value = String(p.propIndex); ps.dispatchEvent(new Event('change')); }
     }
   }
 
@@ -2226,7 +2269,7 @@ ${steps(0, LL_STEPS)}
     const it = (window.__pendingCache || [])[i];
     if (!it) { startBlankLease(); return; }
     window.__intakeId = it.id; window.__intakeName = it.name; window.__intakeUnit = it.unitInterest || '';
-    window.__intakePrefill = { name: it.name, phone: it.phone, email: it.email };
+    window.__intakePrefill = { name: it.name, phone: it.phone, email: it.email, propIndex: propertyIndexFor(it.propertyChoice) };
     window.__restoreDraft = false;
     renderForm(); window.scrollTo(0, 0);
   }
