@@ -79,6 +79,10 @@
   .sig-preview { font-family: 'Dancing Script', cursive; font-size: 2rem; padding: 0.5rem 0.25rem; border-bottom: 1px solid var(--line); margin-top: 0.5rem; min-height: 2.5rem; }
   .id-upload { border: 1px dashed var(--line); border-radius: 4px; padding: 1rem; text-align: center; }
   .id-upload input[type="file"] { font-size: 0.8125rem; }
+  .id-upload { display: flex; flex-wrap: wrap; gap: 0.6rem; justify-content: center; align-items: center; flex-direction: column; }
+  .upl-btn { position: relative; overflow: hidden; width: 100%; max-width: 320px; text-align: center; padding: 0.9rem 1rem; font-size: 1rem; cursor: pointer; }
+  .upl-input { position: absolute; inset: 0; opacity: 0; cursor: pointer; width: 100%; height: 100%; }
+  .card.needs { outline: 3px solid #D9534F; outline-offset: 2px; }
   .id-thumb { max-width: 100%; max-height: 220px; border-radius: 4px; border: 1px solid var(--line); display: block; margin: 0.75rem auto 0; }
   .id-remove { font-size: 0.8125rem; color: var(--slate); background: none; border: none; cursor: pointer; margin-top: 0.5rem; text-decoration: underline; padding: 0; }
   .attach-label { font-size: 0.75rem; color: var(--slate); margin: 0.5rem 0 0.25rem; font-family: 'Inter', sans-serif; }
@@ -456,6 +460,7 @@
     if (hash === '#/archive') { if (!landlordAuthed()) { renderGate('#/archive'); return; } renderArchive(); return; }
     if (hash === '#/evict') { if (!landlordAuthed()) { renderGate('#/evict'); return; } renderCases(); return; }
     if (hash === '#/status') { if (!landlordAuthed()) { renderGate('#/status'); return; } renderLeaseStatus(); return; }
+    if (hash === '#/assist') { if (!landlordAuthed()) { renderGate('#/assist'); return; } renderAssist(); return; }
     if (hash === '#/receipts') { if (!landlordAuthed()) { renderGate('#/receipts'); return; } renderReceipts(); return; }
     if (hash === '#/listings') { if (!landlordAuthed()) { renderGate('#/listings'); return; } renderListings(); return; }
     if (hash === '#/staff') { if (!landlordAuthed()) { renderGate('#/staff'); return; } renderStaffMenu(); return; }
@@ -504,6 +509,7 @@
         ${landlordAuthed() ? `<div class="card">
           <div class="section-label">Landlord or staff</div>
           <div style="display:flex;flex-direction:column;gap:0.6rem;">
+            ${tile('#/assist', 'On-site help', 'A worker helps a tenant sign their lease or records a payment on site.', true)}
             ${tile('#/new', 'Create a lease', 'Start blank, or pick up a tenant who already sent their info.', false)}
             ${tile('#/receipt', 'Create a receipt', 'Any tenant: full rent, partial payment, deposit, or installment.', false)}
             ${tile('#/receipts', 'Find a receipt', 'Every receipt you have made, listed by property.', false)}
@@ -1418,6 +1424,84 @@
   };
   window.drawListings = drawListings;
 
+  // ---------- ON-SITE HELP (worker helps a tenant on the worker's device) ----------
+  function helperName() { try { return localStorage.getItem('ld_helper') || ''; } catch (e) { return ''; } }
+  function renderAssist() {
+    const big = (id, title, sub, primary) => `<button class="btn ${primary ? 'btn-primary' : 'btn-ghost'}" id="${id}" style="width:100%;text-align:left;display:block;padding:1.2rem 1.1rem;"><strong style="display:block;font-size:1.15rem;">${title}</strong><span style="font-size:0.9rem;opacity:.85;font-weight:normal;">${sub}</span></button>`;
+    app.innerHTML = header() + `
+      <div style="max-width:520px;margin:1.25rem auto;">
+        <h1 style="text-align:center;margin-bottom:0.3rem;">On-site help</h1>
+        <p class="subhead" style="text-align:center;margin:0 auto 1.25rem;">For helping a tenant in person on your phone or tablet. The tenant reads and signs for themselves.</p>
+        <div class="card">
+          <div class="field" style="margin:0;"><label>Your name (the worker helping)</label><input type="text" id="as-name" value="${esc(helperName())}" placeholder="First and last name" style="font-size:1.1rem;"></div>
+          <p class="hint" style="margin:0.4rem 0 0;">Shown on the lease and receipt as the person who helped.</p>
+        </div>
+        <div style="display:flex;flex-direction:column;gap:0.75rem;">
+          ${big('as-lease', 'Help a tenant sign their lease', 'Find the tenant, then hand them the device to review, add their ID, and sign.', true)}
+          ${big('as-receipt', 'Record a payment', 'Write a receipt for rent or a deposit you collected on site.', false)}
+        </div>
+        <p class="error-text" id="as-err" style="display:none;margin-top:0.75rem;"></p>
+      </div>`;
+    const need = () => { const v = document.getElementById('as-name').value.trim(); if (!v) { const er = document.getElementById('as-err'); er.textContent = 'Enter your name first.'; er.style.display = ''; document.getElementById('as-name').focus(); return ''; } try { localStorage.setItem('ld_helper', v); } catch (e) {} return v; };
+    document.getElementById('as-lease').addEventListener('click', () => { const n = need(); if (n) renderAssistPick(n); });
+    document.getElementById('as-receipt').addEventListener('click', () => {
+      const n = need(); if (!n) return;
+      renderReceiptForm({ entity: n });
+      const ts = document.getElementById('r-tenantsign'); if (ts) ts.checked = true;
+    });
+    window.scrollTo(0, 0);
+  }
+  async function renderAssistPick(helper) {
+    app.innerHTML = header() + `<p class="hint" style="text-align:center;padding:2rem 0;">Finding leases waiting for a tenant&hellip;</p>`;
+    let items = [];
+    try { const r = await fetch('/api/intake?list=1&key=' + encodeURIComponent(staffKey())); if (r.ok) items = (await r.json()).items || []; } catch (e) {}
+    const waiting = items.filter(it => it.leaseId && it.status !== 'pending' && (it.stage || 'tenant_to_sign') === 'tenant_to_sign')
+      .sort((a, b) => String(a.name).localeCompare(String(b.name)));
+    app.innerHTML = header() + `
+      <button class="step-back" onclick="goHash('#/assist')">&larr; On-site help</button>
+      <div style="max-width:560px;margin:0 auto;">
+        <h1 style="margin-bottom:0.3rem;">Which tenant?</h1>
+        <p class="subhead" style="margin-bottom:1rem;">Leases ready for the tenant to sign.</p>
+        ${waiting.length > 6 ? '<div class="field"><label>Search by name</label><input type="search" id="ap-q" style="font-size:1.1rem;"></div>' : ''}
+        <div id="ap-list" style="display:flex;flex-direction:column;gap:0.6rem;">
+          ${waiting.length ? waiting.map(it => `<button class="btn btn-ghost ap-item" data-id="${esc(it.leaseId)}" data-name="${esc(String(it.name || '').toLowerCase())}" style="width:100%;text-align:left;display:block;padding:1rem 1.1rem;"><strong style="display:block;font-size:1.1rem;">${esc(it.name || 'Tenant')}</strong><span style="font-size:0.9rem;opacity:.85;font-weight:normal;">${esc(it.property || '')}</span></button>`).join('')
+            : '<div class="card"><p style="margin:0;">No leases are waiting for a tenant signature. The landlord needs to prepare the lease and send it to the tenant first.</p></div>'}
+        </div>
+        <p class="error-text" id="ap-err" style="display:none;"></p>
+      </div>`;
+    const q = document.getElementById('ap-q');
+    if (q) q.addEventListener('input', () => { const v = q.value.trim().toLowerCase(); document.querySelectorAll('.ap-item').forEach(b => { b.style.display = !v || b.dataset.name.includes(v) ? '' : 'none'; }); });
+    document.querySelectorAll('.ap-item').forEach(b => b.addEventListener('click', async () => {
+      b.disabled = true; b.querySelector('span').textContent = 'Opening…';
+      try {
+        const r = await fetch('/api/lease?id=' + encodeURIComponent(b.dataset.id));
+        if (!r.ok) throw 0;
+        const d = JSON.parse(await r.text());
+        if (d.tenantSignerName) { alert('This tenant already signed.'); b.disabled = false; return; }
+        d.assistedBy = helper; d.assistedAt = Date.now();
+        window.__currentLeaseId = b.dataset.id;
+        renderAssistHandoff(d);
+      } catch (e) { const er = document.getElementById('ap-err'); er.textContent = 'Could not open that lease. Check the connection and try again.'; er.style.display = ''; b.disabled = false; }
+    }));
+    window.scrollTo(0, 0);
+  }
+  function renderAssistHandoff(d) {
+    app.innerHTML = header(true) + `
+      <div style="max-width:520px;margin:2rem auto;text-align:center;">
+        <div class="card">
+          <h1 style="margin-bottom:0.5rem;">Hand the device to ${esc(d.tenantName || 'the tenant')}</h1>
+          <p style="font-size:1.05rem;">They will:</p>
+          <ol style="text-align:left;font-size:1.05rem;line-height:1.8;margin:0 auto 1rem;max-width:340px;">
+            <li>Read the lease</li><li>Check their name, phone, and the terms</li><li>Take a photo of their ID</li><li>Sign with their finger or by typing</li>
+          </ol>
+          <p class="hint">You can help them tap and read out loud. Only the tenant signs.</p>
+          <button class="btn btn-primary" id="ah-go" style="font-size:1.1rem;padding:1rem 1.5rem;">Start</button>
+        </div>
+      </div>`;
+    document.getElementById('ah-go').addEventListener('click', () => goToLease(d));
+    window.scrollTo(0, 0);
+  }
+
   function renderStaffMenu() {
     const tile = (hsh, title, sub, primary) => `
       <button class="btn ${primary ? 'btn-primary' : 'btn-ghost'}" style="width:100%;text-align:left;display:block;padding:0.9rem 1rem;" onclick="goHash('${hsh}')">
@@ -1428,6 +1512,7 @@
         <h1 style="text-align:center;margin-bottom:1.25rem;">Landlord tools</h1>
         <div class="card"><div style="display:flex;flex-direction:column;gap:0.6rem;">
           ${tile('#/new', 'Create a new lease', 'Start blank, or pick up a tenant who already sent their info.', true)}
+          ${tile('#/assist', 'On-site help', 'A worker helps a tenant sign their lease or records a payment on site.', false)}
           ${tile('#/receipt', 'Record a payment receipt', 'Rent, prorated rent, deposit, or deposit installment.', false)}
           ${tile('#/receipts', 'Find a receipt', 'Every receipt you have made, listed by property.', false)}
           ${tile('#/status', 'Lease status', 'Who still needs to sign or countersign.', false)}
@@ -2735,7 +2820,7 @@ ${steps(1, LL_STEPS)}
     if (!opts.noSignatures) {
     const sigs = [
       { label: d.entity || 'Landlord', role: 'Landlord', img: d.landlordSignatureImage, typed: d.landlordSignerName, at: d.landlordSignedAt, extra: '' },
-      { label: [d.tenantName, d.tenantName2].filter(Boolean).join(' and ') || 'Tenant', role: 'Tenant', img: d.tenantSignatureImage, typed: d.tenantSignerName, at: d.tenantSignedAt, extra: d.tenantAttested ? 'Identity certified under penalty of perjury at signing' : '' },
+      { label: [d.tenantName, d.tenantName2].filter(Boolean).join(' and ') || 'Tenant', role: 'Tenant', img: d.tenantSignatureImage, typed: d.tenantSignerName, at: d.tenantSignedAt, extra: [d.tenantAttested ? 'Identity certified under penalty of perjury at signing' : '', d.assistedBy ? 'Assisted in person by ' + d.assistedBy : ''].filter(Boolean).join('. ') },
     ];
     ensure(40); y -= 8; ops.push('BT /F2 11 Tf ' + ML + ' ' + y.toFixed(2) + ' Td ' + pdfStr('Signatures') + ' Tj ET'); y -= 14;
     for (const s of sigs) {
@@ -2829,7 +2914,7 @@ ${steps(1, LL_STEPS)}
         </div>
         <div class="sig-col">
           ${d.tenantSignatureImage ? `<img class="sig-img" src="${d.tenantSignatureImage}" alt="Tenant signature" style="max-height:55px;display:block;">` : `<div class="sig-script">${esc(d.tenantSignerName || '')}</div>`}
-          <div class="sig-line"><strong>${esc([d.tenantName, d.tenantName2].filter(Boolean).join(' and ') || 'Tenant')}</strong>${d.tenantSignedAt ? ' &middot; signed ' + fmtDateTime(d.tenantSignedAt) : ''}${d.tenantAttested ? ' &middot; identity certified under penalty of perjury at signing' : ''}</div>
+          <div class="sig-line"><strong>${esc([d.tenantName, d.tenantName2].filter(Boolean).join(' and ') || 'Tenant')}</strong>${d.tenantSignedAt ? ' &middot; signed ' + fmtDateTime(d.tenantSignedAt) : ''}${d.tenantAttested ? ' &middot; identity certified under penalty of perjury at signing' : ''}${d.assistedBy ? ' &middot; assisted in person by ' + esc(d.assistedBy) : ''}</div>
         </div>
       </div>`;
   }
@@ -3158,14 +3243,16 @@ ${steps(1, TN_STEPS)}
     } catch (e) { return null; }
   }
 
-  function uploadBoxHtml(key, title, hint) {
+  function uploadPickerHtml(key) {
+    return `<label class="btn btn-primary upl-btn">Take a photo<input type="file" accept="image/*" capture="environment" id="${key}-input" class="upl-input"></label>
+      <label class="btn btn-ghost upl-btn">Choose a saved photo<input type="file" accept="image/*" id="${key}-input2" class="upl-input"></label>`;
+  }
+  function uploadBoxHtml(key, title, hint, required) {
     return `
-      <div class="card no-print" style="margin-top:1.5rem;">
-        <div class="section-label">${title}</div>
+      <div class="card no-print" id="${key}-card" style="margin-top:1.5rem;">
+        <div class="section-label">${title}${required ? ' <span style="color:#A0352C;font-size:0.8em;">(required)</span>' : ''}</div>
         <p class="hint" style="margin-bottom:0.75rem;">${hint}</p>
-        <div class="id-upload" id="${key}-wrap">
-          <input type="file" accept="image/*" capture="environment" id="${key}-input">
-        </div>
+        <div class="id-upload" id="${key}-wrap">${uploadPickerHtml(key)}</div>
       </div>
     `;
   }
@@ -3174,7 +3261,7 @@ ${steps(1, TN_STEPS)}
     window.__pendingUploads = window.__pendingUploads || {};
     window.__pendingUploads[key] = null;
     document.getElementById(key + '-wrap').addEventListener('change', async (e) => {
-      if (!e.target || e.target.id !== key + '-input') return;
+      if (!e.target || !String(e.target.id || '').startsWith(key + '-input')) return;
       const file = e.target.files[0];
       if (!file) return;
       const wrap = document.getElementById(key + '-wrap');
@@ -3182,9 +3269,10 @@ ${steps(1, TN_STEPS)}
       try {
         const dataUrl = await compressImage(file);
         window.__pendingUploads[key] = dataUrl;
-        wrap.innerHTML = `<img class="id-thumb" src="${dataUrl}" alt="${key} preview"><button type="button" class="id-remove" onclick="removeUpload('${key}')">Remove photo</button>`;
+        const card = document.getElementById(key + '-card'); if (card) card.classList.remove('needs');
+        wrap.innerHTML = `<p style="margin:0;color:#256B45;font-weight:600;">Photo added &#10003;</p><img class="id-thumb" src="${dataUrl}" alt="${key} preview"><button type="button" class="id-remove" onclick="removeUpload('${key}')">Remove and retake</button>`;
       } catch (err) {
-        wrap.innerHTML = `<p class="error-text">Could not process that image. Try another photo.</p><input type="file" accept="image/*" capture="environment" id="${key}-input">`;
+        wrap.innerHTML = `<p class="error-text">Could not process that image. Try another photo.</p>` + uploadPickerHtml(key);
       }
     });
   }
@@ -3192,7 +3280,7 @@ ${steps(1, TN_STEPS)}
   window.removeUpload = function (key) {
     window.__pendingUploads[key] = null;
     const wrap = document.getElementById(key + '-wrap');
-    wrap.innerHTML = `<input type="file" accept="image/*" capture="environment" id="${key}-input">`;
+    wrap.innerHTML = uploadPickerHtml(key);
   };
 
   function renderTenantSign(d) {
@@ -3209,6 +3297,7 @@ ${steps(1, TN_STEPS)}
 
     app.innerHTML = header(true) + `
 ${steps(0, TN_STEPS)}
+      ${d.assistedBy ? `<div class="banner" style="background:#E8ECF5;border:1px solid #C9D2E6;color:#2A3756;"><span><strong>On-site help:</strong> ${esc(d.assistedBy)} is helping you with this lease. You can ask them to read any part out loud. You will sign it yourself.</span></div>` : ''}
       <div class="banner banner-brass">Please review the details below, confirm your information, and sign.</div>
       <div class="paper" id="lease-paper">${leaseBody(d)}</div>
 
@@ -3238,6 +3327,8 @@ ${steps(0, TN_STEPS)}
         </div>
       </div>
 
+      ${d.tenantIdImage ? '' : uploadBoxHtml('idphoto', 'Photo ID', 'Take a clear photo of the front of your driver\'s license, state ID, or passport. Make sure your name and photo are readable.', true)}
+
       <div class="card no-print">
         <div class="section-label">Are the lease terms correct?</div>
         <div class="confirm-row"><span class="clabel">Property</span><span class="cval">${esc(d.propertyAddress)}${d.unitLabel ? ', ' + esc(d.unitLabel) : ''}</span></div>
@@ -3254,7 +3345,6 @@ ${steps(0, TN_STEPS)}
         </div>
       </div>
 
-      ${uploadBoxHtml('idphoto', 'Photo ID (optional)', 'On a phone, this opens your camera. You can also choose a photo already saved.')}
       ${uploadBoxHtml('paystub', 'Proof of income (optional)', "A pay stub or similar document, for the landlord's records.")}
       <div class="card no-print">
         <div class="section-label">Read before signing: required pamphlets</div>
@@ -3270,7 +3360,11 @@ ${steps(0, TN_STEPS)}
       </div>
     `;
     setupSignPanel('sig');
-    wireUploadBox('idphoto');
+    if (d.assistedBy) {
+      const agree = document.getElementById('sig-agree');
+      if (agree) agree.closest('.checkbox-row').insertAdjacentHTML('afterend', `<label class="checkbox-row"><input type="checkbox" id="sig-assist"> ${esc(d.assistedBy)} helped me use this device. I reviewed this lease (or had it read to me), I understand it, and I am signing it myself.</label>`);
+    }
+    if (!d.tenantIdImage) wireUploadBox('idphoto');
     wireUploadBox('paystub');
 
     const state = { nameOk: false, phoneOk: false, termsOk: false };
@@ -3356,6 +3450,15 @@ ${steps(0, TN_STEPS)}
       if (!state.nameOk) { alert('Please confirm your name above (Correct or Needs a fix).'); return; }
       if (!state.phoneOk) { alert('Please confirm your phone number above (Correct or Needs a fix).'); return; }
       if (!state.termsOk) { alert('Please confirm the lease terms are correct before signing. If something is wrong, tap "Tell the landlord" so they can send a corrected lease.'); return; }
+      if (!d.tenantIdImage && !((window.__pendingUploads || {}).idphoto)) {
+        const card = document.getElementById('idphoto-card'); if (card) { card.classList.add('needs'); card.scrollIntoView({ behavior: 'smooth', block: 'center' }); }
+        alert('Please add a photo of your ID before signing.'); return;
+      }
+      if (d.assistedBy) {
+        const ack = document.getElementById('sig-assist');
+        if (!ack || !ack.checked) { if (ack) ack.closest('.checkbox-row').classList.add('needs'); alert('Please check the box confirming you are signing for yourself.'); return; }
+        d.assistAcknowledged = true;
+      }
       const result = readSignPanel('sig');
       if (!result) return;
       const nm = document.getElementById('tc-name');
