@@ -534,7 +534,7 @@
         <strong>${esc(it.tenant || 'Tenant')}</strong><br>
         <span style="font-size:0.88rem;color:var(--ink-soft);">${esc(it.property)}${it.entity ? ' &middot; ' + esc(it.entity) : ''}</span><br>
         <span style="font-size:0.85rem;color:var(--ink-soft);">${esc(fmtTerm(it))}${it.rent ? ' &middot; ' + fmtMoney(it.rent) + '/mo' : ''}</span><br>
-        <span style="display:inline-block;margin-top:0.3rem;font-size:0.78rem;font-weight:700;padding:0.15rem 0.6rem;border-radius:999px;color:#256B45;background:#E7F4EC;">Completed ${it.completedAt ? esc(fmtDateTime(it.completedAt)) : ''}</span>
+        <span style="display:inline-block;margin-top:0.3rem;font-size:0.78rem;font-weight:700;padding:0.15rem 0.6rem;border-radius:999px;color:#256B45;background:#E7F4EC;">Completed ${it.completedAt ? esc(fmtDateTime(it.completedAt)) : ''}</span>${it.idUntil ? ` <span style="display:inline-block;margin-top:0.3rem;font-size:0.78rem;font-weight:700;padding:0.15rem 0.6rem;border-radius:999px;color:#3B4A6B;background:#E8ECF5;">ID photo until ${esc(fmtDateTime(it.idUntil).split(',').slice(0, 2).join(','))}</span>` : ''}
         <div class="btn-row" style="margin-top:0.6rem;flex-wrap:wrap;">
           <button class="btn btn-primary" onclick="archivePdf('${esc(it.id)}', this)">Download PDF</button>
           <button class="btn btn-ghost" onclick="openArchived('${esc(it.id)}')">Open</button>
@@ -544,7 +544,7 @@
     app.innerHTML = header() + `
       <div style="max-width:640px;margin:1rem auto;">
         <h1 style="text-align:center;margin-bottom:0.4rem;">Completed leases</h1>
-        <p class="subhead" style="text-align:center;margin:0 auto 1.25rem;">Every fully signed lease is saved here until you delete it. ID photos and pay stubs aren't kept here.</p>
+        <p class="subhead" style="text-align:center;margin:0 auto 1.25rem;">Every fully signed lease is saved here until you delete it. ID photos and pay stubs are kept for 30 days after signing, then deleted automatically.</p>
         <div class="card">
           ${items.length ? `<div class="field" style="margin-bottom:0.25rem;"><label>Search</label><input type="search" id="arch-q" placeholder="Tenant name or address"></div>` : ''}
           <div id="arch-list">${items.length ? rows(items) : '<p class="hint" style="margin:0;">No completed leases yet. As soon as both sides sign, the lease shows up here.</p>'}</div>
@@ -588,6 +588,12 @@
         <button class="btn" onclick="window.print()">Print / Save as PDF</button>
       </div></div>
       <div class="paper">${leaseBody(d)}${sigBlockHtml(d)}</div>
+      ${d.tenantIdImage || d.tenantPayStubImage ? `<div class="card no-print" style="margin-top:1.5rem;">
+        <div class="section-label">Tenant's ID and documents</div>
+        <p class="hint" style="margin-bottom:0.75rem;">Kept until ${esc(fmtDateTime(d.idKeepUntil))}, then deleted automatically. Save a copy to Innago if you need it longer.</p>
+        ${d.tenantIdImage ? `<div class="attach-label" style="font-weight:600;">Photo ID</div><img class="id-thumb" src="${d.tenantIdImage}" alt="Tenant photo ID" style="max-height:340px;margin:0.4rem 0 0.4rem;"><a class="btn btn-ghost" style="display:inline-block;margin-bottom:1rem;" href="${d.tenantIdImage}" download="ID - ${esc(d.tenantName || 'tenant')}.jpg">Download ID photo</a>` : ''}
+        ${d.tenantPayStubImage ? `<div class="attach-label" style="font-weight:600;">Proof of income</div><img class="id-thumb" src="${d.tenantPayStubImage}" alt="Tenant proof of income" style="max-height:340px;margin:0.4rem 0 0.4rem;"><a class="btn btn-ghost" style="display:inline-block;" href="${d.tenantPayStubImage}" download="Income - ${esc(d.tenantName || 'tenant')}.jpg">Download</a>` : ''}
+      </div>` : ''}
       <div class="card no-print" style="margin-top:1.5rem;">
         <div class="section-label">Remove from archive</div>
         <p class="hint" style="margin-bottom:0.75rem;">Only do this once you've saved the PDF somewhere else, like Innago. This can't be undone.</p>

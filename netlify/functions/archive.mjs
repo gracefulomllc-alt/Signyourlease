@@ -1,5 +1,5 @@
 import { getStore } from '@netlify/blobs';
-import { ARCHIVE_STORE, archiveIfComplete, markDeleted } from '../lib/archive-lib.mjs';
+import { ARCHIVE_STORE, archiveIfComplete, markDeleted, purgeExpiredIds, idsFor, deleteIds } from '../lib/archive-lib.mjs';
 
 const STAFF_CODES = ['1208', '6040'];
 const cors = {
@@ -34,14 +34,16 @@ export default async (req) => {
     if (id) {
       const d = await archive.get(id, { type: 'json' }).catch(() => null);
       if (!d) return json({ error: 'not found' }, 404);
-      return json(d);
+      const extra = await idsFor(id).catch(() => null);
+      return json(extra ? { ...d, ...extra } : d);
     }
     await backfill(archive).catch(() => {});
+    const live = await purgeExpiredIds().catch(() => ({}));
     const { blobs } = await archive.list();
     const items = [];
     for (const b of blobs) {
       const m = await archive.getMetadata(b.key).catch(() => null);
-      if (m) items.push({ id: b.key, ...(m.metadata || {}) });
+      if (m) items.push({ id: b.key, ...(m.metadata || {}), idUntil: live[b.key] || 0 });
     }
     items.sort((a, b) => (b.completedAt || 0) - (a.completedAt || 0));
     return json({ items });
@@ -55,6 +57,7 @@ export default async (req) => {
       if (!body.id) return json({ error: 'missing id' }, 400);
       await markDeleted(String(body.id)).catch(() => {});
       await archive.delete(String(body.id)).catch(() => {});
+      await deleteIds(String(body.id));
       return json({ ok: true });
     }
     return json({ error: 'unknown action' }, 400);
