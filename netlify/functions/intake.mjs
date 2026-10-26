@@ -1,4 +1,5 @@
 import { getStore } from '@netlify/blobs';
+import { fixFields } from '../lib/rename.mjs';
 import { randomBytes } from 'node:crypto';
 
 const EXPIRY_DAYS = 30;
@@ -34,7 +35,11 @@ async function allIntakes(store) {
       if (!entry || entry.data == null) continue;
       const expiresAt = entry.metadata && entry.metadata.expiresAt;
       if (expiresAt && Date.now() > expiresAt) { try { await store.delete(b.key); } catch (e) {} continue; }
-      out.push({ id: b.key, ...entry.data });
+      const rec = entry.data;
+      if (fixFields(rec, ['property', 'unitInterest', 'note']) | fixFields(rec.propertyChoice, ['street'])) {
+        try { await store.setJSON(b.key, rec, { metadata: entry.metadata || {} }); } catch (e) {}
+      }
+      out.push({ id: b.key, ...rec });
     } catch (e) { /* skip bad record */ }
   }
   out.sort((a, b) => (b.createdAt || 0) - (a.createdAt || 0));

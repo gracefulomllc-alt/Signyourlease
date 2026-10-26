@@ -202,7 +202,7 @@
     ];
     const list = base.map(p => ({ ...p, unit: p.unit || '', label: p.street + (p.unit ? ', ' + p.unit : '') + ' — ' + p.cityZip }));
     for (let i = 1; i <= 11; i++) {
-      list.push({ street: '411 Thunderwolf Dr', unit: 'Unit ' + i, cityZip: 'Pueblo, Colorado 81001', entity: 'TLDR Enterprise LLC', label: '411 Thunderwolf Dr (formerly Troy Ave), Unit ' + i + ' — Pueblo, CO 81001' });
+      list.push({ street: '411 Thunderwolf Dr', unit: 'Unit ' + i, cityZip: 'Pueblo, Colorado 81001', entity: 'TLDR Enterprise LLC', label: '411 Thunderwolf Dr, Unit ' + i + ' — Pueblo, CO 81001' });
     }
     return list;
   })();
@@ -1616,7 +1616,7 @@
       document.getElementById('in-unitsel-wrap').style.display = 'none'; unitSel.innerHTML = '';
       if (!city || city === '__unsure__') { document.getElementById('in-prop-wrap').style.display = 'none'; propSel.innerHTML = ''; return; }
       const streets = Array.from(new Set(PROPERTIES.filter(p => propCity(p) === city).map(p => p.street)));
-      propSel.innerHTML = '<option value="">Choose the address</option>' + streets.map(s => `<option value="${esc(s)}">${esc(s)}${s === '411 Thunderwolf Dr' ? ' (formerly Troy Ave)' : ''}</option>`).join('') + '<option value="__unsure__">I\'m not sure</option>';
+      propSel.innerHTML = '<option value="">Choose the address</option>' + streets.map(s => `<option value="${esc(s)}">${esc(s)}</option>`).join('') + '<option value="__unsure__">I\'m not sure</option>';
       document.getElementById('in-prop-wrap').style.display = '';
     });
     propSel.addEventListener('change', () => {

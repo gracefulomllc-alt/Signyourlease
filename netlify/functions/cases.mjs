@@ -1,5 +1,6 @@
 import { getStore } from '@netlify/blobs';
 import { randomBytes } from 'node:crypto';
+import { fixFields } from '../lib/rename.mjs';
 
 // Tenant files for the eviction toolkit: notices, service logs, late-payment history.
 // Staff only. Kept until deleted.
@@ -31,12 +32,14 @@ export default async (req) => {
     const id = url.searchParams.get('id');
     if (id) {
       const c = await store.get(id, { type: 'json' }).catch(() => null);
+      if (c && fixFields(c, ['propertyLine', 'notes'])) await store.setJSON(id, c).catch(() => {});
       return c ? json(c) : json({ error: 'not found' }, 404);
     }
     const { blobs } = await store.list();
     const items = [];
     for (const b of blobs) {
       const c = await store.get(b.key, { type: 'json' }).catch(() => null);
+      if (c && fixFields(c, ['propertyLine', 'notes'])) await store.setJSON(b.key, c).catch(() => {});
       if (c) items.push(c);
     }
     items.sort((a, b) => (b.updatedAt || 0) - (a.updatedAt || 0));

@@ -1,5 +1,6 @@
 import { getStore } from '@netlify/blobs';
 import { createHash } from 'node:crypto';
+import { fixFields } from '../lib/rename.mjs';
 
 // Saved payment receipts. Staff only. Kept until deleted.
 const STAFF_CODES = ['1208', '6040'];
@@ -9,7 +10,9 @@ const json = (o, s = 200) => new Response(JSON.stringify(o), { status: s, header
 
 // Same receipt saved twice (e.g. reopened from an emailed link) gets the same id.
 function receiptId(d) {
-  const core = JSON.stringify([d.tenantName, d.propertyAddress, d.dateReceived, d.method, (d.items || []).map(i => [i.label, i.amount]), d.partial || null, d.receivedBy, d.landlordSignedAt || 0, d.tenantSignedAt || 0]);
+  // Address is hashed in its pre-rename form so a receipt keeps the same id after Troy Ave -> Thunderwolf Dr.
+  const addr = String(d.propertyAddress || '').replace(/Thunderwolf Dr/gi, 'Troy Ave');
+  const core = JSON.stringify([d.tenantName, addr, d.dateReceived, d.method, (d.items || []).map(i => [i.label, i.amount]), d.partial || null, d.receivedBy, d.landlordSignedAt || 0, d.tenantSignedAt || 0]);
   return 'r' + createHash('sha256').update(core).digest('hex').slice(0, 20);
 }
 function summary(d, id) {
@@ -29,13 +32,20 @@ export default async (req) => {
     const id = url.searchParams.get('id');
     if (id) {
       const d = await store.get(id, { type: 'json' }).catch(() => null);
+      if (d && fixFields(d, ['propertyAddress'])) { const m0 = await store.getMetadata(id).catch(() => null); await store.setJSON(id, d, { metadata: { ...summary(d, id), savedAt: (m0 && m0.metadata && m0.metadata.savedAt) || Date.now() } }).catch(() => {}); }
       return d ? json(d) : json({ error: 'not found' }, 404);
     }
     const { blobs } = await store.list();
     const items = [];
     for (const b of blobs) {
       const m = await store.getMetadata(b.key).catch(() => null);
-      if (m && m.metadata && m.metadata.id) items.push(m.metadata);
+      if (m && m.metadata && m.metadata.id) {
+        if (fixFields(m.metadata, ['property'])) {
+          const d = await store.get(b.key, { type: 'json' }).catch(() => null);
+          if (d) { fixFields(d, ['propertyAddress']); const meta = { ...summary(d, m.metadata.id), savedAt: m.metadata.savedAt }; await store.setJSON(b.key, d, { metadata: meta }).catch(() => {}); items.push(meta); continue; }
+        }
+        items.push(m.metadata);
+      }
     }
     items.sort((a, b) => (b.dateReceived || '').localeCompare(a.dateReceived || '') || (b.savedAt || 0) - (a.savedAt || 0));
     return json({ items });
@@ -49,6 +59,7 @@ export default async (req) => {
     if (body.action === 'save') {
       const d = body.receipt;
       if (!d || typeof d !== 'object' || !Array.isArray(d.items)) return json({ error: 'bad receipt' }, 400);
+      fixFields(d, ['propertyAddress']);
       const id = receiptId(d);
       const existing = await store.getMetadata(id).catch(() => null);
       const meta = summary(d, id);

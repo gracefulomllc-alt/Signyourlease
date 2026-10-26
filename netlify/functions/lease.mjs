@@ -1,6 +1,7 @@
 import { getStore } from '@netlify/blobs';
 import { randomBytes } from 'node:crypto';
 import { ARCHIVE_STORE, archiveIfComplete } from '../lib/archive-lib.mjs';
+import { fixFields } from '../lib/rename.mjs';
 
 const EXPIRY_DAYS = 30;
 const MAX_BYTES = 6 * 1024 * 1024; // 6 MB ceiling to keep photos sane
@@ -71,7 +72,16 @@ export default async (req, context) => {
       try { await store.delete(id); } catch (e) {}
       return new Response(JSON.stringify({ error: 'expired' }), { status: 410, headers: { ...cors, 'Content-Type': 'application/json' } });
     }
-    return new Response(entry.data, { status: 200, headers: { ...cors, 'Content-Type': 'text/plain' } });
+    let text = entry.data;
+    // Street renamed (Troy Ave -> Thunderwolf Dr): update leases nobody has signed yet. Signed ones stay as signed.
+    try {
+      const d = JSON.parse(text);
+      if (!d.tenantSignerName && !d.landlordSignerName && fixFields(d, ['propertyAddress', 'unitLabel'])) {
+        text = JSON.stringify(d);
+        await store.set(id, text, { metadata: entry.metadata || {} });
+      }
+    } catch (e) { /* leave as is */ }
+    return new Response(text, { status: 200, headers: { ...cors, 'Content-Type': 'text/plain' } });
   }
 
   return new Response(JSON.stringify({ error: 'method not allowed' }), { status: 405, headers: { ...cors, 'Content-Type': 'application/json' } });
