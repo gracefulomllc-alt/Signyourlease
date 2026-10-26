@@ -1881,9 +1881,16 @@ ${steps(0, LL_STEPS)}
             <div class="field"><label>Rent due day of month</label><input type="number" id="f-dueday" min="1" max="28" value="1"></div>
             <div class="field full">
               <label style="display:flex;align-items:center;gap:0.5rem;font-size:0.875rem;">
-                <input type="checkbox" id="f-prorate" style="width:auto;"> Prorate first month's rent (auto-calculated from move-in date)
+                <input type="checkbox" id="f-prorate" style="width:auto;"> Prorate first month's rent
               </label>
-              <p class="hint" id="prorate-preview" style="display:none;"></p>
+              <div id="prorate-opts" style="display:none;margin-top:0.6rem;">
+                <div class="field-grid">
+                  <div class="field"><label>Figure it on</label><select id="f-prorate-basis"><option value="30">A 30-day month</option><option value="actual">Actual days in that month</option></select></div>
+                  <div class="field"><label>Prorated rent (you can change it)</label><input type="number" id="f-prorate-amount" min="0" step="0.01"></div>
+                </div>
+                <p class="hint" id="prorate-preview" style="margin:0.25rem 0 0;"></p>
+                <button type="button" class="btn btn-ghost" id="prorate-reset" style="display:none;padding:0.35rem 0.8rem;font-size:0.82rem;margin-top:0.4rem;">Use the calculated amount</button>
+              </div>
             </div>
           </div>
           <label style="display:flex;align-items:center;gap:0.5rem;font-size:0.875rem;margin-top:0.25rem;">
@@ -2027,32 +2034,53 @@ ${steps(0, LL_STEPS)}
       document.getElementById('petrent-fields').style.display = e.target.checked ? '' : 'none';
       updatePetRentHint();
     });
-    function prorateCalc() {
+    window.__prorateCustom = false;
+    function prorateBase() {
       const rent = parseFloat(document.getElementById('f-rent').value) || 0;
       const start = document.getElementById('f-start').value;
       if (!rent || !start) return null;
       const dt = new Date(start + 'T12:00:00');
-      const daysInMonth = new Date(dt.getFullYear(), dt.getMonth() + 1, 0).getDate();
-      const remaining = daysInMonth - dt.getDate() + 1;
-      if (remaining >= daysInMonth) return null; // moving in on the 1st: no proration
-      const amount = Math.round((rent / daysInMonth) * remaining * 100) / 100;
-      return { amount, remaining, daysInMonth, periodEnd: new Date(dt.getFullYear(), dt.getMonth() + 1, 0).toISOString().slice(0,10) };
+      const actualDays = new Date(dt.getFullYear(), dt.getMonth() + 1, 0).getDate();
+      if (dt.getDate() === 1) return null; // moving in on the 1st: no proration
+      const basisSel = document.getElementById('f-prorate-basis');
+      const basis = basisSel && basisSel.value === 'actual' ? 'actual' : '30';
+      const daysInMonth = basis === '30' ? 30 : actualDays;
+      const remaining = basis === '30' ? Math.max(1, 30 - dt.getDate() + 1) : actualDays - dt.getDate() + 1;
+      const calcAmount = Math.round((rent / daysInMonth) * remaining * 100) / 100;
+      return { calcAmount, remaining, daysInMonth, basis, periodEnd: new Date(dt.getFullYear(), dt.getMonth() + 1, 0).toISOString().slice(0,10) };
+    }
+    function prorateCalc() {
+      const b = prorateBase();
+      if (!b) return null;
+      const field = document.getElementById('f-prorate-amount');
+      const typed = field ? parseFloat(field.value) : NaN;
+      const custom = !!(window.__prorateCustom && !isNaN(typed) && Math.abs(typed - b.calcAmount) > 0.004);
+      const out = { amount: custom ? Math.round(typed * 100) / 100 : b.calcAmount, remaining: b.remaining, daysInMonth: b.daysInMonth, periodEnd: b.periodEnd, basis: b.basis, calcAmount: b.calcAmount };
+      if (custom) out.custom = true;
+      return out;
     }
     function refreshProrate() {
       const box = document.getElementById('f-prorate');
       const prev = document.getElementById('prorate-preview');
+      const opts = document.getElementById('prorate-opts');
       if (!box || !prev) return;
-      const p = box.checked ? prorateCalc() : null;
-      if (box.checked && p) {
-        prev.style.display = '';
-        prev.textContent = 'Prorated first month: ' + fmtMoney(p.amount) + ' (' + p.remaining + ' of ' + p.daysInMonth + ' days). Full rent starts the 1st of the following month.';
-      } else if (box.checked) {
-        prev.style.display = '';
-        prev.textContent = 'Enter rent and a start date after the 1st to calculate proration.';
-      } else {
-        prev.style.display = 'none';
-      }
+      opts.style.display = box.checked ? '' : 'none';
+      if (!box.checked) return;
+      const b = prorateBase();
+      const field = document.getElementById('f-prorate-amount');
+      const reset = document.getElementById('prorate-reset');
+      if (!b) { prev.textContent = 'Enter the rent and a move-in date after the 1st to figure the prorated rent.'; if (!window.__prorateCustom) field.value = ''; reset.style.display = 'none'; return; }
+      if (!window.__prorateCustom) field.value = b.calcAmount.toFixed(2);
+      const p = prorateCalc();
+      const how = b.basis === '30' ? 'rent ÷ 30 × ' + b.remaining + ' days' : 'rent ÷ ' + b.daysInMonth + ' × ' + b.remaining + ' days';
+      prev.textContent = p.custom
+        ? 'You set the prorated rent to ' + fmtMoney(p.amount) + '. The calculated amount was ' + fmtMoney(b.calcAmount) + ' (' + how + '). Full rent starts the 1st of next month.'
+        : 'Calculated: ' + fmtMoney(b.calcAmount) + ' (' + how + '). Change the amount above if you are giving a deal. Full rent starts the 1st of next month.';
+      reset.style.display = p.custom ? '' : 'none';
     }
+    document.getElementById('f-prorate-amount').addEventListener('input', () => { window.__prorateCustom = true; refreshProrate(); });
+    document.getElementById('f-prorate-basis').addEventListener('change', refreshProrate);
+    document.getElementById('prorate-reset').addEventListener('click', () => { window.__prorateCustom = false; refreshProrate(); });
     const radonBox = document.getElementById('f-radonknown');
     if (radonBox) radonBox.addEventListener('change', () => {
       document.getElementById('radon-info-wrap').style.display = radonBox.checked ? '' : 'none';
@@ -2312,6 +2340,12 @@ ${steps(0, LL_STEPS)}
     setVal('f-additional', d.additional);
     setVal('f-occupants', d.occupants);
     setChk('f-prorate', d.prorateFirst);
+    if (d.prorate) {
+      const bs = byId('f-prorate-basis'); if (bs) bs.value = d.prorate.basis === 'actual' || (!d.prorate.basis && d.prorate.daysInMonth !== 30) ? 'actual' : '30';
+      window.__prorateCustom = !!d.prorate.custom;
+      if (d.prorate.custom) setVal('f-prorate-amount', String(d.prorate.amount));
+      const pf = byId('f-prorate'); if (pf) pf.dispatchEvent(new Event('change'));
+    }
   }
 
   // ---------- PRE-SEND CHECK ----------
@@ -2431,7 +2465,7 @@ ${steps(1, LL_STEPS)}
         ${row('Landlord', esc(d.entity || '—'))}
         ${row('Term', d.termType === 'mtm' ? 'Month-to-month from ' + fmtDate(d.startDate) : fmtDate(d.startDate) + ' to ' + fmtDate(d.endDate))}
         ${row('Monthly rent', fmtMoney(rent) + ', due the ' + (parseInt(d.dueDay, 10) || 1) + ordinalSuffix(parseInt(d.dueDay, 10) || 1) + (petTotal ? ' &middot; plus ' + fmtMoney(petTotal) + ' pet rent (a separate charge)' : ''))}
-        ${row('First month', fmtMoney(firstMonth) + (d.prorateFirst && d.prorate && d.prorate.amount ? ' (prorated, ' + d.prorate.remaining + ' of ' + d.prorate.daysInMonth + ' days)' : ''))}
+        ${row('First month', fmtMoney(firstMonth) + (d.prorateFirst && d.prorate && d.prorate.amount ? (d.prorate.custom ? ' (prorated, your price; calculated was ' + fmtMoney(d.prorate.calcAmount) + ')' : ' (prorated, ' + d.prorate.remaining + (d.prorate.basis === '30' ? ' days on a 30-day month)' : ' of ' + d.prorate.daysInMonth + ' days)')) : ''))}
         ${row('Deposits', deposits)}
         ${row('Deposit due at signing', fmtMoney(depAtSigning))}
         ${row('Utilities', d.utilMode === 'included' ? 'Included (flat fee in rent)' : d.utilMode === 'landlord' ? 'Landlord pays' : 'Tenant pays')}
@@ -2592,7 +2626,7 @@ ${steps(1, LL_STEPS)}
       addendaHtml += `
       <h2>Addendum ${k}: Prorated First Month</h2>
       ${P(`This Addendum is part of the Lease between ${esc(landlordName)} and ${esc(tenants || 'Tenant')} for ${esc(propLine)}.`)}
-      ${P(`Because the Start Date (${fmtDate(d.startDate)}) is not the first day of the month, Rent for the first partial month, from ${fmtDate(d.startDate)} through ${fmtDate(d.prorate.periodEnd)} (${d.prorate.remaining} of ${d.prorate.daysInMonth} days), is ${fmtMoney(d.prorate.amount)}, calculated as the monthly Rent of ${rentText} divided by ${d.prorate.daysInMonth} days and multiplied by ${d.prorate.remaining} days. This prorated amount is Rent and is due on or before the Start Date. Full monthly Rent is due beginning on the first day of the following month and on the regular due date each month after that.`)}`;
+      ${P(`Because the Start Date (${fmtDate(d.startDate)}) is not the first day of the month, Rent for the first partial month, from ${fmtDate(d.startDate)} through ${fmtDate(d.prorate.periodEnd)} (${d.prorate.basis === '30' ? d.prorate.remaining + ' days, figured on a 30-day month' : d.prorate.remaining + ' of ' + d.prorate.daysInMonth + ' days'}), ${d.prorate.custom ? `is ${fmtMoney(d.prorate.amount)}, as agreed by the Landlord and the Tenant` : d.prorate.basis === '30' ? `is ${fmtMoney(d.prorate.amount)}, calculated on a 30-day month as the monthly Rent of ${rentText} divided by 30 days and multiplied by ${d.prorate.remaining} days` : `is ${fmtMoney(d.prorate.amount)}, calculated as the monthly Rent of ${rentText} divided by ${d.prorate.daysInMonth} days and multiplied by ${d.prorate.remaining} days`}. This prorated amount is Rent and is due on or before the Start Date. Full monthly Rent is due beginning on the first day of the following month and on the regular due date each month after that.`)}`;
     }
     if (planDeps.length) {
       const k = addendumKey('Security Deposit Installment Agreement');
