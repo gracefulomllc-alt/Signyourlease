@@ -10,7 +10,7 @@ const json = (o, s = 200, extra = {}) => new Response(JSON.stringify(o), { statu
 
 const P = (id, address, city, zip, extra = {}) => ({ id, address, unit: '', city, state: 'CO', zip, type: 'House', beds: '', baths: '', rent: '', rentNote: '', available: false, availableNote: '', show: true, applyUrl: '', notes: '', ...extra });
 const SEED = [
-  P('troy411', '411 Troy Ave', 'Pueblo', '81001', { type: 'Studio apartments', beds: 'Studio', baths: '1', rent: '805', rentNote: 'per month, all utilities included', available: true, availableNote: 'Limited space available', applyUrl: INNAGO, notes: 'Renovated studios. Housing vouchers accepted. Storage units available.' }),
+  P('troy411', '411 Thunderwolf Dr', 'Pueblo', '81001', { type: 'Studio apartments', beds: 'Studio', baths: '1', rent: '805', rentNote: 'per month, all utilities included', available: true, availableNote: 'Limited space available', applyUrl: INNAGO, notes: 'Renovated studios. Housing vouchers accepted. Storage units available.' }),
   P('e4th2043a', '2043 E 4th St', 'Pueblo', '81001', { unit: 'Unit A', type: 'Duplex unit' }),
   P('e4th2043b', '2043 E 4th St', 'Pueblo', '81001', { unit: 'Unit B', type: 'Duplex unit' }),
   P('e4th2045', '2045 E 4th St', 'Pueblo', '81001'),
@@ -82,7 +82,12 @@ async function withCoords(items, store) {
 
 async function load(store) {
   const saved = await store.get('items', { type: 'json' }).catch(() => null);
-  return saved && Array.isArray(saved.items) ? saved.items : SEED.map(clean);
+  const items = saved && Array.isArray(saved.items) ? saved.items : SEED.map(clean);
+  // Oct 2026: Troy Ave was renamed Thunderwolf Dr (same number and ZIP). Same building, so the pin stays where it is.
+  let moved = false;
+  for (const it of items) if (/^411 Troy Ave$/i.test(String(it.address || '').trim())) { it.address = '411 Thunderwolf Dr'; moved = true; }
+  if (moved && saved) await store.setJSON('items', { items, updatedAt: Date.now() }).catch(() => {});
+  return items;
 }
 
 export default async (req) => {

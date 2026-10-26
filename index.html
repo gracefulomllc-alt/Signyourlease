@@ -202,7 +202,7 @@
     ];
     const list = base.map(p => ({ ...p, unit: p.unit || '', label: p.street + (p.unit ? ', ' + p.unit : '') + ' — ' + p.cityZip }));
     for (let i = 1; i <= 11; i++) {
-      list.push({ street: '411 Troy Ave', unit: 'Unit ' + i, cityZip: 'Pueblo, Colorado 81001', entity: 'TLDR Enterprise LLC', label: '411 Troy Ave, Unit ' + i + ' — Pueblo, CO 81001' });
+      list.push({ street: '411 Thunderwolf Dr', unit: 'Unit ' + i, cityZip: 'Pueblo, Colorado 81001', entity: 'TLDR Enterprise LLC', label: '411 Thunderwolf Dr (formerly Troy Ave), Unit ' + i + ' — Pueblo, CO 81001' });
     }
     return list;
   })();
@@ -220,7 +220,8 @@
   }
   function propertyIndexFor(choice) {
     if (!choice || !choice.street) return -1;
-    return PROPERTIES.findIndex(p => p.street === choice.street && (p.unit || '') === (choice.unit || ''));
+    const street = choice.street === '411 Troy Ave' ? '411 Thunderwolf Dr' : choice.street;
+    return PROPERTIES.findIndex(p => p.street === street && (p.unit || '') === (choice.unit || ''));
   }
 
   const ENTITIES = (() => {
@@ -1615,7 +1616,7 @@
       document.getElementById('in-unitsel-wrap').style.display = 'none'; unitSel.innerHTML = '';
       if (!city || city === '__unsure__') { document.getElementById('in-prop-wrap').style.display = 'none'; propSel.innerHTML = ''; return; }
       const streets = Array.from(new Set(PROPERTIES.filter(p => propCity(p) === city).map(p => p.street)));
-      propSel.innerHTML = '<option value="">Choose the address</option>' + streets.map(s => `<option>${esc(s)}</option>`).join('') + '<option value="__unsure__">I\'m not sure</option>';
+      propSel.innerHTML = '<option value="">Choose the address</option>' + streets.map(s => `<option value="${esc(s)}">${esc(s)}${s === '411 Thunderwolf Dr' ? ' (formerly Troy Ave)' : ''}</option>`).join('') + '<option value="__unsure__">I\'m not sure</option>';
       document.getElementById('in-prop-wrap').style.display = '';
     });
     propSel.addEventListener('change', () => {
@@ -1911,7 +1912,7 @@ ${steps(0, LL_STEPS)}
           <div class="field full"><label>Utilities arrangement</label>
             <select id="f-utilmode">
               <option value="tenant">Tenant pays all utilities</option>
-              <option value="included">Utilities included in Rent — landlord furnishes utilities (Troy Ave style)</option>
+              <option value="included">Utilities included in Rent — landlord furnishes utilities (Thunderwolf Dr studios)</option>
               <option value="landlord">Landlord pays all utilities (no separate fee)</option>
             </select>
             <p class="hint">"Utilities included" makes one all-in Rent (for example $805) that covers utilities, so the whole amount counts as Rent if it goes unpaid. A separately listed utility fee would not count as Rent under Colorado law.</p>
@@ -2324,12 +2325,12 @@ ${steps(0, LL_STEPS)}
     const today = new Date(); today.setHours(0, 0, 0, 0);
     const rent = parseFloat(d.rent) || 0;
     const start = parseISO(d.startDate), end = parseISO(d.endDate);
-    const isTroy = /troy/i.test(d.propertyAddress || '');
+    const isTroy = /troy|thunderwolf/i.test(d.propertyAddress || '');
 
     // Who / where
     if (!d.entity) errors.push('The landlord entity is missing.');
     if (!d.propertyAddress) errors.push('The property address is missing.');
-    if (isTroy && !d.unitLabel) warns.push('No unit number. 411 Troy Ave has several units, so add which one.');
+    if (isTroy && !d.unitLabel) warns.push('No unit number. 411 Thunderwolf Dr has several units, so add which one.');
     if (/2043/.test(d.propertyAddress || '') && !d.unitLabel) warns.push('No unit. 2043 East 4th Street has Unit A and Unit B, so add which one.');
     if (!d.landlordAddr) warns.push('The landlord notice address is blank. Colorado leases must include it.');
     if (!d.tenantName) errors.push('The tenant name is missing.');
@@ -2369,7 +2370,7 @@ ${steps(0, LL_STEPS)}
       if (d.prorateFirst && start.getDate() === 1) notes.push('Move-in is on the 1st, so no proration applies.');
       if (d.prorateFirst && start.getDate() !== 1 && !(d.prorate && d.prorate.amount)) errors.push('The proration couldn\'t be calculated. Check the rent and start date.');
     }
-    if (isTroy && d.utilMode !== 'included') warns.push('Troy Ave studios include utilities, but Utilities is set to "' + (d.utilMode === 'landlord' ? 'Landlord pays' : 'Tenant pays') + '".');
+    if (isTroy && d.utilMode !== 'included') warns.push('The Thunderwolf Dr studios include utilities, but Utilities is set to "' + (d.utilMode === 'landlord' ? 'Landlord pays' : 'Tenant pays') + '".');
     if (d.lateFee && !/(seven|\b7\b)/i.test(d.lateFee)) warns.push('The late fee text doesn\'t mention the 7-day grace period Colorado requires.');
 
     const refundableTotal = (d.deposits || []).filter(dep => dep.status !== 'nonrefundable').reduce((s, dep) => s + (parseFloat(dep.amount) || 0), 0);
