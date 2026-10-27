@@ -1604,7 +1604,17 @@
         <div class="field"><label><span class="qn">4</span> What city is the place in?</label><select id="in-city"><option value="">Tap to choose a city</option>${PROPERTY_CITIES.map(c => `<option>${esc(c)}</option>`).join('')}<option value="__unsure__">I'm not sure</option></select></div>
         <div class="field" id="in-prop-wrap" style="display:none;"><label>Which address?</label><select id="in-prop"></select></div>
         <div class="field" id="in-unitsel-wrap" style="display:none;"><label>Which unit number?</label><select id="in-unitsel"></select></div>
-        <div class="field"><label><span class="qn">5</span> Anything else? <span style="font-weight:normal;">(you can skip this)</span></label><textarea id="in-note" rows="2" placeholder="When you want to move in, pets, questions"></textarea></div>
+        <div class="field"><label><span class="qn">5</span> Is another adult going on the lease with you?</label>
+          <p class="hint" style="margin:0 0 0.5rem;">Only adults who will sign the lease and be responsible for the rent. Children and others who live there but don't sign go in the next question.</p>
+          <div class="field-grid" id="in-t2-fields" style="display:none;">
+            <div class="field full"><label>Their full name</label><input type="text" id="in-name2" placeholder="First and last name"></div>
+            <div class="field"><label>Their cell phone</label><input type="tel" id="in-phone2" placeholder="(719) 555-0100"></div>
+            <div class="field"><label>Their email <span style="font-weight:normal;">(if they have one)</span></label><input type="email" id="in-email2" placeholder="name@email.com"></div>
+          </div>
+          <button type="button" class="btn btn-ghost" id="in-toggle-t2" style="padding:0.6rem 0.9rem;">+ Add another adult</button>
+        </div>
+        <div class="field"><label><span class="qn">6</span> Anyone else living there who won't sign? <span style="font-weight:normal;">(you can skip this)</span></label><input type="text" id="in-occupants" placeholder="e.g. Maria Doe (daughter), age 9"><p class="hint">Children and other people who will live there but aren't signing the lease.</p></div>
+        <div class="field"><label><span class="qn">7</span> Anything else? <span style="font-weight:normal;">(you can skip this)</span></label><textarea id="in-note" rows="2" placeholder="When you want to move in, pets, questions"></textarea></div>
         <div class="banner" style="background:#E8ECF5;border:1px solid #C9D2E6;color:#2A3756;"><span><strong>Remember this:</strong> to come back and sign your lease, you will type your name and the <strong>last 4 numbers of your cell phone</strong>.</span></div>
         <p class="error-text" id="in-error" style="display:none;font-size:1.05rem;"></p>
         <div class="btn-row"><button class="btn btn-primary" id="in-submit" style="width:100%;font-size:1.15rem;padding:1rem;">Send my info</button></div>
@@ -1626,13 +1636,28 @@
         document.getElementById('in-unitsel-wrap').style.display = '';
       } else { unitSel.innerHTML = ''; document.getElementById('in-unitsel-wrap').style.display = 'none'; }
     });
+    document.getElementById('in-toggle-t2').addEventListener('click', () => {
+      const wrap = document.getElementById('in-t2-fields');
+      const btn = document.getElementById('in-toggle-t2');
+      const showing = wrap.style.display !== 'none';
+      wrap.style.display = showing ? 'none' : '';
+      btn.textContent = showing ? '+ Add another adult' : '− No, it\'s just me';
+      if (showing) { document.getElementById('in-name2').value = ''; document.getElementById('in-phone2').value = ''; document.getElementById('in-email2').value = ''; }
+      else document.getElementById('in-name2').focus();
+    });
     document.getElementById('in-submit').addEventListener('click', async function () {
       const name = document.getElementById('in-name').value.trim();
       const phoneVal = document.getElementById('in-phone').value.trim();
       const err = document.getElementById('in-error');
+      const t2Open = document.getElementById('in-t2-fields').style.display !== 'none';
+      const name2 = t2Open ? document.getElementById('in-name2').value.trim() : '';
+      const phone2 = t2Open ? document.getElementById('in-phone2').value.trim() : '';
+      const email2 = t2Open ? document.getElementById('in-email2').value.trim() : '';
       if (!name) { err.textContent = 'Enter your full legal name.'; err.style.display = ''; return; }
       if (phoneVal.replace(/\D/g, '').length < 4) { err.textContent = 'Enter your cell number — its last 4 digits are your access code.'; err.style.display = ''; return; }
       if (!document.getElementById('in-city').value) { err.textContent = 'Choose the city the place is in, or "I\'m not sure".'; err.style.display = ''; return; }
+      if (t2Open && !name2) { err.textContent = 'Enter the other adult\'s full name, or tap "No, it\'s just me".'; err.style.display = ''; return; }
+      if (t2Open && phone2.replace(/\D/g, '').length && phone2.replace(/\D/g, '').length < 10) { err.textContent = 'Check the other adult\'s phone number — it looks incomplete.'; err.style.display = ''; return; }
       err.style.display = 'none';
       this.disabled = true; this.textContent = 'Submitting…';
       try {
@@ -1640,6 +1665,8 @@
           body: JSON.stringify({ action: 'create', name,
             phone: phoneVal,
             email: document.getElementById('in-email').value.trim(),
+            name2, phone2, email2,
+            occupants: document.getElementById('in-occupants').value.trim(),
             unitInterest: intakeChoiceText(),
             propertyChoice: intakeChoice(),
             note: document.getElementById('in-note').value.trim() }) });
@@ -2248,6 +2275,14 @@ ${steps(0, LL_STEPS)}
       const p = window.__intakePrefill; window.__intakePrefill = null;
       const set = (fid, v) => { const el = document.getElementById(fid); if (el && v) el.value = v; };
       set('f-tenant', p.name); set('f-phone', p.phone); set('f-email', p.email);
+      set('f-occupants', p.occupants);
+      if (p.name2) {
+        const t2wrap = document.getElementById('tenant2-fields');
+        const t2btn = document.getElementById('toggle-tenant2');
+        if (t2wrap) t2wrap.style.display = '';
+        if (t2btn) t2btn.textContent = '− Remove second tenant';
+        set('f-tenant2', p.name2); set('f-phone2', p.phone2); set('f-email2', p.email2);
+      }
       const ps = document.getElementById('f-property-select');
       if (ps && p.propIndex >= 0) { ps.value = String(p.propIndex); ps.dispatchEvent(new Event('change')); }
     }
@@ -2277,8 +2312,10 @@ ${steps(0, LL_STEPS)}
             ${pending.map((it, i) => `
               <div style="display:flex;gap:0.5rem;align-items:stretch;">
                 <button class="btn btn-ghost" style="flex:1;text-align:left;display:block;padding:0.8rem 1rem;" onclick="startFromIntake(${i})">
-                  <strong style="display:block;">${esc(it.name)}</strong>
+                  <strong style="display:block;">${esc(it.name)}${it.name2 ? ' &amp; ' + esc(it.name2) : ''}</strong>
                   <span style="font-size:0.82rem;font-weight:normal;opacity:.85;">${esc(it.phone || 'no phone')}${it.email ? ' · ' + esc(it.email) : ''}</span>
+                  ${it.name2 ? `<span style="display:block;font-size:0.82rem;font-weight:normal;opacity:.85;">2nd: ${esc(it.phone2 || 'no phone')}${it.email2 ? ' · ' + esc(it.email2) : ''}</span>` : ''}
+                  ${it.occupants ? `<span style="display:block;font-size:0.82rem;font-weight:normal;margin-top:0.2rem;">Also living there: ${esc(it.occupants)}</span>` : ''}
                   ${it.unitInterest || it.note ? `<span style="display:block;font-size:0.82rem;font-weight:normal;margin-top:0.2rem;">${esc(it.unitInterest || '')}${it.note ? (it.unitInterest ? ' — ' : '') + esc(it.note) : ''}</span>` : ''}
                 </button>
                 <button class="btn btn-ghost" title="Remove" style="padding:0 0.9rem;" onclick="removeIntake('${it.id}')">&times;</button>
@@ -2298,7 +2335,9 @@ ${steps(0, LL_STEPS)}
     const it = (window.__pendingCache || [])[i];
     if (!it) { startBlankLease(); return; }
     window.__intakeId = it.id; window.__intakeName = it.name; window.__intakeUnit = it.unitInterest || '';
-    window.__intakePrefill = { name: it.name, phone: it.phone, email: it.email, propIndex: propertyIndexFor(it.propertyChoice) };
+    window.__intakePrefill = { name: it.name, phone: it.phone, email: it.email,
+      name2: it.name2 || '', phone2: it.phone2 || '', email2: it.email2 || '', occupants: it.occupants || '',
+      propIndex: propertyIndexFor(it.propertyChoice) };
     window.__restoreDraft = false;
     renderForm(); window.scrollTo(0, 0);
   }
