@@ -1375,7 +1375,7 @@
             <div style="display:flex;justify-content:space-between;align-items:center;gap:0.75rem;padding:0.7rem 0;border-bottom:1px solid #F1E4D8;flex-wrap:wrap;">
               <div style="min-width:0;flex:1;">
                 <strong>${esc(it.address)}${it.unit ? ', ' + esc(it.unit) : ''}</strong>
-                <span class="hint" style="display:block;margin:0;">${esc(it.type || '')}${it.rent ? ' &middot; $' + esc(it.rent) : ''}${it.show ? '' : ' &middot; hidden from website'}${it.lat == null ? ' &middot; pin location pending' : ''}</span>
+                <span class="hint" style="display:block;margin:0;">${esc(it.type || '')}${it.rent ? ' &middot; $' + esc(it.rent) : ''}${it.photoCount ? ' &middot; ' + it.photoCount + ' photo' + (it.photoCount === 1 ? '' : 's') : ' &middot; no photos'}${it.show ? '' : ' &middot; hidden from website'}${it.lat == null ? ' &middot; pin location pending' : ''}</span>
               </div>
               <button class="btn ${it.available ? 'btn-primary' : 'btn-ghost'}" style="padding:0.45rem 0.9rem;font-size:0.85rem;min-width:118px;" onclick="toggleAvail(${i}, this)">${it.available ? 'Available' : 'Not available'}</button>
               <button class="btn btn-ghost" style="padding:0.45rem 0.9rem;font-size:0.85rem;" onclick="editListing(${i})">Edit</button>
@@ -1401,8 +1401,100 @@
     try { await saveListings(btn); drawListings(esc(it.address) + (it.unit ? ', ' + esc(it.unit) : '') + ' is now <strong>' + (it.available ? 'available' : 'not available') + '</strong> on the website.'); }
     catch (e) { it.available = !it.available; drawListings(); alert('Could not save. Try again.'); }
   };
+  async function urlToDataUrl(u) {
+    try {
+      const r = await fetch(u);
+      if (!r.ok) return null;
+      const blob = await r.blob();
+      return await new Promise((res, rej) => {
+        const fr = new FileReader();
+        fr.onload = () => res(fr.result);
+        fr.onerror = () => rej(new Error('read failed'));
+        fr.readAsDataURL(blob);
+      });
+    } catch (e) { return null; }
+  }
+
+  // Listing photos. Held as data URLs while editing, pushed to /api/photos on
+  // every add or remove so they survive even if the landlord never presses Save.
+  const MAX_LISTING_PHOTOS = 8;
+  async function wireListingPhotos(listingId) {
+    const grid = document.getElementById('pl-photos');
+    const wrap = document.getElementById('pl-photo-wrap');
+    const status = document.getElementById('pl-photo-status');
+    if (!grid || !wrap) return;
+    window.__listingPhotos = [];
+
+    const picker = () => `<label class="btn btn-primary upl-btn">Take a photo<input type="file" accept="image/*" capture="environment" id="plph-input" class="upl-input"></label>
+      <label class="btn btn-ghost upl-btn">Choose saved photos<input type="file" accept="image/*" multiple id="plph-input2" class="upl-input"></label>`;
+
+    function draw() {
+      const list = window.__listingPhotos;
+      grid.innerHTML = list.length ? list.map((src, n) => `
+        <div style="position:relative;">
+          <img src="${src}" alt="Photo ${n + 1}" style="width:100%;aspect-ratio:4/3;object-fit:cover;border-radius:6px;border:1px solid var(--line);">
+          ${n === 0 ? '<span style="position:absolute;top:4px;left:4px;background:rgba(0,0,0,.72);color:#fff;font-size:0.68rem;padding:2px 6px;border-radius:4px;">Main</span>' : ''}
+          <button type="button" title="Remove" onclick="removeListingPhoto(${n})" style="position:absolute;top:4px;right:4px;background:rgba(0,0,0,.72);color:#fff;border:0;border-radius:50%;width:24px;height:24px;font-size:1rem;line-height:1;cursor:pointer;">&times;</button>
+          ${n > 0 ? `<button type="button" title="Make this the main photo" onclick="promoteListingPhoto(${n})" style="position:absolute;bottom:4px;left:4px;background:rgba(0,0,0,.72);color:#fff;border:0;border-radius:4px;font-size:0.68rem;padding:2px 6px;cursor:pointer;">Make main</button>` : ''}
+        </div>`).join('') : '<p class="hint" style="grid-column:1/-1;margin:0;">No photos yet.</p>';
+      wrap.innerHTML = list.length >= MAX_LISTING_PHOTOS ? '<p class="hint" style="margin:0;">That\'s the maximum of 8. Remove one to add another.</p>' : picker();
+    }
+
+    async function push() {
+      status.textContent = 'Saving photos…';
+      try {
+        const r = await fetch('/api/photos', { method: 'POST', headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ key: staffKey(), id: listingId, photos: window.__listingPhotos }) });
+        if (!r.ok) throw new Error((await r.json().catch(() => ({}))).error || 'save failed');
+        status.textContent = window.__listingPhotos.length ? 'Photos saved ✓' : 'Photos removed ✓';
+      } catch (e) {
+        status.textContent = 'Could not save the photos — check your connection and try again.';
+      }
+    }
+    window.__pushListingPhotos = push;
+
+    window.removeListingPhoto = async function (n) {
+      window.__listingPhotos.splice(n, 1); draw(); await push();
+    };
+    window.promoteListingPhoto = async function (n) {
+      const [p] = window.__listingPhotos.splice(n, 1); window.__listingPhotos.unshift(p); draw(); await push();
+    };
+
+    wrap.addEventListener('change', async (e) => {
+      if (!e.target || !String(e.target.id || '').startsWith('plph-input')) return;
+      const files = Array.from(e.target.files || []);
+      if (!files.length) return;
+      const room = MAX_LISTING_PHOTOS - window.__listingPhotos.length;
+      const take = files.slice(0, room);
+      wrap.innerHTML = '<p class="hint" style="margin:0;">Processing ' + take.length + ' photo' + (take.length === 1 ? '' : 's') + '&hellip;</p>';
+      let failed = 0;
+      for (const f of take) {
+        try { window.__listingPhotos.push(await compressImage(f)); } catch (err) { failed++; }
+      }
+      draw();
+      await push();
+      if (failed) status.textContent = failed + ' photo' + (failed === 1 ? '' : 's') + ' could not be read. The rest saved.';
+      else if (files.length > room) status.textContent = 'Saved ' + take.length + '. The other ' + (files.length - room) + ' went over the 8-photo limit.';
+    });
+
+    grid.innerHTML = '<p class="hint" style="grid-column:1/-1;margin:0;">Loading photos&hellip;</p>';
+    wrap.innerHTML = '';
+    try {
+      const r = await fetch('/api/photos?id=' + encodeURIComponent(listingId));
+      const urls = r.ok ? ((await r.json()).photos || []) : [];
+      // Keep everything as data URLs: a later add or remove re-posts the whole
+      // set, and the server only accepts images, not links back to itself.
+      window.__listingPhotos = (await Promise.all(urls.map(urlToDataUrl))).filter(Boolean);
+    } catch (e) { window.__listingPhotos = []; }
+    draw();
+    if (status && !window.__listingPhotos.length) status.textContent = '';
+  }
+
   window.editListing = function (i) {
     const it = i >= 0 ? { ...window.__listings[i] } : { id: '', address: '', unit: '', city: 'Pueblo', state: 'CO', zip: '', type: 'House', beds: '', baths: '', rent: '', rentNote: '', available: false, availableNote: '', show: true, applyUrl: '', notes: '' };
+    // Photos attach to a listing id, so a brand-new property needs one before
+    // the first upload. The server keeps any id that looks like this.
+    if (!/^[a-z0-9]{2,40}$/.test(String(it.id || ''))) it.id = Math.random().toString(36).slice(2, 12);
     const f = (id, label, val, type, hint, full) => `<div class="field${full ? ' full' : ''}"><label>${label}</label><input type="${type || 'text'}" id="${id}" value="${esc(val || '')}">${hint ? `<p class="hint">${hint}</p>` : ''}</div>`;
     app.innerHTML = header() + `
       <button class="step-back" onclick="drawListings()">&larr; Property listings</button>
@@ -1421,6 +1513,13 @@
         <label class="checkbox-row"><input type="checkbox" id="pl-avail" ${it.available ? 'checked' : ''}><span><strong>Available</strong> (red pin)</span></label>
         <label class="checkbox-row"><input type="checkbox" id="pl-show" ${it.show !== false ? 'checked' : ''}><span>Show on the website map</span></label>
         </div>
+        <div class="card no-print">
+          <div class="section-label">Photos</div>
+          <p class="hint" style="margin-bottom:0.75rem;">Up to 8. The first one is the main picture on the website. Photos save as soon as you add them &mdash; you don't have to press Save.</p>
+          <div id="pl-photos" style="display:grid;grid-template-columns:repeat(auto-fill,minmax(120px,1fr));gap:0.6rem;"></div>
+          <div class="id-upload" id="pl-photo-wrap" style="margin-top:0.75rem;"></div>
+          <p class="hint" id="pl-photo-status" style="margin-top:0.5rem;"></p>
+        </div>
         <p class="error-text" id="pl-err" style="display:none;"></p>
         <div class="btn-row" style="flex-wrap:wrap;">
           <button class="btn btn-primary" id="pl-save">Save</button>
@@ -1428,6 +1527,7 @@
         </div>
       </div>`;
     const v = (id) => document.getElementById(id).value.trim();
+    wireListingPhotos(it.id);
     document.getElementById('pl-save').addEventListener('click', async function () {
       const next = { ...it, address: v('pl-addr'), unit: v('pl-unit'), type: v('pl-type'), city: v('pl-city'), zip: v('pl-zip'), beds: v('pl-beds'), baths: v('pl-baths'),
         rent: v('pl-rent'), rentNote: v('pl-rentnote'), availableNote: v('pl-availnote'), applyUrl: v('pl-apply'), notes: document.getElementById('pl-notes').value.trim(),

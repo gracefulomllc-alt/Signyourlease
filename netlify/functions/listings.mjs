@@ -80,6 +80,15 @@ async function withCoords(items, store) {
   return changed;
 }
 
+// listingId -> photo count, written by /api/photos. Missing or unreadable means
+// no photos, which is never a reason to fail the listings request.
+async function photoCounts() {
+  try {
+    const idx = await getStore({ name: 'listingphotos', consistency: 'strong' }).get('index', { type: 'json' });
+    return (idx && typeof idx === 'object') ? idx : {};
+  } catch (e) { return {}; }
+}
+
 async function load(store) {
   const saved = await store.get('items', { type: 'json' }).catch(() => null);
   const items = saved && Array.isArray(saved.items) ? saved.items : SEED.map(clean);
@@ -99,10 +108,13 @@ export default async (req) => {
     const staff = STAFF_CODES.includes(String(url.searchParams.get('key') || ''));
     const items = await load(store);
     if (await withCoords(items, store)) await store.setJSON('items', { items, updatedAt: Date.now() }).catch(() => {});
-    if (staff) return json({ items });
+    const photoIndex = await photoCounts();
+    if (staff) return json({ items: items.map(it => ({ ...it, photoCount: photoIndex[it.id] || 0 })) });
     const pub = items.filter(it => it.show).map(it => {
       const o = { ...it };
       if (o.lat == null) { const c = CITY_CENTER[(o.city || '').toLowerCase()]; if (c) { o.lat = c[0]; o.lng = c[1]; o.approx = true; } }
+      const n = photoIndex[o.id] || 0;
+      o.photos = Array.from({ length: n }, (_, i) => `/api/photos?id=${encodeURIComponent(o.id)}&n=${i}`);
       return o;
     });
     return json({ items: pub, contact: { email: 'tldrenterprise@gmail.com', phone: '(719) 359-7502' } }, 200, { 'Cache-Control': 'public, max-age=60' });
@@ -122,7 +134,8 @@ export default async (req) => {
     });
     await withCoords(items, store);
     await store.setJSON('items', { items, updatedAt: Date.now() });
-    return json({ ok: true, items });
+    const counts = await photoCounts();
+    return json({ ok: true, items: items.map(it => ({ ...it, photoCount: counts[it.id] || 0 })) });
   }
   return json({ error: 'method not allowed' }, 405);
 };
