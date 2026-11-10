@@ -61,6 +61,32 @@
   .paper h2 { font-family: 'Playfair Display', serif; font-size: 1.5rem; font-weight: 700; text-align: center; margin: 0 0 1.75rem; }
   .paper h3 { font-size: 1rem; font-weight: 600; margin: 1.5rem 0 0.5rem; }
   .paper p { margin: 0 0 0.9rem; }
+  .rc { position: relative; font-family: 'Inter', system-ui, sans-serif; line-height: 1.5; }
+  .rc-head { display: flex; justify-content: space-between; gap: 1rem; align-items: flex-start; border-top: 4px solid var(--brass); padding-top: 1rem; margin: -0.5rem 0 1.25rem; flex-wrap: wrap; }
+  .rc-owner { font-family: 'Playfair Display', serif; font-size: 1.55rem; font-weight: 700; line-height: 1.2; color: var(--ink); }
+  .rc-sub { font-size: 0.82rem; color: var(--slate); margin-top: 0.15rem; letter-spacing: 0.02em; }
+  .rc-meta { text-align: right; font-size: 0.85rem; }
+  .rc-meta span { color: var(--slate); margin-right: 0.4rem; }
+  .rc-title { font-family: 'Playfair Display', serif; font-size: 1.6rem; font-weight: 700; letter-spacing: 0.12em; color: var(--brass); line-height: 1.1; margin-bottom: 0.3rem; }
+  .rc-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 0.9rem 1.5rem; border-top: 1px solid var(--paper-line); border-bottom: 1px solid var(--paper-line); padding: 1rem 0; margin-bottom: 1.25rem; }
+  @media (max-width: 520px) { .rc-grid { grid-template-columns: 1fr; } .rc-meta { text-align: left; } }
+  .rc-label { font-size: 0.68rem; font-weight: 700; letter-spacing: 0.09em; text-transform: uppercase; color: var(--slate); }
+  .rc-val { font-size: 0.98rem; color: var(--ink); }
+  .rc-tablewrap { position: relative; }
+  .rc-table { width: 100%; border-collapse: collapse; font-size: 0.95rem; }
+  .rc-table th { background: #F2F4F5; font-size: 0.7rem; letter-spacing: 0.09em; text-transform: uppercase; color: var(--slate); text-align: left; padding: 0.55rem 0.7rem; }
+  .rc-table td { padding: 0.6rem 0.7rem; border-bottom: 1px solid var(--paper-line); }
+  .rc-table .r { text-align: right; white-space: nowrap; }
+  .rc-table tfoot td { border-bottom: none; }
+  .rc-total td { font-weight: 700; font-size: 1.05rem; border-top: 2px solid var(--ink); }
+  .rc-bal td { font-weight: 700; color: #b3261e; }
+  .rc-stampwrap { display: flex; justify-content: flex-end; padding: 1rem 1.2rem 1.1rem; }
+  .rc-stamp { transform: rotate(-10deg); border: 3px double currentColor; border-radius: 6px; padding: 0.2rem 0.9rem 0.3rem; text-align: center; font-family: 'Inter', sans-serif; font-weight: 800; font-size: 2rem; letter-spacing: 0.12em; line-height: 1; opacity: 0.82; pointer-events: none; mix-blend-mode: multiply; }
+  .rc-stamp span { display: block; font-size: 0.6rem; letter-spacing: 0.08em; font-weight: 700; margin-top: 0.25rem; text-transform: uppercase; }
+  .rc-paid { color: #1E7A45; }
+  .rc-part { color: #C2570C; font-size: 1.6rem; }
+  .rc-note { font-size: 0.82rem; margin-top: 1rem; }
+  .rc-foot { font-size: 0.78rem; color: var(--slate); text-align: center; border-top: 1px solid var(--paper-line); padding-top: 0.8rem; margin-top: 1.5rem; }
   .sig-block { display: flex; gap: 2.5rem; margin-top: 2.5rem; flex-wrap: wrap; }
   .sig-col { flex: 1; min-width: 220px; }
   .sig-script { font-family: 'Dancing Script', cursive; font-size: 1.75rem; color: var(--ink); min-height: 2.25rem; margin-bottom: 2px; }
@@ -4000,37 +4026,235 @@ ${steps(3, TN_STEPS)}
     });
   }
 
+  // ---------- OFFICIAL RECEIPT (screen + PDF) ----------
+  function normStreet(s) {
+    return String(s || '').toLowerCase().replace(/[.,#]/g, ' ')
+      .replace(/\beast\b/g, 'e').replace(/\bwest\b/g, 'w').replace(/\bnorth\b/g, 'n').replace(/\bsouth\b/g, 's')
+      .replace(/\bstreet\b/g, 'st').replace(/\bavenue\b/g, 'ave').replace(/\bcourt\b/g, 'ct').replace(/\bdrive\b/g, 'dr')
+      .replace(/\blane\b/g, 'ln').replace(/\broad\b/g, 'rd').replace(/\bcircle\b/g, 'cir').replace(/\btroy ave\b/g, 'thunderwolf dr')
+      .replace(/\s+/g, ' ').trim();
+  }
+  function receiptOwner(d) {
+    if (d.entity && !/^landlord$/i.test(d.entity)) return d.entity;
+    const a = normStreet(d.propertyAddress);
+    const hit = PROPERTIES.find(p => { const s = normStreet(p.street); return s && (a === s || a.startsWith(s + ' ') || a.indexOf(s) === 0); });
+    return hit ? hit.entity : 'Landlord';
+  }
+  function receiptStatus(d) {
+    return d.partial && (parseFloat(d.partial.balance) || 0) > 0 ? 'partial' : 'paid';
+  }
+  function receiptRef(d) {
+    // Short reference built from the receipt's own details, so it's stable for the same receipt.
+    const src = [d.tenantName, d.propertyAddress, d.dateReceived, (d.items || []).map(i => i.label + i.amount).join('|')].join('~');
+    let h = 2166136261; for (let i = 0; i < src.length; i++) { h ^= src.charCodeAt(i); h = Math.imul(h, 16777619) >>> 0; }
+    return (String(d.dateReceived || '').replace(/-/g, '').slice(0, 6) || 'R') + '-' + h.toString(36).toUpperCase().slice(0, 5).padStart(5, '0');
+  }
+
   function receiptBody(d) {
     const total = d.items.reduce((s, it) => s + (parseFloat(it.amount) || 0), 0);
+    const owner = receiptOwner(d);
+    const st = receiptStatus(d);
+    const stamp = st === 'paid'
+      ? `<div class="rc-stamp rc-paid" aria-label="Paid">PAID<span>${esc(fmtDate(d.dateReceived))}</span></div>`
+      : `<div class="rc-stamp rc-part" aria-label="Partial payment">PARTIAL<span>Balance due ${esc(fmtMoney(d.partial.balance))}</span></div>`;
     return `
-      <h2>Receipt of Payment</h2>
-      <p style="text-align:center;color:var(--slate);font-family:'Inter',sans-serif;font-size:0.8125rem;margin-top:-1rem;">${fmtDate(d.dateReceived)}</p>
-      <p><strong>Property:</strong> ${esc(d.propertyAddress)}<br>
-      <strong>Tenant:</strong> ${esc(d.tenantName)}<br>
-      <strong>Payment method:</strong> ${esc(d.method)}</p>
-      <table style="width:100%;border-collapse:collapse;margin:1.5rem 0;">
-        ${d.items.map(it => `<tr><td style="padding:0.4rem 0;border-bottom:1px solid var(--paper-line);">${esc(it.label)}</td><td style="padding:0.4rem 0;border-bottom:1px solid var(--paper-line);text-align:right;">${fmtMoney(it.amount)}</td></tr>`).join('')}
-        <tr><td style="padding:0.6rem 0;font-weight:600;">Total received</td><td style="padding:0.6rem 0;font-weight:600;text-align:right;">${fmtMoney(total)}</td></tr>
-        ${d.partial ? `<tr><td style="padding:0.4rem 0;">Total owed${d.partial.forWhat ? ' (' + esc(d.partial.forWhat) + ')' : ''}</td><td style="padding:0.4rem 0;text-align:right;">${fmtMoney(d.partial.owed)}</td></tr>
-        <tr><td style="padding:0.6rem 0;font-weight:600;color:#b3261e;">Remaining balance${d.partial.dueBy ? ', due by ' + fmtDate(d.partial.dueBy) : ''}</td><td style="padding:0.6rem 0;font-weight:600;text-align:right;color:#b3261e;">${fmtMoney(d.partial.balance)}</td></tr>` : ''}
-      </table>
-      ${d.partial ? `<p style="font-size:0.85rem;"><strong>Partial payment.</strong> This receipt acknowledges a partial payment only. A balance of ${fmtMoney(d.partial.balance)} remains owed${d.partial.dueBy ? ' and is due by ' + fmtDate(d.partial.dueBy) : ''}. As provided in the lease, the Landlord's acceptance of a partial payment does not waive the remaining balance or any of the Landlord's rights or remedies under the lease or Colorado law.</p>` : ''}
-      <p style="font-family:'Inter',sans-serif;font-size:0.8125rem;color:var(--slate);">Received by: ${esc(d.receivedBy || 'Landlord')}</p>
+      <div class="rc">
+        <div class="rc-head">
+          <div>
+            <div class="rc-owner">${esc(owner)}</div>
+            <div class="rc-sub">Rental Payment Receipt</div>
+          </div>
+          <div class="rc-meta">
+            <div class="rc-title">RECEIPT</div>
+            <div><span>Date</span>${esc(fmtDate(d.dateReceived))}</div>
+            <div><span>Ref.</span>${esc(receiptRef(d))}</div>
+          </div>
+        </div>
+        <div class="rc-grid">
+          <div><div class="rc-label">Received from</div><div class="rc-val">${esc(d.tenantName)}</div></div>
+          <div><div class="rc-label">Property</div><div class="rc-val">${esc(d.propertyAddress)}</div></div>
+          <div><div class="rc-label">Payment method</div><div class="rc-val">${esc(d.method || '—')}</div></div>
+          <div><div class="rc-label">Received by</div><div class="rc-val">${esc(d.receivedBy || owner)}</div></div>
+        </div>
+        <div class="rc-tablewrap">
+          <table class="rc-table">
+            <thead><tr><th>Description</th><th class="r">Amount</th></tr></thead>
+            <tbody>${d.items.map(it => `<tr><td>${esc(it.label)}</td><td class="r">${fmtMoney(it.amount)}</td></tr>`).join('')}</tbody>
+            <tfoot>
+              <tr class="rc-total"><td>Total received</td><td class="r">${fmtMoney(total)}</td></tr>
+              ${d.partial ? `<tr><td>Total owed${d.partial.forWhat ? ' (' + esc(d.partial.forWhat) + ')' : ''}</td><td class="r">${fmtMoney(d.partial.owed)}</td></tr>
+              <tr class="rc-bal"><td>Remaining balance${d.partial.dueBy ? ', due by ' + esc(fmtDate(d.partial.dueBy)) : ''}</td><td class="r">${fmtMoney(d.partial.balance)}</td></tr>` : ''}
+            </tfoot>
+          </table>
+          <div class="rc-stampwrap">${stamp}</div>
+        </div>
+        ${d.partial ? `<p class="rc-note"><strong>Partial payment.</strong> This receipt acknowledges a partial payment only. A balance of ${fmtMoney(d.partial.balance)} remains owed${d.partial.dueBy ? ' and is due by ' + esc(fmtDate(d.partial.dueBy)) : ''}. As provided in the lease, the Landlord's acceptance of a partial payment does not waive the remaining balance or any of the Landlord's rights or remedies under the lease or Colorado law.</p>` : ''}
+        ${receiptSignaturesHtml(d)}
+        <p class="rc-foot">This receipt confirms payment received by ${esc(owner)} on the date shown. Please keep it for your records.</p>
+      </div>
     `;
   }
 
-  function receiptSigBlockHtml(d) {
-    if (!d.needsTenantSign && !d.needsLandlordSign) return '';
+  // Draws the receipt as a one-page PDF that matches the on-screen design.
+  async function receiptPdfBlob(d) {
+    const PW = 612, PH = 792, ML = 54, MR = 54, CW = PW - ML - MR;
+    const ops = []; const images = [];
+    const owner = receiptOwner(d), st = receiptStatus(d);
+    const total = d.items.reduce((s, it) => s + (parseFloat(it.amount) || 0), 0);
+    const rgb = (h) => [1, 3, 5].map(i => (parseInt(h.slice(i, i + 2), 16) / 255).toFixed(3)).join(' ');
+    const INK = rgb('#1F2A33'), MUTE = rgb('#5C6E77'), LINE = rgb('#D9DEE2'), BRASS = rgb('#B8862B');
+    const text = (s, x, y, size, bold, color, align) => {
+      s = String(s == null ? '' : s); let w = textW(s, bold, size);
+      const xx = align === 'r' ? x - w : align === 'c' ? x - w / 2 : x;
+      ops.push(color + ' rg BT /' + (bold ? 'F2' : 'F1') + ' ' + size + ' Tf ' + xx.toFixed(2) + ' ' + y.toFixed(2) + ' Td ' + pdfStr(s) + ' Tj ET');
+    };
+    const wrap = (s, size, maxW, bold) => {
+      const words = String(s || '').split(/\s+/); const lines = []; let cur = '';
+      for (const w of words) { const t = cur ? cur + ' ' + w : w; if (textW(t, bold, size) > maxW && cur) { lines.push(cur); cur = w; } else cur = t; }
+      if (cur) lines.push(cur); return lines;
+    };
+    const hline = (x1, x2, y, w, color) => ops.push(color + ' RG ' + w + ' w ' + x1.toFixed(2) + ' ' + y.toFixed(2) + ' m ' + x2.toFixed(2) + ' ' + y.toFixed(2) + ' l S');
+    const fill = (x, y, w, h, color) => ops.push(color + ' rg ' + [x, y, w, h].map(n => n.toFixed(2)).join(' ') + ' re f');
+
+    let y = PH - 54;
+    // Header band
+    fill(ML, y - 4, CW, 4, BRASS);
+    y -= 34;
+    const ownerLines = wrap(owner, 20, CW * 0.58, true);
+    ownerLines.forEach((ln, i) => text(ln, ML, y - i * 23, 20, true, INK));
+    text('RECEIPT', PW - MR, y, 22, true, BRASS, 'r');
+    y -= (ownerLines.length - 1) * 23 + 18;
+    text('Rental Payment Receipt', ML, y, 10, false, MUTE);
+    text('Date:  ' + fmtDate(d.dateReceived), PW - MR, y + 2, 10, false, INK, 'r');
+    text('Ref.:  ' + receiptRef(d), PW - MR, y - 12, 10, false, INK, 'r');
+    y -= 26; hline(ML, PW - MR, y, 0.8, LINE);
+
+    // Details grid (2 x 2)
+    y -= 22;
+    const col2 = ML + CW / 2 + 10;
+    const cell = (label, val, x, yy, w) => {
+      text(label.toUpperCase(), x, yy, 7.5, true, MUTE);
+      const ls = wrap(val || '-', 11, w, false); ls.forEach((ln, i) => text(ln, x, yy - 14 - i * 13, 11, false, INK));
+      return 14 + ls.length * 13;
+    };
+    const h1 = Math.max(cell('Received from', d.tenantName, ML, y, CW / 2 - 20), cell('Property', d.propertyAddress, col2, y, CW / 2 - 10));
+    y -= h1 + 10;
+    const h2 = Math.max(cell('Payment method', d.method, ML, y, CW / 2 - 20), cell('Received by', d.receivedBy || owner, col2, y, CW / 2 - 10));
+    y -= h2 + 16;
+
+    // Items table
+    const tableTop = y;
+    fill(ML, y - 6, CW, 22, rgb('#F2F4F5'));
+    text('DESCRIPTION', ML + 10, y + 1, 8, true, MUTE); text('AMOUNT', PW - MR - 10, y + 1, 8, true, MUTE, 'r');
+    y -= 26;
+    for (const it of d.items) {
+      const ls = wrap(it.label, 11, CW - 140, false);
+      ls.forEach((ln, i) => text(ln, ML + 10, y - i * 13, 11, false, INK));
+      text(fmtMoney(it.amount), PW - MR - 10, y, 11, false, INK, 'r');
+      y -= (ls.length - 1) * 13 + 10; hline(ML, PW - MR, y, 0.5, LINE); y -= 16;
+    }
+    y -= 2;
+    text('Total received', ML + 10, y, 12, true, INK); text(fmtMoney(total), PW - MR - 10, y, 12, true, INK, 'r');
+    if (d.partial) {
+      y -= 20; text('Total owed' + (d.partial.forWhat ? ' (' + d.partial.forWhat + ')' : ''), ML + 10, y, 10.5, false, INK); text(fmtMoney(d.partial.owed), PW - MR - 10, y, 10.5, false, INK, 'r');
+      y -= 18; const red = rgb('#B3261E');
+      text('Remaining balance' + (d.partial.dueBy ? ', due by ' + fmtDate(d.partial.dueBy) : ''), ML + 10, y, 11, true, red); text(fmtMoney(d.partial.balance), PW - MR - 10, y, 11, true, red, 'r');
+    }
+    y -= 10; hline(ML, PW - MR, y, 1.2, INK);
+
+    // Stamp: rotated box over the table's right side
+    {
+      const paid = st === 'paid'; const col = paid ? rgb('#1E7A45') : rgb('#C2570C');
+      const big = paid ? 'PAID' : 'PARTIAL'; const small = paid ? fmtDate(d.dateReceived) : 'Balance due ' + fmtMoney(d.partial.balance);
+      const bw = Math.max(textW(big, true, 30), textW(small, true, 8.5)) + 26, bh = 54;
+      const cx = PW - MR - 150, cy = Math.min(tableTop - 34, (tableTop + y) / 2 + 10);
+      const a = -12 * Math.PI / 180, c = Math.cos(a), s = Math.sin(a);
+      ops.push('q /GS1 gs ' + [c, s, -s, c, cx, cy].map(n => n.toFixed(4)).join(' ') + ' cm');
+      ops.push(col + ' RG 2.2 w ' + (-bw / 2).toFixed(2) + ' ' + (-bh / 2).toFixed(2) + ' ' + bw.toFixed(2) + ' ' + bh.toFixed(2) + ' re S');
+      ops.push(col + ' RG 0.8 w ' + (-bw / 2 + 4).toFixed(2) + ' ' + (-bh / 2 + 4).toFixed(2) + ' ' + (bw - 8).toFixed(2) + ' ' + (bh - 8).toFixed(2) + ' re S');
+      ops.push(col + ' rg BT /F2 30 Tf ' + (-textW(big, true, 30) / 2).toFixed(2) + ' -2 Td ' + pdfStr(big) + ' Tj ET');
+      ops.push(col + ' rg BT /F2 8.5 Tf ' + (-textW(small, true, 8.5) / 2).toFixed(2) + ' -17 Td ' + pdfStr(small.toUpperCase()) + ' Tj ET');
+      ops.push('Q');
+    }
+
+    // Partial-payment note
+    if (d.partial) {
+      y -= 22;
+      const note = 'Partial payment. This receipt acknowledges a partial payment only. A balance of ' + fmtMoney(d.partial.balance) + ' remains owed' + (d.partial.dueBy ? ' and is due by ' + fmtDate(d.partial.dueBy) : '') + '. As provided in the lease, the Landlord\'s acceptance of a partial payment does not waive the remaining balance or any of the Landlord\'s rights or remedies under the lease or Colorado law.';
+      wrap(note, 9, CW, false).forEach((ln, i) => text(ln, ML, y - i * 12, 9, false, INK)); y -= wrap(note, 9, CW, false).length * 12;
+    }
+
+    // Signatures
+    const sigs = [];
+    if (d.needsLandlordSign && (d.landlordSignatureImage || d.landlordSignerName)) sigs.push({ img: d.landlordSignatureImage, typed: d.landlordSignerName, name: d.receivedBy || owner, role: 'Received by', at: d.landlordSignedAt });
+    if (d.needsTenantSign && (d.tenantSignatureImage || d.tenantSignerName)) sigs.push({ img: d.tenantSignatureImage, typed: d.tenantSignerName, name: d.tenantName, role: 'Tenant', at: d.tenantSignedAt });
+    if (sigs.length) {
+      y -= 30; const colW = (CW - 30) / 2;
+      for (let i = 0; i < sigs.length; i++) {
+        const s = sigs[i]; const x = ML + i * (colW + 30);
+        const j = await signatureJpeg(s.img, s.typed); const name = 'Im' + (images.length + 1); images.push({ name, ...j });
+        const dw = Math.min(170, colW), dh = dw * j.h / j.w;
+        ops.push('q ' + dw.toFixed(2) + ' 0 0 ' + dh.toFixed(2) + ' ' + x.toFixed(2) + ' ' + (y - dh).toFixed(2) + ' cm /' + name + ' Do Q');
+        hline(x, x + colW, y - dh - 4, 0.6, INK);
+        text(s.role + ': ' + s.name, x, y - dh - 16, 9, true, INK);
+        if (s.at) text('Signed electronically ' + fmtDateTime(s.at), x, y - dh - 28, 8, false, MUTE);
+      }
+      y -= 110;
+    }
+
+    // Footer
+    hline(ML, PW - MR, 70, 0.5, LINE);
+    text('This receipt confirms payment received by ' + owner + ' on the date shown. Please keep it for your records.', PW / 2, 56, 8.5, false, MUTE, 'c');
+
+    // Assemble
+    const enc = (s) => { const a = new Uint8Array(s.length); for (let i = 0; i < s.length; i++) a[i] = s.charCodeAt(i) & 255; return a; };
+    const parts = []; let len = 0; const offsets = [];
+    const push = (x) => { const b = typeof x === 'string' ? enc(x) : x; parts.push(b); len += b.length; };
+    const obj = (n, body) => { offsets[n] = len; push(n + ' 0 obj\n'); body(); push('\nendobj\n'); };
+    push('%PDF-1.4\n%\xE2\xE3\xCF\xD3\n');
+    const imgBase = 7, pageObj = imgBase + images.length;
+    const xobj = images.map((im, i) => '/' + im.name + ' ' + (imgBase + i) + ' 0 R').join(' ');
+    const res = '<< /Font << /F1 3 0 R /F2 4 0 R /F3 5 0 R >> /ExtGState << /GS1 6 0 R >>' + (images.length ? ' /XObject << ' + xobj + ' >>' : '') + ' >>';
+    obj(1, () => push('<< /Type /Catalog /Pages 2 0 R >>'));
+    obj(2, () => push('<< /Type /Pages /Count 1 /Kids [' + pageObj + ' 0 R] >>'));
+    obj(3, () => push('<< /Type /Font /Subtype /Type1 /BaseFont /Helvetica /Encoding /WinAnsiEncoding >>'));
+    obj(4, () => push('<< /Type /Font /Subtype /Type1 /BaseFont /Helvetica-Bold /Encoding /WinAnsiEncoding >>'));
+    obj(5, () => push('<< /Type /Font /Subtype /Type1 /BaseFont /Helvetica-Oblique /Encoding /WinAnsiEncoding >>'));
+    obj(6, () => push('<< /Type /ExtGState /CA 0.85 /ca 0.85 >>'));
+    images.forEach((im, i) => obj(imgBase + i, () => { push('<< /Type /XObject /Subtype /Image /Width ' + im.w + ' /Height ' + im.h + ' /ColorSpace /DeviceRGB /BitsPerComponent 8 /Filter /DCTDecode /Length ' + im.bytes.length + ' >>\nstream\n'); push(im.bytes); push('\nendstream'); }));
+    const content = ops.join('\n');
+    obj(pageObj, () => push('<< /Type /Page /Parent 2 0 R /MediaBox [0 0 ' + PW + ' ' + PH + '] /Resources ' + res + ' /Contents ' + (pageObj + 1) + ' 0 R >>'));
+    obj(pageObj + 1, () => { push('<< /Length ' + enc(content).length + ' >>\nstream\n'); push(content); push('\nendstream'); });
+    const totalObjs = pageObj + 2, xref = len;
+    push('xref\n0 ' + totalObjs + '\n0000000000 65535 f \n');
+    for (let n = 1; n < totalObjs; n++) push(String(offsets[n]).padStart(10, '0') + ' 00000 n \n');
+    push('trailer\n<< /Size ' + totalObjs + ' /Root 1 0 R /Info << /Title ' + pdfStr('Receipt - ' + (d.tenantName || '') + ' - ' + (d.dateReceived || '')) + ' /Producer (Lease Desk) >> >>\nstartxref\n' + xref + '\n%%EOF');
+    return new Blob(parts, { type: 'application/pdf' });
+  }
+  async function downloadReceiptPdf(d, btn) {
+    const orig = btn ? btn.textContent : '';
+    if (btn) { btn.disabled = true; btn.textContent = 'Making PDF…'; }
+    try {
+      const blob = await receiptPdfBlob(d);
+      const a = document.createElement('a'); a.href = URL.createObjectURL(blob); a.download = receiptFileName(d);
+      document.body.appendChild(a); a.click(); setTimeout(() => { URL.revokeObjectURL(a.href); a.remove(); }, 1500);
+    } catch (e) { alert('Could not make the PDF. Try Print instead.'); }
+    if (btn) { btn.disabled = false; btn.textContent = orig; }
+  }
+
+  function receiptSigBlockHtml(d) { return ''; }
+  function receiptSignaturesHtml(d) {
+    if (!(d.needsLandlordSign && d.landlordSignedAt) && !(d.needsTenantSign && d.tenantSignedAt)) return '';
     const cols = [];
     if (d.needsLandlordSign) cols.push(`
       <div class="sig-col">
         ${d.landlordSignatureImage ? `<img class="sig-img" src="${d.landlordSignatureImage}" style="max-height:55px;display:block;">` : `<div class="sig-script">${esc(d.landlordSignerName || '')}</div>`}
-        <div class="sig-line"><strong>${esc(d.receivedBy || 'Landlord')}</strong>${d.landlordSignedAt ? ' &middot; ' + fmtDateTime(d.landlordSignedAt) : ''}</div>
+        <div class="sig-line"><strong>Received by: ${esc(d.receivedBy || receiptOwner(d))}</strong>${d.landlordSignedAt ? ' &middot; signed ' + fmtDateTime(d.landlordSignedAt) : ''}</div>
       </div>`);
     if (d.needsTenantSign) cols.push(`
       <div class="sig-col">
         ${d.tenantSignatureImage ? `<img class="sig-img" src="${d.tenantSignatureImage}" style="max-height:55px;display:block;">` : `<div class="sig-script">${esc(d.tenantSignerName || '')}</div>`}
-        <div class="sig-line"><strong>${esc(d.tenantName)}</strong>${d.tenantSignedAt ? ' &middot; ' + fmtDateTime(d.tenantSignedAt) : ''}</div>
+        <div class="sig-line"><strong>Tenant: ${esc(d.tenantName)}</strong>${d.tenantSignedAt ? ' &middot; signed ' + fmtDateTime(d.tenantSignedAt) : ''}</div>
       </div>`);
     return `<div class="sig-block">${cols.join('')}</div>`;
   }
@@ -4145,7 +4369,7 @@ ${steps(3, TN_STEPS)}
   };
   window.receiptPdf = async function (id, btn) {
     const orig = btn.textContent; btn.disabled = true; btn.textContent = '…';
-    try { const d = await fetchReceipt(id); btn.disabled = false; btn.textContent = orig; await downloadDocPdf(receiptPdfHtml(d), receiptFileName(d), 'Receipt: ' + (d.propertyAddress || ''), 'Receipt - ' + (d.tenantName || ''), btn); }
+    try { const d = await fetchReceipt(id); btn.disabled = false; btn.textContent = orig; await downloadReceiptPdf(d, btn); }
     catch (e) { btn.disabled = false; btn.textContent = orig; alert('Could not load that receipt. Try again.'); }
   };
   function renderSavedReceipt(d) {
@@ -4163,7 +4387,7 @@ ${steps(3, TN_STEPS)}
           <button class="btn btn-ghost" style="color:#A8372D;" id="sr-del">Delete receipt</button>
         </div>
       </div>`;
-    document.getElementById('sr-pdf').addEventListener('click', function () { downloadDocPdf(receiptPdfHtml(d), receiptFileName(d), 'Receipt: ' + (d.propertyAddress || ''), 'Receipt - ' + (d.tenantName || ''), this); });
+    document.getElementById('sr-pdf').addEventListener('click', function () { downloadReceiptPdf(d, this); });
     document.getElementById('sr-del').addEventListener('click', async function () {
       if (this.dataset.confirm !== '1') { this.dataset.confirm = '1'; this.textContent = 'Tap again to delete permanently'; return; }
       this.disabled = true;
@@ -4191,7 +4415,7 @@ ${steps(3, TN_STEPS)}
         </div>
       </div>
     `;
-    document.getElementById('btn-download-receipt').addEventListener('click', function () { downloadDocPdf(receiptPdfHtml(d), receiptFileName(d), 'Receipt: ' + (d.propertyAddress || ''), 'Receipt - ' + (d.tenantName || ''), this); });
+    document.getElementById('btn-download-receipt').addEventListener('click', function () { downloadReceiptPdf(d, this); });
     if (landlordAuthed()) saveReceiptToServer(d).then(() => { const s = document.getElementById('rc-saved'); if (s) s.innerHTML = 'Saved in <a href="#/receipts">Receipts</a>.'; })
       .catch(() => { const s = document.getElementById('rc-saved'); if (s) s.innerHTML = '<strong>Not saved to Receipts</strong> (connection problem). Reload this page to try again.'; });
   }
