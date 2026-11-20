@@ -61,6 +61,41 @@
   .paper h2 { font-family: 'Playfair Display', serif; font-size: 1.5rem; font-weight: 700; text-align: center; margin: 0 0 1.75rem; }
   .paper h3 { font-size: 1rem; font-weight: 600; margin: 1.5rem 0 0.5rem; }
   .paper p { margin: 0 0 0.9rem; }
+  .wz { max-width: 560px; margin: 0.5rem auto 2rem; }
+  .wz-top { display: flex; justify-content: space-between; align-items: center; margin-bottom: 0.75rem; }
+  .wz-adv { font-size: 0.82rem; color: var(--ink-soft); }
+  .wz-bar { height: 8px; background: #EFE6DC; border-radius: 999px; overflow: hidden; }
+  .wz-bar > div { height: 100%; background: var(--brass); border-radius: 999px; transition: width .3s ease; }
+  .wz-step { font-size: 0.8rem; color: var(--ink-soft); margin: 0.5rem 0 0.25rem; font-weight: 600; letter-spacing: 0.04em; text-transform: uppercase; }
+  .wz-q { font-size: 1.6rem; line-height: 1.25; margin: 0 0 0.4rem; }
+  .wz-help { font-size: 1.02rem; color: var(--ink-soft); margin: 0 0 1.1rem; }
+  .wz-list { display: flex; flex-direction: column; gap: 0.65rem; }
+  .wz-opt { display: block; width: 100%; text-align: left; background: #fff; border: 2px solid var(--line); border-radius: 12px; padding: 1rem 1.1rem; cursor: pointer; font: inherit; color: var(--ink); transition: border-color .15s, box-shadow .15s; }
+  .wz-opt:hover, .wz-opt:focus-visible { border-color: var(--brass); box-shadow: 0 2px 10px rgba(0,0,0,.06); outline: none; }
+  .wz-opt strong { display: block; font-size: 1.12rem; }
+  .wz-opt span { display: block; font-size: 0.92rem; color: var(--ink-soft); margin-top: 0.15rem; }
+  .wz-opt.on, .wz-month.on > .wz-opt { border-color: var(--brass); background: #FFF8EA; }
+  .wz-opt:disabled { opacity: .6; }
+  .wz-yn { display: grid; grid-template-columns: repeat(auto-fit, minmax(120px, 1fr)); gap: 0.65rem; }
+  .wz-yn .wz-opt { text-align: center; padding: 1.2rem; }
+  .wz-yn .wz-opt strong { font-size: 1.3rem; }
+  .wz-next { width: 100%; font-size: 1.15rem; padding: 1rem; margin-top: 1.25rem; }
+  .wz-input { font-size: 1.1rem !important; padding: 0.8rem 0.85rem !important; min-height: 52px; width: 100%; }
+  .wz-amt { padding: 0.5rem 0.25rem 0.25rem; }
+  .wz-amt label { font-size: 0.9rem; font-weight: 600; }
+  .wz-total { font-size: 1.15rem; font-weight: 700; margin: 0.75rem 0 0; }
+  .wz-chips { display: flex; flex-wrap: wrap; gap: 0.5rem; margin-bottom: 1rem; }
+  .wz-chip { border: 2px solid var(--line); background: #fff; border-radius: 999px; padding: 0.6rem 1rem; font: inherit; font-size: 0.98rem; cursor: pointer; color: var(--ink); }
+  .wz-chip.on { border-color: var(--brass); background: #FFF8EA; font-weight: 700; }
+  .wz-deadline { background: #F2F4F5; border-radius: 10px; padding: 0.9rem 1rem; margin: 0.25rem 0 1rem; }
+  .wz-deadline span { display: block; font-size: 0.9rem; color: var(--ink-soft); }
+  .wz-deadline strong { display: block; font-size: 1.3rem; margin: 0.15rem 0; }
+  .wz-deadline em { display: block; font-size: 0.8rem; color: var(--ink-soft); font-style: normal; }
+  .wz-pick { background: #E7F4EC; color: #1F5A38; font-weight: 700; border-radius: 8px; padding: 0.7rem 0.9rem; margin-bottom: 0.75rem; }
+  .wz-row { display: flex; justify-content: space-between; gap: 1rem; padding: 0.55rem 0; border-bottom: 1px solid #F1E4D8; }
+  .wz-row span { color: var(--ink-soft); }
+  .wz-row strong { text-align: right; }
+  .wz-steps { padding-left: 1.2rem; margin: 0.25rem 0 0; line-height: 1.7; font-size: 1.02rem; }
   .rc { position: relative; font-family: 'Inter', system-ui, sans-serif; line-height: 1.5; }
   .rc-head { display: flex; justify-content: space-between; gap: 1rem; align-items: flex-start; border-top: 4px solid var(--brass); padding-top: 1rem; margin: -0.5rem 0 1.25rem; flex-wrap: wrap; }
   .rc-owner { font-family: 'Playfair Display', serif; font-size: 1.55rem; font-weight: 700; line-height: 1.2; color: var(--ink); }
@@ -505,7 +540,8 @@
     if (hash === '#/continue') { renderTenantStatus(); return; }
     if (hash === '#/start') { renderTenantIntake(); return; }
     if (hash === '#/archive') { if (!landlordAuthed()) { renderGate('#/archive'); return; } renderArchive(); return; }
-    if (hash === '#/evict') { if (!landlordAuthed()) { renderGate('#/evict'); return; } renderCases(); return; }
+    if (hash === '#/evict') { if (!landlordAuthed()) { renderGate('#/evict'); return; } renderEvictWizard(); return; }
+    if (hash === '#/evict/files') { if (!landlordAuthed()) { renderGate('#/evict/files'); return; } renderCases(); return; }
     if (hash === '#/status') { if (!landlordAuthed()) { renderGate('#/status'); return; } renderLeaseStatus(); return; }
     if (hash === '#/assist') { if (!landlordAuthed()) { renderGate('#/assist'); return; } renderAssist(); return; }
     if (hash === '#/receipts') { if (!landlordAuthed()) { renderGate('#/receipts'); return; } renderReceipts(); return; }
@@ -562,7 +598,7 @@
             ${tile('#/receipts', 'Find a receipt', 'Every receipt you have made, listed by property.', false)}
             ${tile('#/status', 'Lease status', 'See who still needs to sign or countersign.', false)}
             ${tile('#/archive', 'Completed leases', 'Every fully signed lease, saved until you delete it. Download any as a PDF.', false)}
-            ${tile('#/evict', 'Eviction toolkit', 'Demand notices, service log, late-payment and 12-month tracker.', false)}
+            ${tile('#/evict', 'Eviction notice', 'Answer a few questions and get the right notice, filled in.', false)}
             ${tile('#/listings', 'Property listings', 'Mark properties available or not for the website map.', false)}
           </div>
           <p style="text-align:center;margin:0.75rem 0 0;"><a href="#" style="font-size:0.82rem;" onclick="lockDevice();return false;">Sign out on this device</a></p>
@@ -779,6 +815,361 @@
   const badBox = (html) => `<div class="banner" style="background:#FBE9E6;border:1px solid #EBB9B2;color:#7A231B;">${html}</div>`;
 
   // ---- list of tenant files
+  // =====================================================================
+  // EVICTION NOTICE GUIDE: one question at a time, picks the right notice
+  // =====================================================================
+  const WZ_REASONS = [
+    { id: 'rent', title: 'They haven\'t paid rent', sub: 'All or part of the rent is late.', kind: 'demand' },
+    { id: 'violation', title: 'They broke a rule in the lease', sub: 'Example: someone extra living there, a pet, smoking, damage.', kind: 'demand' },
+    { id: 'conduct', title: 'They are bothering the neighbors', sub: 'Noise, fighting, harassing other tenants.', kind: 'demand' },
+    { id: 'repeat', title: 'They did the same thing again', sub: 'You already gave them a notice for this, and it happened again.', kind: 'terminate' },
+    { id: 'substantial', title: 'They did something dangerous or criminal', sub: 'Violence, threats, drug felony, serious damage on purpose.', kind: 'terminate' },
+    { id: 'nofault', title: 'They did nothing wrong, I just want them out', sub: 'End of lease, selling, moving family in.', kind: '' },
+  ];
+  const WZ_RULES = ['Someone not on the lease is living there', 'Unapproved pet', 'Smoking or vaping inside', 'Damage to the unit', 'Unit not kept clean or sanitary', 'Other rule'];
+  const WZ_SUBST = [
+    { k: 'endanger', t: 'Hurt or threatened someone, or put people or the property in danger' },
+    { k: 'felony', t: 'A violent or drug felony on or near the property' },
+    { k: 'nuisance', t: 'A serious crime on the property that was declared a public nuisance' },
+  ];
+  function wzCounty(city) { return /pueblo/i.test(city) ? 'Pueblo' : /colorado springs|fountain/i.test(city) ? 'El Paso' : ''; }
+  function wzMonths(n) {
+    const out = []; const d = new Date(); d.setDate(1);
+    for (let i = 0; i < n; i++) { const x = new Date(d.getFullYear(), d.getMonth() - i, 1); out.push({ iso: isoOf(x), label: x.toLocaleString('en-US', { month: 'long', year: 'numeric' }) }); }
+    return out;
+  }
+  const WZ = () => window.__wz;
+
+  async function renderEvictWizard() {
+    window.__wz = { step: 'tenant', hist: [], tenant: null, reason: '', notice: {}, flags: {} };
+    app.innerHTML = header() + `<p class="hint" style="text-align:center;padding:2rem 0;">Loading your tenants&hellip;</p>`;
+    let arch = [], cases = [];
+    try { const r = await fetch('/api/archive?key=' + encodeURIComponent(staffKey())); if (r.ok) arch = (await r.json()).items || []; } catch (e) {}
+    try { cases = await fetchCases(); } catch (e) {}
+    WZ().arch = arch; WZ().cases = cases; window.__cases = cases;
+    wzDraw();
+  }
+  window.renderEvictWizard = renderEvictWizard;
+  function wzGo(step) { WZ().hist.push(WZ().step); WZ().step = step; wzDraw(); }
+  window.wzBack = function () { const w = WZ(); if (!w.hist.length) { goHash('#/'); return; } w.step = w.hist.pop(); wzDraw(); };
+
+  function wzShell(n, total, title, help, body) {
+    const pct = Math.round((n / total) * 100);
+    return header() + `
+      <div class="wz">
+        <div class="wz-top"><button class="step-back" style="margin:0;" onclick="wzBack()">&larr; Back</button>
+          <a href="#/evict/files" onclick="goHash('#/evict/files');return false;" class="wz-adv">Advanced view</a></div>
+        <div class="wz-bar"><div style="width:${pct}%;"></div></div>
+        <p class="wz-step">Step ${n} of ${total}</p>
+        <h1 class="wz-q">${title}</h1>
+        ${help ? `<p class="wz-help">${help}</p>` : ''}
+        ${body}
+        <p class="error-text" id="wz-err" style="display:none;font-size:1.05rem;"></p>
+      </div>`;
+  }
+  const wzBig = (id, title, sub, extra) => `<button class="wz-opt" id="${id}" ${extra || ''}><strong>${title}</strong>${sub ? `<span>${sub}</span>` : ''}</button>`;
+  function wzErr(msg) { const e = document.getElementById('wz-err'); e.textContent = msg; e.style.display = ''; e.scrollIntoView({ behavior: 'smooth', block: 'center' }); }
+  function wzYesNo(prefix, unsure) {
+    return `<div class="wz-yn">${wzBig(prefix + '-yes', 'Yes', '')}${wzBig(prefix + '-no', 'No', '')}${unsure ? wzBig(prefix + '-ns', 'Not sure', '') : ''}</div>`;
+  }
+  function wzTotal() { return WZ().reason === 'nofault' ? 3 : 7; }
+
+  function wzDraw() {
+    const w = WZ(); const T = wzTotal();
+    const s = w.step;
+    // ---------- 1. tenant
+    if (s === 'tenant') {
+      const seen = new Set();
+      const fromCases = w.cases.map((c, i) => { seen.add((c.archiveId || '') + '|' + c.tenantName.toLowerCase()); return { src: 'case', i, name: c.tenantName + (c.tenantName2 ? ' and ' + c.tenantName2 : ''), sub: c.propertyLine || '' }; });
+      const fromArch = w.arch.map((a, i) => ({ src: 'arch', i, name: a.tenant || 'Tenant', sub: a.property || '' }))
+        .filter(x => !w.cases.some(c => c.archiveId === w.arch[x.i].id || c.tenantName.toLowerCase() === String(x.name).toLowerCase()));
+      const all = fromCases.concat(fromArch).sort((a, b) => a.name.localeCompare(b.name));
+      app.innerHTML = wzShell(1, T, 'Who is the tenant?', 'Tap their name. If they aren\'t listed, add them at the bottom.', `
+        ${all.length > 6 ? '<div class="field"><input type="search" id="wz-q" placeholder="Search by name" class="wz-input"></div>' : ''}
+        <div class="wz-list">${all.map(x => wzBig('', esc(x.name), esc(x.sub), `data-src="${x.src}" data-i="${x.i}" data-name="${esc(x.name.toLowerCase())}"`)).join('') || '<p class="hint">No tenants saved yet.</p>'}</div>
+        <div style="margin-top:1rem;">${wzBig('wz-custom', '+ Someone not on this list', 'Type in their name and address.', 'style="border-style:dashed;"')}</div>`);
+      const q = document.getElementById('wz-q');
+      if (q) q.addEventListener('input', () => { const v = q.value.trim().toLowerCase(); document.querySelectorAll('.wz-list .wz-opt').forEach(b => { b.style.display = !v || b.dataset.name.includes(v) ? '' : 'none'; }); });
+      document.querySelectorAll('.wz-list .wz-opt').forEach(b => b.addEventListener('click', async () => {
+        if (b.dataset.src === 'case') { w.tenant = { ...w.cases[+b.dataset.i] }; wzGo('reason'); return; }
+        const it = w.arch[+b.dataset.i]; b.disabled = true;
+        let d = {};
+        try { const r = await fetch('/api/archive?id=' + encodeURIComponent(it.id) + '&key=' + encodeURIComponent(staffKey())); if (r.ok) d = await r.json(); } catch (e) {}
+        const city = (d.cityZip || '').split(',')[0].trim();
+        const zip = ((d.cityZip || '').match(/\d{5}/) || [''])[0];
+        w.tenant = { notices: [], archiveId: it.id, tenantName: d.tenantName || it.tenant || '', tenantName2: d.tenantName2 || '',
+          propertyLine: (d.propertyAddress || '') + (d.unitLabel ? ', ' + d.unitLabel : ''), city, zip, county: wzCounty(city), rent: d.rent || '',
+          entity: d.entity || '', signerName: d.agent || '', tenancyStart: d.startDate || '', leaseStart: d.startDate || '', leaseEnd: d.termType === 'mtm' ? '' : (d.endDate || ''), language: 'English' };
+        wzGo('reason');
+      }));
+      document.getElementById('wz-custom').addEventListener('click', () => wzGo('custom'));
+    }
+    // ---------- 1b. custom tenant
+    else if (s === 'custom') {
+      const t = w.tenant && !w.tenant.id && !w.tenant.archiveId ? w.tenant : {};
+      const opts = PROPERTIES.map((p, i) => `<option value="${i}">${esc(p.street + (p.unit ? ', ' + p.unit : '') + ' — ' + propCity(p))}</option>`).join('');
+      app.innerHTML = wzShell(1, T, 'Tell us about the tenant', 'Only the name, address, and rent are needed. You can fill the rest in later.', `
+        <div class="card big-form">
+          <div class="field"><label>Tenant's full name</label><input type="text" id="wc-name" value="${esc(t.tenantName || '')}"></div>
+          <div class="field"><label>Second adult on the lease (if any)</label><input type="text" id="wc-name2" value="${esc(t.tenantName2 || '')}"></div>
+          <div class="field"><label>Which property?</label><select id="wc-prop"><option value="">Tap to choose</option>${opts}<option value="other">Another address</option></select></div>
+          <div class="field" id="wc-other" style="display:none;"><label>Street address and unit</label><input type="text" id="wc-street" placeholder="123 Main St, Unit 2"><label style="margin-top:0.6rem;">City</label><input type="text" id="wc-city" value="Pueblo"></div>
+          <div class="field"><label>Monthly rent</label><input type="number" id="wc-rent" inputmode="decimal" placeholder="805" value="${esc(t.rent || '')}"></div>
+          <div class="field"><label>About when did they move in? <span style="font-weight:normal;">(skip if unsure)</span></label><input type="date" id="wc-since" value="${esc(t.tenancyStart || '')}"></div>
+        </div>
+        <button class="btn btn-primary wz-next" id="wc-go">Next</button>`);
+      const ps = document.getElementById('wc-prop');
+      ps.addEventListener('change', () => { document.getElementById('wc-other').style.display = ps.value === 'other' ? '' : 'none'; });
+      document.getElementById('wc-go').addEventListener('click', () => {
+        const v = (id) => document.getElementById(id).value.trim();
+        if (!v('wc-name')) return wzErr('Enter the tenant\'s name.');
+        let line = '', city = '', zip = '', entity = '';
+        if (ps.value === 'other') { line = v('wc-street'); city = v('wc-city'); if (!line) return wzErr('Enter the street address.'); }
+        else if (ps.value !== '') { const p = PROPERTIES[+ps.value]; line = p.street + (p.unit ? ', ' + p.unit : ''); city = propCity(p); zip = ((p.cityZip || '').match(/\d{5}/) || [''])[0]; entity = p.entity; }
+        else return wzErr('Choose the property.');
+        if (!(parseFloat(v('wc-rent')) > 0)) return wzErr('Enter the monthly rent.');
+        w.tenant = { notices: [], tenantName: v('wc-name'), tenantName2: v('wc-name2'), propertyLine: line, city, zip, county: wzCounty(city), rent: v('wc-rent'),
+          entity, tenancyStart: v('wc-since'), leaseStart: v('wc-since'), language: 'English' };
+        wzGo('reason');
+      });
+    }
+    // ---------- 2. reason
+    else if (s === 'reason') {
+      app.innerHTML = wzShell(2, 7, 'What is going on with ' + esc(w.tenant.tenantName.split(' ')[0]) + '?', 'Pick the one that fits best.', `
+        <div class="wz-list">${WZ_REASONS.map(r => wzBig('', r.title, r.sub, `data-r="${r.id}"`)).join('')}</div>`);
+      document.querySelectorAll('[data-r]').forEach(b => b.addEventListener('click', () => {
+        w.reason = b.dataset.r; w.notice = { rent: [], rule: '', what: '', who: '', kinds: [] };
+        wzGo(w.reason === 'nofault' ? 'nofault' : 'details');
+      }));
+    }
+    // ---------- no-fault: explain
+    else if (s === 'nofault') {
+      const t = tenure(w.tenant);
+      const under = t.known && !t.isCovered;
+      app.innerHTML = wzShell(3, 3, under ? 'You can choose not to renew' : 'This needs a special 90-day notice', '', `
+        <div class="card" style="font-size:1.05rem;">
+          ${under ? `<p>${esc(w.tenant.tenantName)} has lived there less than 12 months (until ${esc(fmtDate(t.covered))}). You may end the tenancy at the end of the lease without a reason by giving written notice on time:</p>
+            <ul><li>Lease of 1 year or more, or month-to-month for over 6 months: <strong>91 days</strong> before it ends</li><li>Month-to-month 1 to 6 months: <strong>28 days</strong></li><li>Shorter: <strong>21 days</strong> or less</li></ul>
+            <p>If they use a housing voucher, give at least 30 days even if the lease says less.</p>`
+          : `<p>${t.known ? esc(w.tenant.tenantName) + ' has lived there 12 months or more.' : 'If they have lived there 12 months or more,'} Colorado only allows a no-fault move-out for specific reasons, like selling the home, moving a family member in, or major repairs. It needs <strong>90 days' notice</strong> on the court's form <strong>JDF 99C</strong>, and some reasons require paying relocation help.</p>
+            <p>Because the rules are strict, talk to a Colorado eviction attorney before sending it.</p>`}
+          <div class="btn-row" style="flex-wrap:wrap;">
+            <a class="btn btn-primary" href="https://www.coloradojudicial.gov/self-help/residential-evictions" target="_blank" rel="noopener">Open the court's eviction forms</a>
+            <button class="btn btn-ghost" onclick="goHash('#/')">Done</button>
+          </div>
+        </div>`);
+    }
+    // ---------- 3. details
+    else if (s === 'details') {
+      const n = w.notice; const r = w.reason;
+      if (r === 'rent') {
+        const months = wzMonths(6);
+        if (!n.rent.length) n.rent = [];
+        app.innerHTML = wzShell(3, 7, 'Which months have not been paid?', 'Tap every month that is unpaid. Change the amount if they paid part of it.', `
+          <div class="wz-list">${months.map((m, i) => {
+            const on = n.rent.find(x => x.due === m.iso);
+            return `<div class="wz-month ${on ? 'on' : ''}" data-i="${i}"><button class="wz-opt" style="margin:0;"><strong>${on ? '&#10003; ' : ''}${esc(m.label)}</strong><span>Due ${esc(fmtDate(m.iso))}</span></button>
+              ${on ? `<div class="wz-amt"><label>Amount still owed for ${esc(m.label.split(' ')[0])}</label><input type="number" inputmode="decimal" class="wz-input" data-amt="${m.iso}" value="${esc(on.amount)}"></div>` : ''}</div>`;
+          }).join('')}</div>
+          <div class="banner" style="background:#FBF1DC;border:1px solid #E9D3A3;color:#5A3E0B;"><span><strong>Rent only.</strong> Don't include late fees, utilities, or damages. The court can throw out the case if you do.${w.flags.subsidized ? ' Only the tenant\'s share, not the housing authority\'s.' : ''}</span></div>
+          <p class="wz-total" id="wz-total"></p>
+          <button class="btn btn-primary wz-next" id="wz-go">Next</button>`);
+        const tot = () => { document.getElementById('wz-total').textContent = n.rent.length ? 'Total rent owed: ' + fmtMoney(n.rent.reduce((s, x) => s + (parseFloat(x.amount) || 0), 0)) : ''; };
+        tot();
+        document.querySelectorAll('.wz-month > .wz-opt').forEach(b => b.addEventListener('click', () => {
+          const m = months[+b.parentElement.dataset.i]; const idx = n.rent.findIndex(x => x.due === m.iso);
+          if (idx >= 0) n.rent.splice(idx, 1); else n.rent.push({ due: m.iso, period: m.label, amount: w.tenant.rent || '' });
+          wzDraw();
+        }));
+        document.querySelectorAll('[data-amt]').forEach(inp => inp.addEventListener('input', () => { const x = n.rent.find(y => y.due === inp.dataset.amt); x.amount = inp.value; tot(); }));
+        document.getElementById('wz-go').addEventListener('click', () => {
+          if (!n.rent.length) return wzErr('Tap at least one unpaid month.');
+          if (n.rent.some(x => !(parseFloat(x.amount) > 0))) return wzErr('Enter the amount owed for each month you picked.');
+          wzGo('subsidy');
+        });
+      } else if (r === 'violation' || r === 'repeat') {
+        const prior = r === 'repeat' ? (w.tenant.notices || []).filter(x => x.kind === 'demand').map(x => ({ x, st: serviceStatus(w.tenant, x) })).filter(o => o.st.complete) : [];
+        app.innerHTML = wzShell(3, 7, r === 'repeat' ? 'Which rule did they break again?' : 'Which rule did they break?', 'Tap one, then say what happened in a sentence or two.', `
+          <div class="wz-chips">${WZ_RULES.map(x => `<button class="wz-chip ${n.rule === x ? 'on' : ''}" data-rule="${esc(x)}">${esc(x)}</button>`).join('')}</div>
+          <div class="field" id="wz-other" style="${n.rule === 'Other rule' ? '' : 'display:none;'}"><label>Which rule?</label><input type="text" id="wz-ruletext" class="wz-input" value="${esc(n.ruleText || '')}"></div>
+          <div class="field"><label>What happened? Include dates.</label><textarea id="wz-what" class="wz-input" rows="4" placeholder="Example: Since October 3, a man named John has been staying at the unit every night. He is not on the lease.">${esc(n.what || '')}</textarea></div>
+          ${r === 'repeat' ? `<div class="field"><label>When did you give them the first notice for this?</label>${prior.length ? `<select id="wz-prior" class="wz-input">${prior.map(o => `<option value="${esc(o.st.date)}">Notice served ${esc(fmtDate(o.st.date))}</option>`).join('')}<option value="">A different date</option></select>` : ''}<input type="date" id="wz-priordate" class="wz-input" style="${prior.length ? 'display:none;' : ''}margin-top:0.5rem;" value="${esc(n.prior || '')}"><p class="hint">The first notice must have been about the same rule.</p></div>` : ''}
+          <button class="btn btn-primary wz-next" id="wz-go">Next</button>`);
+        document.querySelectorAll('[data-rule]').forEach(b => b.addEventListener('click', () => { n.what = document.getElementById('wz-what').value; n.rule = b.dataset.rule; wzDraw(); }));
+        const ps = document.getElementById('wz-prior');
+        if (ps) ps.addEventListener('change', () => { document.getElementById('wz-priordate').style.display = ps.value ? 'none' : ''; });
+        document.getElementById('wz-go').addEventListener('click', () => {
+          n.what = document.getElementById('wz-what').value.trim();
+          n.ruleText = (document.getElementById('wz-ruletext') || {}).value || '';
+          if (!n.rule) return wzErr('Tap the rule they broke.');
+          if (n.rule === 'Other rule' && !n.ruleText.trim()) return wzErr('Type which rule they broke.');
+          if (n.what.length < 10) return wzErr('Say what happened, with dates.');
+          if (r === 'repeat') { n.prior = ps && ps.value ? ps.value : document.getElementById('wz-priordate').value; if (!n.prior) return wzErr('Enter the date of the first notice.'); }
+          wzGo('subsidy');
+        });
+      } else if (r === 'conduct') {
+        app.innerHTML = wzShell(3, 7, 'What are they doing?', 'Say who is being bothered and what is happening, with dates.', `
+          <div class="field"><label>Who is being bothered?</label><input type="text" id="wz-who" class="wz-input" value="${esc(n.who || '')}" placeholder="Example: the tenants in Units 2 and 4"></div>
+          <div class="field"><label>What is happening?</label><textarea id="wz-what" class="wz-input" rows="4" placeholder="Example: Loud music and yelling after midnight on Nov 2, 5, and 9.">${esc(n.what || '')}</textarea></div>
+          <button class="btn btn-primary wz-next" id="wz-go">Next</button>`);
+        document.getElementById('wz-go').addEventListener('click', () => {
+          n.who = document.getElementById('wz-who').value.trim(); n.what = document.getElementById('wz-what').value.trim();
+          if (!n.who || n.what.length < 10) return wzErr('Fill in both boxes.');
+          wzGo('subsidy');
+        });
+      } else if (r === 'substantial') {
+        app.innerHTML = wzShell(3, 7, 'What did they do?', 'Tap what fits, then describe it. Add the police report number if there is one.', `
+          <div class="wz-list">${WZ_SUBST.map(x => `<button class="wz-opt ${n.kinds.includes(x.k) ? 'on' : ''}" data-k="${x.k}"><strong>${n.kinds.includes(x.k) ? '&#10003; ' : ''}${esc(x.t)}</strong></button>`).join('')}</div>
+          <div class="field"><label>What happened? Include dates.</label><textarea id="wz-what" class="wz-input" rows="4">${esc(n.what || '')}</textarea></div>
+          <div class="banner" style="background:#FBF1DC;border:1px solid #E9D3A3;color:#5A3E0B;"><span>This notice gives only 3 days and no chance to fix it. If the tenant was the victim (for example, of domestic violence), it does not apply. Talk to an attorney if you're unsure.</span></div>
+          <button class="btn btn-primary wz-next" id="wz-go">Next</button>`);
+        document.querySelectorAll('[data-k]').forEach(b => b.addEventListener('click', () => { n.what = document.getElementById('wz-what').value; const i = n.kinds.indexOf(b.dataset.k); if (i >= 0) n.kinds.splice(i, 1); else n.kinds.push(b.dataset.k); wzDraw(); }));
+        document.getElementById('wz-go').addEventListener('click', () => {
+          n.what = document.getElementById('wz-what').value.trim();
+          if (!n.kinds.length) return wzErr('Tap what they did.');
+          if (n.what.length < 10) return wzErr('Describe what happened, with dates.');
+          wzGo('subsidy');
+        });
+      }
+    }
+    // ---------- 4. quick yes/no questions
+    else if (s === 'subsidy' || s === 'mortgage' || s === 'benefits' || s === 'victim' || s === 'language') {
+      const Q = {
+        subsidy: ['Do they use a housing voucher (like Section 8) or other help paying rent?', 'This changes how many days the notice gives.', 'subsidized', true],
+        mortgage: ['Does this property have a government-backed mortgage?', 'FHA, VA, USDA, Fannie Mae, or Freddie Mac loans count. If you\'re not sure, tap "Not sure" and we\'ll give the longer notice to be safe.', 'cares', true],
+        benefits: ['Have they told you they get SSI, SSDI, or Colorado Works?', 'If yes, you must offer mediation before going to court.', 'mediationEligible', false],
+        victim: ['Have they told you they are a victim of domestic violence, sexual assault, or stalking?', 'Extra delivery steps and a repayment plan apply.', 'victimNotified', false],
+        language: ['Is English their main language?', '', 'english', false],
+      };
+      const order = w.reason === 'rent' ? ['subsidy', 'mortgage', 'benefits', 'victim', 'language'] : ['subsidy', 'mortgage', 'benefits', 'victim', 'language'];
+      const q = Q[s]; const nextStep = order[order.indexOf(s) + 1] || 'serve';
+      app.innerHTML = wzShell(4, 7, q[0], q[1], wzYesNo('wy', q[3]) + (s === 'language' ? `<div class="field" id="wz-langbox" style="display:none;margin-top:1rem;"><label>What is their main language?</label><input type="text" id="wz-lang" class="wz-input" placeholder="Spanish"><button class="btn btn-primary wz-next" id="wz-langgo">Next</button></div>` : ''));
+      const set = (v) => { w.flags[q[2]] = v; };
+      document.getElementById('wy-yes').addEventListener('click', () => { set(true); if (s === 'language') { w.tenant.language = 'English'; } wzGo(nextStep); });
+      document.getElementById('wy-no').addEventListener('click', () => {
+        set(false);
+        if (s === 'language') { document.getElementById('wz-langbox').style.display = ''; document.getElementById('wz-lang').focus(); return; }
+        wzGo(nextStep);
+      });
+      const ns = document.getElementById('wy-ns'); if (ns) ns.addEventListener('click', () => { set(true); wzGo(nextStep); });
+      const lg = document.getElementById('wz-langgo');
+      if (lg) lg.addEventListener('click', () => { const v = document.getElementById('wz-lang').value.trim(); if (!v) return wzErr('Type their language.'); w.tenant.language = v; wzGo('serve'); });
+    }
+    // ---------- 5. delivery date + signer
+    else if (s === 'serve') {
+      const c = wzCase(); const kind = wzKind(); const nd = noticeDays(c, kind, { grounds: wzGrounds() });
+      if (!w.serve) w.serve = todayISO();
+      const dl = legalDeadline(w.serve, nd.days);
+      app.innerHTML = wzShell(5, 7, 'When will you hand it to them?', 'Pick the day you\'ll deliver it. We\'ll figure out the deadline for you.', `
+        <div class="card big-form">
+          <div class="field"><label>Delivery day</label><input type="date" id="wz-serve" value="${esc(w.serve)}"></div>
+          <div class="wz-deadline"><span>They must ${kind === 'terminate' ? 'move out' : (w.reason === 'rent' ? 'pay or move out' : 'fix it or move out')} by</span><strong id="wz-dl">${esc(fmtDate(dl))} at 11:59 p.m.</strong><em id="wz-why">${esc(nd.why)}</em></div>
+          <div class="field"><label>Your name (you will sign it)</label><input type="text" id="wz-signer" value="${esc(w.signer || w.tenant.signerName || (() => { try { return localStorage.getItem('ld_helper') || ''; } catch (e) { return ''; } })())}"></div>
+        </div>
+        <button class="btn btn-primary wz-next" id="wz-go">Next</button>`);
+      document.getElementById('wz-serve').addEventListener('change', (e) => { w.serve = e.target.value; const d2 = legalDeadline(w.serve, nd.days); document.getElementById('wz-dl').textContent = fmtDate(d2) + ' at 11:59 p.m.'; });
+      document.getElementById('wz-go').addEventListener('click', () => {
+        w.serve = document.getElementById('wz-serve').value; w.signer = document.getElementById('wz-signer').value.trim();
+        if (!w.serve) return wzErr('Pick the delivery day.');
+        if (!w.signer) return wzErr('Enter your name.');
+        wzGo('review');
+      });
+    }
+    // ---------- 6. review
+    else if (s === 'review') {
+      const c = wzCase(); const kind = wzKind(); const g = wzGrounds(); const nd = noticeDays(c, kind, { grounds: g }); const dl = legalDeadline(w.serve, nd.days);
+      const form = kind === 'terminate' ? 'Notice to Terminate Tenancy (court form JDF 99B)' : 'Demand for Compliance or Possession (court form JDF 99A)';
+      const reasonTxt = w.reason === 'rent' ? 'Unpaid rent: ' + fmtMoney(g.rent.rows.reduce((s, x) => s + (parseFloat(x.amount) || 0), 0)) + ' for ' + g.rent.rows.map(x => x.period).join(', ')
+        : w.reason === 'violation' ? 'Broke a lease rule: ' + g.violation.term : w.reason === 'conduct' ? 'Bothering ' + g.conduct.who
+        : w.reason === 'repeat' ? 'Did it again: ' + g.repeat.term : 'Dangerous or criminal act';
+      const row = (k, v) => `<div class="wz-row"><span>${k}</span><strong>${v}</strong></div>`;
+      app.innerHTML = wzShell(6, 7, 'Check this, then make the notice', 'This is the notice Colorado requires for your answers.', `
+        <div class="card">
+          <div class="wz-pick">&#10003; ${esc(form)}</div>
+          ${row('Tenant', esc(c.tenantName + (c.tenantName2 ? ' and ' + c.tenantName2 : '')))}
+          ${row('Address', esc(c.propertyLine + (c.city ? ', ' + c.city : '')))}
+          ${row('Reason', esc(reasonTxt))}
+          ${row('Notice period', nd.days + ' days')}
+          ${row('You deliver it', esc(fmtDate(w.serve)))}
+          ${row('Deadline', esc(fmtDate(dl)) + ' at 11:59 p.m.')}
+          ${row('Signed by', esc(w.signer))}
+        </div>
+        ${caseWarnings(c)}
+        <button class="btn btn-primary wz-next" id="wz-go">Make my notice</button>`);
+      document.getElementById('wz-go').addEventListener('click', async function () {
+        this.disabled = true; this.textContent = 'Saving…';
+        try {
+          const n = { id: newId(), kind, createdAt: Date.now(), grounds: g, service: { attempts: [] }, outcome: { status: 'open' },
+            days: nd.days, daysWhy: nd.why, plannedServiceISO: w.serve, moveOutISO: dl, signerName: w.signer, fromGuide: true };
+          const saved = await saveCase({ ...c, signerName: c.signerName || w.signer, notices: (c.notices || []).concat([n]) });
+          w.saved = saved; w.savedNotice = saved.notices.find(x => x.id === n.id); window.__case = saved;
+          try { localStorage.setItem('ld_helper', w.signer); } catch (e) {}
+          wzGo('done');
+        } catch (e) { this.disabled = false; this.textContent = 'Make my notice'; wzErr('Could not save. Check your connection and try again.'); }
+      });
+    }
+    // ---------- 7. done: print + next steps
+    else if (s === 'done') {
+      const c = w.saved, n = w.savedNotice; const form = n.kind === 'terminate' ? 'JDF99B' : 'JDF99A';
+      const spanish = /span|espa/i.test(c.language || '');
+      app.innerHTML = wzShell(7, 7, 'Your notice is ready', 'Print it, sign it, and deliver it.', `
+        <div class="wz-list">
+          ${wzBig('wz-court', '1. Print the official court form', 'Colorado\'s ' + (form === 'JDF99B' ? 'JDF 99B' : 'JDF 99A') + ', already filled in' + (spanish ? ' (Spanish)' : '') + '. Print 2 copies: one to deliver, one to keep.', 'style="border-color:var(--ink);"')}
+          ${wzBig('wz-view', 'Or print the Lease Desk version', 'Same information in a simple letter format, with a service record at the bottom.')}
+        </div>
+        <div class="card" style="margin-top:1rem;">
+          <div class="section-label">2. Deliver it</div>
+          <ol class="wz-steps">
+            <li>Hand it to ${esc(c.tenantName.split(' ')[0])}, or to anyone living there who is 15 or older.</li>
+            <li>If nobody answers, try again on a <strong>different day</strong>.</li>
+            <li>After ${c.victimNotified ? '3' : '2'} tries on different days, tape it to the front door${c.victimNotified ? ' and mail a copy by certified mail' : ''}.</li>
+            <li>Each time you try, write it down here: open the notice and tap <strong>Log attempt</strong>.</li>
+          </ol>
+          <div class="section-label" style="margin-top:1rem;">3. Wait for the deadline</div>
+          <p style="margin:0;">${n.kind === 'demand' && w.reason === 'rent' ? 'If they pay <strong>all</strong> the rent listed before the deadline, you must accept it and the notice is over. ' : ''}If they don't ${n.kind === 'terminate' ? 'move out' : 'fix it or move out'} by <strong>${esc(fmtDate(n.moveOutISO))} at 11:59 p.m.</strong>, you can file an eviction with the ${esc(c.county || '')} County Court the next business day.${c.mediationEligible ? ' Request mediation first.' : ''}</p>
+        </div>
+        <p class="error-text" id="wz-err2" style="display:none;"></p>
+        <div class="btn-row" style="flex-wrap:wrap;justify-content:center;">
+          <button class="btn btn-ghost" id="wz-open">Open this tenant's file</button>
+          <button class="btn btn-ghost" onclick="renderEvictWizard()">Start another notice</button>
+        </div>`);
+      document.getElementById('wz-view').addEventListener('click', () => renderNotice(c, n));
+      document.getElementById('wz-open').addEventListener('click', () => renderCase(c));
+      document.getElementById('wz-court').addEventListener('click', async function () {
+        const sp = this.querySelector('span'); const orig = sp.textContent; sp.textContent = 'Getting the newest form from the court…'; this.disabled = true;
+        try {
+          const r = await fetch('/api/courtforms', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ key: staffKey(), forms: [{ form, lang: spanish ? 'es' : 'en' }], data: courtData(c, n), title: form + ' - ' + c.tenantName }) });
+          if (!r.ok) throw new Error('court site');
+          const blob = await r.blob(); const a = document.createElement('a'); a.href = URL.createObjectURL(blob);
+          a.download = (form === 'JDF99B' ? 'Notice to Terminate' : 'Demand for Compliance') + ' - ' + c.tenantName + '.pdf';
+          document.body.appendChild(a); a.click(); setTimeout(() => { URL.revokeObjectURL(a.href); a.remove(); }, 1500);
+          sp.textContent = 'Downloaded. Tap to download again.';
+        } catch (e) {
+          sp.textContent = orig; const er = document.getElementById('wz-err2');
+          er.textContent = 'The court website didn\'t answer. Try again in a minute, or use the Lease Desk version.'; er.style.display = '';
+        }
+        this.disabled = false;
+      });
+    }
+    window.scrollTo(0, 0);
+  }
+  function wzKind() { return (WZ_REASONS.find(r => r.id === WZ().reason) || {}).kind || 'demand'; }
+  function wzCase() {
+    const w = WZ(); const f = w.flags;
+    return { ...w.tenant, subsidized: !!f.subsidized, cares: !!f.cares, mediationEligible: !!f.mediationEligible, victimNotified: !!f.victimNotified,
+      county: w.tenant.county || wzCounty(w.tenant.city || ''), entity: w.tenant.entity || '', notices: w.tenant.notices || [] };
+  }
+  function wzGrounds() {
+    const w = WZ(), n = w.notice, r = w.reason; const g = {};
+    const rule = n.rule === 'Other rule' ? (n.ruleText || '').trim() : n.rule;
+    if (r === 'rent') g.rent = { on: true, rows: n.rent.slice().sort((a, b) => a.due.localeCompare(b.due)).map(x => ({ period: x.period, due: x.due, amount: String(x.amount) })) };
+    if (r === 'violation') g.violation = { on: true, term: rule, explanation: n.what };
+    if (r === 'conduct') g.conduct = { on: true, who: n.who, what: n.what };
+    if (r === 'repeat') g.repeat = { on: true, term: rule, priorNoticeId: '__other__', priorServedISO: n.prior, explanation: n.what };
+    if (r === 'substantial') g.substantial = { on: true, kinds: n.kinds.slice(), explanation: n.what };
+    return g;
+  }
+
   async function renderCases() {
     app.innerHTML = header() + `<p class="hint" style="text-align:center;padding:2rem 0;">Loading tenant files&hellip;</p>`;
     let items = [];
@@ -788,7 +1179,7 @@
       <div style="max-width:680px;margin:1rem auto;">
         <h1 style="text-align:center;margin-bottom:0.4rem;">Eviction toolkit</h1>
         <p class="subhead" style="text-align:center;margin:0 auto 1.25rem;">Build notices with the content Colorado requires, log service, and track late payments and the 12-month for-cause rule. Keep one file per tenant.</p>
-        <div class="card"><div class="btn-row" style="margin-top:0;"><button class="btn btn-primary" onclick="newCaseFlow()">New tenant file</button></div></div>
+        <div class="card"><div class="btn-row" style="margin-top:0;flex-wrap:wrap;"><button class="btn btn-primary" onclick="goHash('#/evict')">Start the step-by-step guide</button><button class="btn btn-ghost" onclick="newCaseFlow()">New tenant file (manual)</button></div></div>
         <div class="card">
           ${items.length ? items.map(c => {
             const t = tenure(c); const lh = lateHistory(c);
@@ -810,7 +1201,7 @@
   window.openCase = async function (id) {
     let c = (window.__case && window.__case.id === id) ? window.__case : (window.__cases || []).find(x => x.id === id);
     if (!c) { try { const r = await fetch('/api/cases?id=' + encodeURIComponent(id) + '&key=' + encodeURIComponent(staffKey())); if (r.ok) c = await r.json(); } catch (e) {} }
-    if (c) renderCase(c); else goHash('#/evict');
+    if (c) renderCase(c); else goHash('#/evict/files');
   };
 
   // ---- new file: from a completed lease or blank
@@ -820,7 +1211,7 @@
     try { const r = await fetch('/api/archive?key=' + encodeURIComponent(staffKey())); if (r.ok) items = (await r.json()).items || []; } catch (e) {}
     window.__archForCase = items;
     app.innerHTML = header() + `
-      <button class="step-back" onclick="goHash('#/evict')">&larr; Tenant files</button>
+      <button class="step-back" onclick="goHash('#/evict/files')">&larr; Tenant files</button>
       <div style="max-width:620px;margin:0 auto;">
         <h1 style="text-align:center;margin-bottom:1rem;">New tenant file</h1>
         <div class="card">
@@ -852,7 +1243,7 @@
     const f = (id, label, val, type, hint, full) => `<div class="field${full ? ' full' : ''}"><label>${label}</label><input type="${type || 'text'}" id="${id}" value="${esc(val || '')}">${hint ? `<p class="hint">${hint}</p>` : ''}</div>`;
     const chk = (id, label, val, hint) => `<label class="checkbox-row"><input type="checkbox" id="${id}" ${val ? 'checked' : ''}><span>${label}${hint ? `<br><span class="hint">${hint}</span>` : ''}</span></label>`;
     app.innerHTML = header() + `
-      <button class="step-back" onclick="${c.id ? `openCase('${esc(c.id)}')` : `goHash('#/evict')`}">&larr; Back</button>
+      <button class="step-back" onclick="${c.id ? `openCase('${esc(c.id)}')` : `goHash('#/evict/files')`}">&larr; Back</button>
       <div style="max-width:680px;margin:0 auto;">
         <h1 style="margin-bottom:1rem;">${c.id ? 'Edit tenant file' : 'Tenant file details'}</h1>
         <div class="card"><div class="section-label">Tenant and property</div><div class="grid">
@@ -1048,7 +1439,7 @@
       return out.join(', ');
     };
     app.innerHTML = header() + `
-      <button class="step-back" onclick="goHash('#/evict')">&larr; Tenant files</button>
+      <button class="step-back" onclick="goHash('#/evict/files')">&larr; Tenant files</button>
       <div style="max-width:720px;margin:0 auto;">
         <h1 style="margin-bottom:0.2rem;">${esc(c.tenantName)}${c.tenantName2 ? ' and ' + esc(c.tenantName2) : ''}</h1>
         <p class="subhead" style="margin-bottom:1rem;">${esc(c.propertyLine || '')}${c.city ? ', ' + esc(c.city) : ''}${c.rent ? ' &middot; ' + fmtMoney(c.rent) + '/month' : ''}</p>
@@ -1088,7 +1479,7 @@
     document.getElementById('case-del').addEventListener('click', async function () {
       if (this.dataset.confirm !== '1') { this.dataset.confirm = '1'; this.textContent = 'Tap again to delete this file permanently'; return; }
       this.disabled = true;
-      try { await fetch('/api/cases', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ action: 'delete', id: c.id, key: staffKey() }) }); goHash('#/evict'); }
+      try { await fetch('/api/cases', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ action: 'delete', id: c.id, key: staffKey() }) }); goHash('#/evict/files'); }
       catch (e) { const er = document.getElementById('case-del-err'); er.textContent = 'Could not delete. Try again.'; er.style.display = ''; this.disabled = false; }
     });
     window.scrollTo(0, 0);
@@ -1671,7 +2062,7 @@
           ${tile('#/status', 'Lease status', 'Who still needs to sign or countersign.', false)}
           ${tile('#/archive', 'Completed leases', 'Every fully signed lease. Download any as a PDF.', false)}
           ${tile('#/listings', 'Property listings', 'Mark properties available or not for the website map.', false)}
-          ${tile('#/evict', 'Eviction toolkit', 'Demand notices, service log, late-payment and 12-month tracker.', false)}
+          ${tile('#/evict', 'Eviction notice', 'Answer a few questions and get the right notice, filled in.', false)}
         </div></div>
         <p style="text-align:center;"><a href="#" style="font-size:0.82rem;" onclick="lockDevice();return false;">Sign out on this device</a></p>
       </div>`;
