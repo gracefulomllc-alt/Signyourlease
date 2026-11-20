@@ -40,37 +40,42 @@ const cors = { 'Access-Control-Allow-Origin': '*', 'Access-Control-Allow-Methods
 const json = (o, s = 200) => new Response(JSON.stringify(o), { status: s, headers: { ...cors, 'Content-Type': 'application/json' } });
 const UA = { 'User-Agent': 'Mozilla/5.0 (compatible; LeaseDesk/1.0)' };
 
+// Finds the newest version of a form on the court's own form page.
+// Checked at most every 6 hours. If the page can't be read, uses the last version we confirmed, and says so.
+const RECHECK = 6 * 3600000;
 async function currentUrl(form, lang, store) {
   const cacheKey = 'url:' + form + ':' + lang;
   const hit = await store.get(cacheKey, { type: 'json' }).catch(() => null);
-  if (hit && Date.now() - hit.at < DAY) return hit.url;
+  if (hit && hit.live && Date.now() - hit.at < RECHECK) return { url: hit.url, live: true, checkedAt: hit.at };
   let url = '';
   try {
-    const r = await fetch(BASE + '/self-help-and-forms/self-help-forms/' + PAGES[form], { headers: UA });
+    const r = await fetch(BASE + '/self-help-and-forms/self-help-forms/' + PAGES[form], { headers: UA, signal: AbortSignal.timeout(8000) });
     if (r.ok) {
       const html = await r.text();
-      const file = form.replace(/^JDF/, 'JDF') + (lang === 'es' ? '.spanish' : '') + '.pdf';
+      const file = form + (lang === 'es' ? '.spanish' : '') + '.pdf';
       const re = new RegExp('(?:https://www\\.coloradojudicial\\.gov)?(/sites/default/files/[0-9]{4}-[0-9]{2}/' + file.replace(/\./g, '\\.') + ')', 'gi');
       const found = [...html.matchAll(re)].map(m => m[1]).sort();
       if (found.length) url = BASE + found[found.length - 1];
     }
   } catch (e) {}
-  if (!url && lang !== 'es' && FALLBACK[form]) url = BASE + FALLBACK[form];
-  if (url) await store.setJSON(cacheKey, { url, at: Date.now() }).catch(() => {});
-  return url;
+  if (url) { await store.setJSON(cacheKey, { url, at: Date.now(), live: true }).catch(() => {}); return { url, live: true, checkedAt: Date.now() }; }
+  // Court page unreachable: last confirmed version, else the built-in one.
+  if (hit && hit.url) return { url: hit.url, live: false, checkedAt: hit.at };
+  if (lang !== 'es' && FALLBACK[form]) return { url: BASE + FALLBACK[form], live: false, checkedAt: 0 };
+  return { url: '', live: false, checkedAt: 0 };
 }
 
 async function formBytes(form, lang, store) {
-  const url = await currentUrl(form, lang, store);
+  const { url, live, checkedAt } = await currentUrl(form, lang, store);
   if (!url) throw new Error('Could not find ' + form + (lang === 'es' ? ' (Spanish)' : ''));
   const key = 'pdf:' + url.replace(/[^A-Za-z0-9.]/g, '_');
   const cached = await store.get(key, { type: 'arrayBuffer' }).catch(() => null);
-  if (cached) return { bytes: new Uint8Array(cached), url };
+  if (cached) return { bytes: new Uint8Array(cached), url, live, checkedAt };
   const r = await fetch(url, { headers: UA });
   if (!r.ok) throw new Error('Court site returned ' + r.status + ' for ' + form);
   const bytes = new Uint8Array(await r.arrayBuffer());
   await store.set(key, bytes).catch(() => {});
-  return { bytes, url };
+  return { bytes, url, live, checkedAt };
 }
 
 function tooltip(field) {
@@ -116,7 +121,7 @@ function findField(form, fields, key) {
 }
 
 async function fillOne(formId, lang, values, store) {
-  const { bytes } = await formBytes(formId, lang, store);
+  const { bytes, url: srcUrl, live } = await formBytes(formId, lang, store);
   const doc = await PDFDocument.load(bytes, { ignoreEncryption: true, updateMetadata: false });
   let f = null; try { f = doc.getForm(); } catch (e) {}
   const misses = [];
@@ -141,7 +146,7 @@ async function fillOne(formId, lang, values, store) {
     }
     try { f.updateFieldAppearances(await doc.embedFont(StandardFonts.Helvetica)); } catch (e) {}
   }
-  return { doc, misses };
+  return { doc, misses, srcUrl, live };
 }
 
 export default async (req) => {
@@ -182,7 +187,7 @@ export default async (req) => {
     }
     // list of forms with their current court link
     const out = [];
-    for (const form of Object.keys(PAGES)) out.push({ form, url: await currentUrl(form, 'en', store), spanish: SPANISH_OK.has(form) });
+    for (const form of Object.keys(PAGES)) { const c = await currentUrl(form, 'en', store); out.push({ form, url: c.url, live: c.live, spanish: SPANISH_OK.has(form) }); }
     return json({ items: out });
   }
 
@@ -193,11 +198,12 @@ export default async (req) => {
     if (!list.length) return json({ error: 'no forms' }, 400);
     try {
       const out = await PDFDocument.create();
-      const misses = {};
+      const misses = {}; const info = [];
       for (const item of list) {
         const lang = item.lang === 'es' ? 'es' : 'en';
         const data = { tenants: [], ...(body.data || {}) };
-        const { doc, misses: m } = await fillOne(item.form, lang, valuesFor(item.form, data), store);
+        const { doc, misses: m, srcUrl, live } = await fillOne(item.form, lang, valuesFor(item.form, data), store);
+        info.push({ form: item.form, lang, posted: ((srcUrl || '').match(/files\/(\d{4}-\d{2})\//) || [])[1] || '', live, url: srcUrl });
         if (m.length) misses[item.form] = m;
         try { doc.getForm().flatten(); } catch (e) {}
         const copies = Math.max(1, Math.min(4, parseInt(item.copies, 10) || 1));
@@ -208,7 +214,7 @@ export default async (req) => {
       }
       out.setTitle(body.title || 'Eviction forms');
       const bytes = await out.save();
-      return new Response(bytes, { headers: { ...cors, 'Content-Type': 'application/pdf', 'X-Missed-Fields': encodeURIComponent(JSON.stringify(misses)).slice(0, 4000), 'Access-Control-Expose-Headers': 'X-Missed-Fields' } });
+      return new Response(bytes, { headers: { ...cors, 'Content-Type': 'application/pdf', 'X-Missed-Fields': encodeURIComponent(JSON.stringify(misses)).slice(0, 4000), 'X-Form-Info': encodeURIComponent(JSON.stringify(info)).slice(0, 4000), 'Access-Control-Expose-Headers': 'X-Missed-Fields, X-Form-Info' } });
     } catch (e) {
       return json({ error: e.message }, 502);
     }

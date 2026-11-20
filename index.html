@@ -1115,8 +1115,9 @@
       app.innerHTML = wzShell(7, 7, 'Your notice is ready', 'Print it, sign it, and deliver it.', `
         <div class="wz-list">
           ${wzBig('wz-court', '1. Print the official court form', 'Colorado\'s ' + (form === 'JDF99B' ? 'JDF 99B' : 'JDF 99A') + ', already filled in' + (spanish ? ' (Spanish)' : '') + '. Print 2 copies: one to deliver, one to keep.', 'style="border-color:var(--ink);"')}
-          ${wzBig('wz-view', 'Or print the Lease Desk version', 'Same information in a simple letter format, with a service record at the bottom.')}
         </div>
+        <div id="wz-note"></div>
+        <p style="text-align:center;margin:0.5rem 0 0;font-size:0.85rem;"><a href="#" id="wz-view" style="color:var(--ink-soft);">Backup only: Lease Desk letter version (not the court's form)</a></p>
         <div class="card" style="margin-top:1rem;">
           <div class="section-label">2. Deliver it</div>
           <ol class="wz-steps">
@@ -1126,30 +1127,16 @@
             <li>Each time you try, write it down here: open the notice and tap <strong>Log attempt</strong>.</li>
           </ol>
           <div class="section-label" style="margin-top:1rem;">3. Wait for the deadline</div>
-          <p style="margin:0;">${n.kind === 'demand' && w.reason === 'rent' ? 'If they pay <strong>all</strong> the rent listed before the deadline, you must accept it and the notice is over. ' : ''}If they don't ${n.kind === 'terminate' ? 'move out' : 'fix it or move out'} by <strong>${esc(fmtDate(n.moveOutISO))} at 11:59 p.m.</strong>, you can file an eviction with the ${esc(c.county || '')} County Court the next business day.${c.mediationEligible ? ' Request mediation first.' : ''}</p>
+          <p style="margin:0;">${n.kind === 'demand' && w.reason === 'rent' ? 'If they pay <strong>all</strong> the rent listed before the deadline, you must accept it and the notice is over. ' : ''}If they don't ${n.kind === 'terminate' ? 'move out' : (w.reason === 'rent' ? 'pay or move out' : 'fix it or move out')} by <strong>${esc(fmtDate(n.moveOutISO))} at 11:59 p.m.</strong>, you can file an eviction with the ${esc(c.county || '')} County Court the next business day.${c.mediationEligible ? ' Request mediation first.' : ''}</p>
         </div>
         <p class="error-text" id="wz-err2" style="display:none;"></p>
         <div class="btn-row" style="flex-wrap:wrap;justify-content:center;">
           <button class="btn btn-ghost" id="wz-open">Open this tenant's file</button>
           <button class="btn btn-ghost" onclick="renderEvictWizard()">Start another notice</button>
         </div>`);
-      document.getElementById('wz-view').addEventListener('click', () => renderNotice(c, n));
+      document.getElementById('wz-view').addEventListener('click', (e) => { e.preventDefault(); renderNotice(c, n); });
       document.getElementById('wz-open').addEventListener('click', () => renderCase(c));
-      document.getElementById('wz-court').addEventListener('click', async function () {
-        const sp = this.querySelector('span'); const orig = sp.textContent; sp.textContent = 'Getting the newest form from the court…'; this.disabled = true;
-        try {
-          const r = await fetch('/api/courtforms', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ key: staffKey(), forms: [{ form, lang: spanish ? 'es' : 'en' }], data: courtData(c, n), title: form + ' - ' + c.tenantName }) });
-          if (!r.ok) throw new Error('court site');
-          const blob = await r.blob(); const a = document.createElement('a'); a.href = URL.createObjectURL(blob);
-          a.download = (form === 'JDF99B' ? 'Notice to Terminate' : 'Demand for Compliance') + ' - ' + c.tenantName + '.pdf';
-          document.body.appendChild(a); a.click(); setTimeout(() => { URL.revokeObjectURL(a.href); a.remove(); }, 1500);
-          sp.textContent = 'Downloaded. Tap to download again.';
-        } catch (e) {
-          sp.textContent = orig; const er = document.getElementById('wz-err2');
-          er.textContent = 'The court website didn\'t answer. Try again in a minute, or use the Lease Desk version.'; er.style.display = '';
-        }
-        this.disabled = false;
-      });
+      document.getElementById('wz-court').addEventListener('click', function () { officialNoticePdf(c, n, this, document.getElementById('wz-note')); });
     }
     window.scrollTo(0, 0);
   }
@@ -1400,12 +1387,8 @@
       const meta = {}; COURT_FORMS.forEach(g => g.forms.forEach(f => { meta[f.id] = f; }));
       const forms = chosen.map(id => ({ form: id, lang: lang === 'es' && meta[id].es ? 'es' : 'en', copies: meta[id].perTenant ? Math.max(1, data.tenants.length) : 1 }));
       try {
-        const r = await fetch('/api/courtforms', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ key: staffKey(), forms, data, title: 'Eviction forms - ' + c.tenantName }) });
-        if (!r.ok) { let m = ''; try { m = (await r.json()).error; } catch (e) {} throw new Error(m || 'failed'); }
-        const blob = await r.blob();
-        const a = document.createElement('a'); a.href = URL.createObjectURL(blob);
-        a.download = 'Court forms - ' + c.tenantName + ' - ' + chosen.join(', ').replace(/JDF/g, '') + '.pdf';
-        document.body.appendChild(a); a.click(); setTimeout(() => { URL.revokeObjectURL(a.href); a.remove(); }, 1500);
+        const info = await downloadOfficial(forms, data, 'Court forms - ' + c.tenantName + ' - ' + chosen.join(', ').replace(/JDF/g, '') + '.pdf', 'Eviction forms - ' + c.tenantName);
+        err.innerHTML = officialNote(info); err.style.display = '';
         btn.textContent = 'Downloaded. Download again';
       } catch (e) {
         err.innerHTML = 'Could not get the forms from the court website right now (' + esc(e.message) + '). Try again in a minute, or open them on the <a href="https://www.coloradojudicial.gov/self-help/residential-evictions" target="_blank" rel="noopener">court\'s eviction page</a>.';
@@ -1658,6 +1641,40 @@
   }
 
   // ---- one notice: preview, service log, outcome
+  // ---- official court forms: download + say exactly which version was used
+  const MONTHS = ['January','February','March','April','May','June','July','August','September','October','November','December'];
+  function postedLabel(p) { const m = /^(\d{4})-(\d{2})$/.exec(p || ''); return m ? MONTHS[+m[2] - 1] + ' ' + m[1] : ''; }
+  async function downloadOfficial(forms, data, filename, title) {
+    const r = await fetch('/api/courtforms', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ key: staffKey(), forms, data, title }) });
+    if (!r.ok) { let m = ''; try { m = (await r.json()).error; } catch (e) {} throw new Error(m || 'court site'); }
+    let info = []; try { info = JSON.parse(decodeURIComponent(r.headers.get('X-Form-Info') || '[]')); } catch (e) {}
+    const blob = await r.blob(); const a = document.createElement('a'); a.href = URL.createObjectURL(blob); a.download = filename;
+    document.body.appendChild(a); a.click(); setTimeout(() => { URL.revokeObjectURL(a.href); a.remove(); }, 1500);
+    return info;
+  }
+  function officialNote(info) {
+    if (!info || !info.length) return '';
+    const names = info.map(i => i.form.replace(/^JDF/, 'JDF ') + (i.lang === 'es' ? ' (Spanish)' : '') + (i.posted ? ', posted ' + postedLabel(i.posted) : '')).join('; ');
+    if (info.every(i => i.live)) return `<div class="banner" style="background:#E7F4EC;border:1px solid #BFE0CB;color:#1F5A38;"><span><strong>&#10003; Official Colorado court form.</strong> Pulled just now from the Colorado Judicial Branch website, newest version: ${esc(names)}.</span></div>`;
+    return `<div class="banner" style="background:#FBF1DC;border:1px solid #E9D3A3;color:#5A3E0B;"><span><strong>Couldn't reach the court website.</strong> This is the official form, but the last version Lease Desk confirmed (${esc(names)}). Before serving, check the form's date on <a href="https://www.coloradojudicial.gov/self-help/residential-evictions" target="_blank" rel="noopener">coloradojudicial.gov</a>, or try again in a few minutes.</span></div>`;
+  }
+  async function officialNoticePdf(c, n, btn, noteEl) {
+    const form = n.kind === 'terminate' ? 'JDF99B' : 'JDF99A';
+    const spanish = /span|espa/i.test(c.language || '');
+    const label = btn.querySelector('span') || btn; const orig = label.textContent;
+    label.textContent = 'Getting the newest form from the court…'; btn.disabled = true;
+    try {
+      const info = await downloadOfficial([{ form, lang: spanish ? 'es' : 'en' }], courtData(c, n), (form === 'JDF99B' ? 'Notice to Terminate' : 'Demand for Compliance') + ' (' + form.replace('JDF', 'JDF ') + ') - ' + c.tenantName + '.pdf', form + ' - ' + c.tenantName);
+      if (noteEl) noteEl.innerHTML = officialNote(info);
+      label.textContent = 'Downloaded. Tap to download again.';
+    } catch (e) {
+      label.textContent = orig;
+      if (noteEl) noteEl.innerHTML = badBox('The court website didn\'t answer, so the official form couldn\'t be made. Try again in a minute.');
+    }
+    btn.disabled = false;
+  }
+  window.officialNoticePdf = officialNoticePdf;
+
   function renderNotice(c, n) {
     const st = serviceStatus(c, n);
     const legal = st.complete ? legalDeadline(st.date, n.days) : '';
@@ -1671,11 +1688,11 @@
         ${late ? badBox('<strong>Print a new copy before relying on this notice.</strong> It was served ' + esc(fmtDate(st.date)) + ', so the earliest legal move-out deadline is ' + esc(fmtDate(legal)) + ', but the notice says ' + esc(fmtDate(n.moveOutISO)) + '. Edit the notice, which updates the date, then serve the new copy.') : ''}
         <div class="card no-print">
           <div class="btn-row" style="margin-top:0;flex-wrap:wrap;">
-            <button class="btn btn-primary" onclick="window.print()">Print</button>
-            <button class="btn" id="nt-pdf">Download PDF</button>
+            <button class="btn btn-primary" id="nt-official"><span>Official court form (${n.kind === 'terminate' ? 'JDF 99B' : 'JDF 99A'})</span></button>
             <button class="btn btn-ghost" onclick="buildNotice('${esc(n.kind)}', '${esc(n.id)}')">Edit notice</button>
           </div>
-          <p class="hint" style="margin-top:0.5rem;">Print it, sign it in ink, and serve it. Keep a copy. The court's own forms (JDF 99A and 99B) are also available on the <a href="${JDF99_INFO}" target="_blank" rel="noopener">Colorado courts website</a>.</p>
+          <div id="nt-note"></div>
+          <p class="hint" style="margin-top:0.5rem;">Serve the official court form: print it, sign it in ink, deliver it, and keep a copy. Below is the Lease Desk letter version of the same notice, for backup only: <a href="#" onclick="window.print();return false;">print it</a> or <a href="#" id="nt-pdf">download it</a>.</p>
         </div>
         <div class="paper" id="notice-paper">${noticeHtml(c, n)}</div>
         <div class="card no-print" style="margin-top:1.5rem;">
@@ -1728,7 +1745,8 @@
     document.getElementById('oc-save').addEventListener('click', function () {
       persist(nn => { nn.outcome = { status: document.getElementById('oc-status').value, date: document.getElementById('oc-date').value }; }, this);
     });
-    document.getElementById('nt-pdf').addEventListener('click', function () { downloadDocPdf(noticeHtml(c, n), fname, (n.kind === 'terminate' ? 'Notice to terminate: ' : 'Demand for compliance: ') + (c.propertyLine || ''), fname.replace(/\.pdf$/, ''), this); });
+    document.getElementById('nt-official').addEventListener('click', function () { officialNoticePdf(c, n, this, document.getElementById('nt-note')); });
+    document.getElementById('nt-pdf').addEventListener('click', function (e) { e.preventDefault(); downloadDocPdf(noticeHtml(c, n), fname, (n.kind === 'terminate' ? 'Notice to terminate: ' : 'Demand for compliance: ') + (c.propertyLine || ''), fname.replace(/\.pdf$/, ''), this); });
     document.getElementById('nt-del').addEventListener('click', async function () {
       if (this.dataset.confirm !== '1') { this.dataset.confirm = '1'; this.textContent = 'Tap again to delete this notice'; return; }
       this.disabled = true;
