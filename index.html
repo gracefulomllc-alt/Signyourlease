@@ -95,6 +95,7 @@
   .wz-row { display: flex; justify-content: space-between; gap: 1rem; padding: 0.55rem 0; border-bottom: 1px solid #F1E4D8; }
   .wz-row span { color: var(--ink-soft); }
   .wz-row strong { text-align: right; }
+  .wc-filled { background: #FFF8E1 !important; border-color: var(--brass) !important; }
   .wz-steps { padding-left: 1.2rem; margin: 0.25rem 0 0; line-height: 1.7; font-size: 1.02rem; }
   .rc { position: relative; font-family: 'Inter', system-ui, sans-serif; line-height: 1.5; }
   .rc-head { display: flex; justify-content: space-between; gap: 1rem; align-items: flex-start; border-top: 4px solid var(--brass); padding-top: 1rem; margin: -0.5rem 0 1.25rem; flex-wrap: wrap; }
@@ -845,6 +846,81 @@
   }
   const WZ = () => window.__wz;
 
+  // ---------- read tenant info from a screenshot or photo (runs on this device; the picture is not uploaded) ----------
+  let __ocrLib = null;
+  function loadOcr() {
+    if (window.Tesseract) return Promise.resolve(window.Tesseract);
+    if (__ocrLib) return __ocrLib;
+    __ocrLib = new Promise((res, rej) => {
+      const s = document.createElement('script');
+      s.src = 'https://cdn.jsdelivr.net/npm/tesseract.js@5.1.1/dist/tesseract.min.js';
+      s.onload = () => window.Tesseract ? res(window.Tesseract) : rej(new Error('ocr'));
+      s.onerror = () => { __ocrLib = null; rej(new Error('ocr')); };
+      document.head.appendChild(s);
+    });
+    return __ocrLib;
+  }
+  async function ocrImage(file, onProgress) {
+    const T = await loadOcr();
+    const worker = await T.createWorker('eng', 1, { logger: m => { if (m.status === 'recognizing text' && onProgress) onProgress(Math.round(m.progress * 100)); } });
+    try { const { data } = await worker.recognize(file); return data.text || ''; } finally { worker.terminate(); }
+  }
+  const OCR_MONTHS = { jan: 1, feb: 2, mar: 3, apr: 4, may: 5, jun: 6, jul: 7, aug: 8, sep: 9, sept: 9, oct: 10, nov: 11, dec: 12 };
+  function ocrDate(s) {
+    s = String(s || '').trim(); let m;
+    if ((m = /^(\d{4})-(\d{1,2})-(\d{1,2})$/.exec(s))) return m[1] + '-' + m[2].padStart(2, '0') + '-' + m[3].padStart(2, '0');
+    if ((m = /^(\d{1,2})[\/\-.](\d{1,2})[\/\-.](\d{2,4})$/.exec(s))) { const y = m[3].length === 2 ? '20' + m[3] : m[3]; return y + '-' + m[1].padStart(2, '0') + '-' + m[2].padStart(2, '0'); }
+    if ((m = /^([A-Za-z]{3,9})\.?\s+(\d{1,2})(?:st|nd|rd|th)?,?\s+(\d{4})$/.exec(s))) { const mo = OCR_MONTHS[m[1].toLowerCase().slice(0, m[1].toLowerCase().startsWith('sept') ? 4 : 3)]; if (mo) return m[3] + '-' + String(mo).padStart(2, '0') + '-' + m[2].padStart(2, '0'); }
+    return '';
+  }
+  // Pull name, address, rent and move-in date out of text from an Innago screen or a photographed lease.
+  function parseTenantText(raw) {
+    const text = String(raw || '').replace(/[|]/g, ' ').replace(/[“”]/g, '"').replace(/[‘’]/g, "'");
+    const lines = text.split(/\n/).map(l => l.replace(/\s+/g, ' ').trim()).filter(Boolean);
+    const flat = lines.join('\n');
+    const out = {};
+    const NAME = "([A-Z][a-zA-Z'\\-]+(?:[ \\t]+[A-Z]\\.?)?(?:[ \\t]+[A-Z][a-zA-Z'\\-]+){1,2})";
+    const STOP = /^(tenant|tenants|resident|residents|name|lessee|landlord|owner|property|phone|email|unit|rent|lease|address|balance|status|active|current|move|start|end|date|details|overview|payments?|documents?|colorado|pueblo|fountain|the|this|and)$/i;
+    const okName = (n) => n && n.split(/\s+/).length >= 2 && !n.split(/\s+/).some(w => STOP.test(w.replace(/\.$/, '')));
+    // names: "Tenant(s): A and B", "Tenant Name: A", or the line after a "Tenant" label
+    let m = new RegExp('(?:[Tt]enant\\([Ss]\\)|TENANT\\(S\\)|[Tt]enants?|TENANTS?|[Rr]esidents?|RESIDENTS?|[Ll]essees?|LESSEES?)(?:\\s+[Nn]ame)?\\s*[:\\-]\\s*' + NAME + '(?:\\s*(?:,|and|&)\\s*' + NAME + ')?').exec(flat);
+    if (m && okName(m[1])) { out.tenantName = m[1]; if (okName(m[2])) out.tenantName2 = m[2]; }
+    if (!out.tenantName) {
+      for (let i = 0; i < lines.length - 1; i++) {
+        if (/^(tenant|tenants|resident|residents|primary tenant|tenant name|lessee)s?:?$/i.test(lines[i])) {
+          const nm = new RegExp('^' + NAME).exec(lines[i + 1]); if (nm && okName(nm[1])) { out.tenantName = nm[1]; break; }
+        }
+      }
+    }
+    if (!out.tenantName) { m = new RegExp('between .{0,80}? and ' + NAME + '\\s*\\(?["\']?(?:the\\s+)?["\']?tenant', 'i').exec(flat.replace(/\n/g, ' ')); if (m && okName(m[1])) out.tenantName = m[1]; }
+    // street address and unit
+    const ST = '(?:St|Street|Ave|Avenue|Dr|Drive|Ln|Lane|Ct|Court|Rd|Road|Cir|Circle|Blvd|Boulevard|Way|Pl|Place)';
+    const ADDR = new RegExp('\\b(\\d{2,6}(?:\\s+1\\/2)?\\s+(?:[NSEW]\\.?\\s+|(?:East|West|North|South)\\s+)?(?:(?!Property\\b|Address\\b|Phone\\b|Unit\\b)[A-Z0-9][A-Za-z0-9]*\\s+){0,3}' + ST + ')\\b\\.?(?:\\s*,?\\s*((?:Unit|Apt\\.?|Apartment|#)\\s*#?\\s*[A-Za-z0-9\\-]+))?', 'i');
+    m = null;
+    for (const ln of lines) { const x = ADDR.exec(ln); if (x) { m = x; break; } }
+    if (!m) m = ADDR.exec(flat.replace(/\n/g, ' '));
+    if (m) { out.street = m[1].replace(/\s+/g, ' '); if (m[2]) out.unit = 'Unit ' + m[2].replace(/^(unit|apt\.?|apartment|#)\s*#?\s*/i, '').trim(); }
+    if (!out.unit && (m = /\b(?:Unit|Apt\.?|Apartment)\s*#?\s*([A-Za-z]?\d{1,4}[A-Za-z]?|[A-Z])\b/.exec(flat))) out.unit = 'Unit ' + m[1];
+    m = /\b(Pueblo|Colorado Springs|Fountain|Pueblo West|Canon City|Denver|Loveland)\b[,\s]+(?:CO|Colo\.?|Colorado)\b[,\s]*(\d{5})?/i.exec(flat.replace(/\n/g, ' '));
+    if (m) { out.city = m[1].replace(/\b\w/g, c => c.toUpperCase()); if (m[2]) out.zip = m[2]; }
+    // rent: an amount next to the word rent, never a deposit or fee
+    const amt = '\\$\\s?([\\d,]{2,7}(?:\\.\\d{2})?)';
+    const cands = [];
+    for (const ln of lines) {
+      if (/deposit|fee|late|balance|due now|paid|credit/i.test(ln) && !/monthly rent|rent amount|base rent/i.test(ln)) continue;
+      const r = new RegExp('(monthly rent|rent amount|base rent|rent)\\b[^$\\d]{0,30}' + amt, 'i').exec(ln) || new RegExp(amt + '\\s*(?:\\/\\s*mo(?:nth)?|per month|monthly|a month)', 'i').exec(ln);
+      if (r) { const v = parseFloat((r[2] || r[1]).replace(/,/g, '')); if (v >= 200 && v <= 10000) cands.push(v); }
+    }
+    if (!cands.length) { m = new RegExp('rent[^$]{0,80}?' + amt, 'i').exec(flat.replace(/\n/g, ' ')); if (m) { const v = parseFloat(m[1].replace(/,/g, '')); if (v >= 200 && v <= 10000) cands.push(v); } }
+    if (cands.length) out.rent = String(cands[0] % 1 ? cands[0].toFixed(2) : cands[0]);
+    // move-in / lease start date
+    const DT = '([A-Z][a-z]{2,8}\\.?\\s+\\d{1,2}(?:st|nd|rd|th)?,?\\s+\\d{4}|\\d{1,2}[\\/\\-.]\\d{1,2}[\\/\\-.]\\d{2,4}|\\d{4}-\\d{1,2}-\\d{1,2})';
+    m = new RegExp('(?:move[\\s-]?in(?:\\s+date)?|lease\\s+start(?:\\s+date)?|start\\s+date|lease\\s+begins?|commenc(?:e|es|ing|ement)(?:\\s+(?:on|date))?|beginning(?:\\s+on)?|term\\s+begins?|from)\\s*[:\\-]?\\s*(?:on\\s+)?' + DT, 'i').exec(flat.replace(/\n/g, ' '));
+    if (m) { const d = ocrDate(m[1]); if (d) out.since = d; }
+    return out;
+  }
+  window.__parseTenantText = parseTenantText;
+
   async function renderEvictWizard() {
     window.__wz = { step: 'tenant', hist: [], tenant: null, reason: '', notice: {}, flags: {} };
     app.innerHTML = header() + `<p class="hint" style="text-align:center;padding:2rem 0;">Loading your tenants&hellip;</p>`;
@@ -892,7 +968,7 @@
       app.innerHTML = wzShell(1, T, 'Who is the tenant?', 'Tap their name. If they aren\'t listed, add them at the bottom.', `
         ${all.length > 6 ? '<div class="field"><input type="search" id="wz-q" placeholder="Search by name" class="wz-input"></div>' : ''}
         <div class="wz-list">${all.map(x => wzBig('', esc(x.name), esc(x.sub), `data-src="${x.src}" data-i="${x.i}" data-name="${esc(x.name.toLowerCase())}"`)).join('') || '<p class="hint">No tenants saved yet.</p>'}</div>
-        <div style="margin-top:1rem;">${wzBig('wz-custom', '+ Someone not on this list', 'Type in their name and address.', 'style="border-style:dashed;"')}</div>`);
+        <div style="margin-top:1rem;">${wzBig('wz-custom', '+ Someone not on this list', 'Upload a screenshot of their info, or type it in.', 'style="border-style:dashed;"')}</div>`);
       const q = document.getElementById('wz-q');
       if (q) q.addEventListener('input', () => { const v = q.value.trim().toLowerCase(); document.querySelectorAll('.wz-list .wz-opt').forEach(b => { b.style.display = !v || b.dataset.name.includes(v) ? '' : 'none'; }); });
       document.querySelectorAll('.wz-list .wz-opt').forEach(b => b.addEventListener('click', async () => {
@@ -913,7 +989,12 @@
     else if (s === 'custom') {
       const t = w.tenant && !w.tenant.id && !w.tenant.archiveId ? w.tenant : {};
       const opts = PROPERTIES.map((p, i) => `<option value="${i}">${esc(p.street + (p.unit ? ', ' + p.unit : '') + ' — ' + propCity(p))}</option>`).join('');
-      app.innerHTML = wzShell(1, T, 'Tell us about the tenant', 'Only the name, address, and rent are needed. You can fill the rest in later.', `
+      app.innerHTML = wzShell(1, T, 'Tell us about the tenant', 'Upload a screenshot from Innago or a photo of their lease, and we\'ll fill this in. Or just type it.', `
+        <div class="card" style="text-align:center;">
+          <label class="btn btn-primary" style="display:inline-block;cursor:pointer;font-size:1.05rem;padding:0.9rem 1.3rem;">&#128247; Upload a screenshot or photo<input type="file" accept="image/*" id="wc-shot" style="position:absolute;width:1px;height:1px;opacity:0;overflow:hidden;pointer-events:none;"></label>
+          <p class="hint" style="margin:0.5rem 0 0;">Innago tenant page, or the first page of a paper lease. The picture is read on this phone and isn't saved.</p>
+          <div id="wc-shot-status"></div>
+        </div>
         <div class="card big-form">
           <div class="field"><label>Tenant's full name</label><input type="text" id="wc-name" value="${esc(t.tenantName || '')}"></div>
           <div class="field"><label>Second adult on the lease (if any)</label><input type="text" id="wc-name2" value="${esc(t.tenantName2 || '')}"></div>
@@ -925,6 +1006,31 @@
         <button class="btn btn-primary wz-next" id="wc-go">Next</button>`);
       const ps = document.getElementById('wc-prop');
       ps.addEventListener('change', () => { document.getElementById('wc-other').style.display = ps.value === 'other' ? '' : 'none'; });
+      document.getElementById('wc-shot').addEventListener('change', async (e) => {
+        const file = e.target.files && e.target.files[0]; if (!file) return;
+        const st = document.getElementById('wc-shot-status');
+        const thumb = URL.createObjectURL(file);
+        st.innerHTML = `<img src="${thumb}" alt="Your picture" style="max-width:100%;max-height:220px;border-radius:8px;margin-top:0.75rem;border:1px solid var(--line);"><p id="wc-prog" style="margin:0.5rem 0 0;font-weight:600;">Reading the picture&hellip;</p>`;
+        let found = {};
+        try { found = parseTenantText(await ocrImage(file, (pct) => { const pr = document.getElementById('wc-prog'); if (pr) pr.textContent = 'Reading the picture… ' + pct + '%'; })); }
+        catch (err) { const pr = document.getElementById('wc-prog'); if (pr) pr.innerHTML = '<span style="color:#A0352C;">Couldn\'t read the picture on this phone. Type the info below.</span>'; return; }
+        const filled = [];
+        const put = (id, v) => { const el = document.getElementById(id); if (el && v && !el.value.trim()) { el.value = v; el.classList.add('wc-filled'); filled.push(id); } };
+        put('wc-name', found.tenantName); put('wc-name2', found.tenantName2); put('wc-rent', found.rent); put('wc-since', found.since);
+        if (found.street) {
+          const want = normStreet(found.street);
+          const unitWant = String(found.unit || '').toLowerCase().replace(/\s+/g, ' ');
+          let idx = PROPERTIES.findIndex(p => normStreet(p.street) === want && String(p.unit || '').toLowerCase() === unitWant);
+          if (idx < 0) idx = PROPERTIES.findIndex(p => normStreet(p.street) === want && !p.unit);
+          if (idx < 0 && !unitWant) idx = -1;
+          if (idx >= 0) { ps.value = String(idx); ps.classList.add('wc-filled'); filled.push('wc-prop'); }
+          else { ps.value = 'other'; document.getElementById('wc-other').style.display = ''; put('wc-street', found.street + (found.unit ? ', ' + found.unit : '')); if (found.city) { const c2 = document.getElementById('wc-city'); c2.value = found.city; } filled.push('wc-street'); }
+        }
+        const pr = document.getElementById('wc-prog');
+        if (pr) pr.innerHTML = filled.length
+          ? '<span style="color:#1F5A38;">&#10003; Filled in ' + filled.length + ' box' + (filled.length === 1 ? '' : 'es') + ' from the picture (highlighted). Check each one and fix anything that\'s wrong.</span>'
+          : '<span style="color:#7A5410;">Couldn\'t find the tenant\'s info in that picture. Try a clearer screenshot, or type it below.</span>';
+      });
       document.getElementById('wc-go').addEventListener('click', () => {
         const v = (id) => document.getElementById(id).value.trim();
         if (!v('wc-name')) return wzErr('Enter the tenant\'s name.');
