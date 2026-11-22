@@ -773,6 +773,11 @@
     return { complete: false, warnings, need };
   }
 
+  // ---- notices are deleted 30 days after they are made (server does the deleting)
+  const NOTICE_KEEP_DAYS = 30;
+  function noticeDeleteOn(n) { return isoOf(new Date((n.createdAt || Date.now()) + NOTICE_KEEP_DAYS * 86400000)); }
+  const keepBanner = (n) => `<div class="banner" style="background:#E8ECF5;border:1px solid #C9D2E6;color:#2A3756;"><span><strong>Kept 30 days.</strong> Lease Desk deletes this notice on ${esc(fmtDate(noticeDeleteOn(n)))}. Save the PDF and keep your signed paper copy: if you go to court, you'll need the notice you served.</span></div>`;
+
   // ---- late-payment history for C.R.S. 38-12-1303(3)(f)
   function lateHistory(c) {
     const rows = [];
@@ -1117,6 +1122,7 @@
           ${wzBig('wz-court', '1. Print the official court form', 'Colorado\'s ' + (form === 'JDF99B' ? 'JDF 99B' : 'JDF 99A') + ', already filled in' + (spanish ? ' (Spanish)' : '') + '. Print 2 copies: one to deliver, one to keep.', 'style="border-color:var(--ink);"')}
         </div>
         <div id="wz-note"></div>
+        ${keepBanner(n)}
         <p style="text-align:center;margin:0.5rem 0 0;font-size:0.85rem;"><a href="#" id="wz-view" style="color:var(--ink-soft);">Backup only: Lease Desk letter version (not the court's form)</a></p>
         <div class="card" style="margin-top:1rem;">
           <div class="section-label">2. Deliver it</div>
@@ -1175,7 +1181,6 @@
               <strong>${esc(c.tenantName)}${c.tenantName2 ? ' and ' + esc(c.tenantName2) : ''}</strong><br>
               <span style="font-size:0.88rem;color:var(--ink-soft);">${esc(c.propertyLine || '')}</span><br>
               ${t.known ? (t.isCovered ? badge('For-cause law applies', 'warn') : badge('Under 12 months until ' + esc(fmtDate(t.covered)), 'ok')) : badge('Tenant-since date missing', 'bad')}
-              ${badge(lh.count + ' qualifying late payment' + (lh.count === 1 ? '' : 's'), lh.count > 2 ? 'warn' : 'info')}
               ${open.length ? badge(open.length + ' open notice' + (open.length === 1 ? '' : 's'), 'bad') : ''}
               ${c.subsidized || c.cares ? badge('30-day notices', 'info') : ''}
               <div class="btn-row" style="margin-top:0.5rem;"><button class="btn btn-ghost" onclick="openCase('${esc(c.id)}')">Open file</button></div>
@@ -1432,18 +1437,14 @@
           <p>${t.known ? (t.isCovered ? `This tenant has lived here at least 12 months (since ${esc(fmtDate(c.tenancyStart))}). You need a legal cause to evict or to refuse renewal, such as nonpayment, a lease violation, or a no-fault ground with 90 days' notice (C.R.S. 38-12-1303).` : `Under 12 months. The for-cause law starts applying on <strong>${esc(fmtDate(t.covered))}</strong>. Until then, you may decline to renew with proper notice and no reason (C.R.S. 38-12-1302(1)(e)).`) : 'Add the tenant-since date to see this.'}</p>
         </div>
         <div class="card">
-          <div class="section-label">Late-payment history</div>
-          <p>Qualifying late payments: <strong>${lh.count}</strong>. A payment qualifies when it arrived more than 10 days after the due date, after you properly served a rent demand, and after the demand's deadline passed. ${lh.count > 2 ? '<strong>More than two qualifying late payments during this lease: you may decline to renew on 90 days\' written notice that states the legal and factual basis (C.R.S. 38-12-1303(3)(f), (5)). Use the court\'s JDF 99C, and talk to an attorney.</strong>' : 'More than two during the lease term lets you decline to renew (C.R.S. 38-12-1303(3)(f)).'}</p>
-          ${lh.rows.length ? `<ul style="margin:0.5rem 0 0;padding-left:1.1rem;font-size:0.9rem;">${lh.rows.map(r => `<li>Due ${esc(fmtDate(r.due) || '?')}: ${r.served ? 'demand served ' + esc(fmtDate(r.served)) : 'demand not served yet'}${r.paid ? ', paid ' + esc(fmtDate(r.paid)) : ''} &mdash; ${r.qualifies ? '<strong>counts</strong>' : 'does not count'}</li>`).join('')}</ul>` : ''}
-          <p class="hint" style="margin-top:0.5rem;">To record one: create a rent demand, log its service, then mark it paid with the date the payment arrived.</p>
-        </div>
-        <div class="card">
           <div class="section-label">Notices</div>
+          <p class="hint" style="margin-top:0;">Notices are kept for 30 days after they're made, then deleted. Download the PDF of anything you need to keep.</p>
           ${(c.notices || []).length ? (c.notices || []).slice().reverse().map(n => {
             const st = serviceStatus(c, n); const dl = st.complete ? legalDeadline(st.date, n.days) : '';
             const status = n.outcome && n.outcome.status && n.outcome.status !== 'open' ? { paid: 'Paid', complied: 'Complied', moved: 'Moved out', filed: 'Eviction filed', withdrawn: 'Withdrawn' }[n.outcome.status] : '';
             return `<div style="padding:0.75rem 0;border-bottom:1px solid #F1E4D8;">
               <strong>${kindName(n)}</strong> <span class="hint">(${esc(groundsSummary(n))})</span><br>
+              <span class="hint" style="margin:0;">Made ${esc(fmtDate(isoOf(new Date(n.createdAt || Date.now()))))} &middot; deleted automatically ${esc(fmtDate(noticeDeleteOn(n)))}</span><br>
               ${status ? badge(status + (n.outcome.date ? ' ' + esc(fmtDate(n.outcome.date)) : ''), 'ok') : st.complete ? badge('Served ' + esc(fmtDate(st.date)) + ' · deadline ' + esc(fmtDate(dl)), 'warn') : badge('Not served yet', 'bad')}
               <div class="btn-row" style="margin-top:0.4rem;"><button class="btn btn-ghost" onclick="openNotice('${esc(n.id)}')">Open</button></div>
             </div>`; }).join('') : '<p class="hint" style="margin:0 0 0.5rem;">No notices yet.</p>'}
@@ -1694,6 +1695,7 @@
           <div id="nt-note"></div>
           <p class="hint" style="margin-top:0.5rem;">Serve the official court form: print it, sign it in ink, deliver it, and keep a copy. Below is the Lease Desk letter version of the same notice, for backup only: <a href="#" onclick="window.print();return false;">print it</a> or <a href="#" id="nt-pdf">download it</a>.</p>
         </div>
+        ${keepBanner(n)}
         <div class="paper" id="notice-paper">${noticeHtml(c, n)}</div>
         <div class="card no-print" style="margin-top:1.5rem;">
           <div class="section-label">Service log</div>

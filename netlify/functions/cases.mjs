@@ -22,6 +22,17 @@ function makeId() {
   return out;
 }
 
+// Eviction notices are kept for 30 days after they are made, then deleted for good.
+// The tenant file itself (name, address, rent) stays so it can be reused.
+const NOTICE_DAYS = 30;
+function purgeOld(c) {
+  if (!c || !Array.isArray(c.notices)) return false;
+  const cutoff = Date.now() - NOTICE_DAYS * 86400000;
+  const keep = c.notices.filter(n => (n.createdAt || c.createdAt || Date.now()) >= cutoff);
+  if (keep.length === c.notices.length) return false;
+  c.notices = keep; return true;
+}
+
 export default async (req) => {
   if (req.method === 'OPTIONS') return new Response('', { status: 204, headers: cors });
   const store = getStore({ name: 'cases', consistency: 'strong' });
@@ -32,14 +43,14 @@ export default async (req) => {
     const id = url.searchParams.get('id');
     if (id) {
       const c = await store.get(id, { type: 'json' }).catch(() => null);
-      if (c && fixFields(c, ['propertyLine', 'notes'])) await store.setJSON(id, c).catch(() => {});
+      if (c && (fixFields(c, ['propertyLine', 'notes']) | purgeOld(c))) await store.setJSON(id, c).catch(() => {});
       return c ? json(c) : json({ error: 'not found' }, 404);
     }
     const { blobs } = await store.list();
     const items = [];
     for (const b of blobs) {
       const c = await store.get(b.key, { type: 'json' }).catch(() => null);
-      if (c && fixFields(c, ['propertyLine', 'notes'])) await store.setJSON(b.key, c).catch(() => {});
+      if (c && (fixFields(c, ['propertyLine', 'notes']) | purgeOld(c))) await store.setJSON(b.key, c).catch(() => {});
       if (c) items.push(c);
     }
     items.sort((a, b) => (b.updatedAt || 0) - (a.updatedAt || 0));
@@ -58,6 +69,8 @@ export default async (req) => {
       if (!c || typeof c !== 'object' || !String(c.tenantName || '').trim()) return json({ error: 'tenant name required' }, 400);
       const id = c.id && /^[a-z0-9]{6,24}$/.test(c.id) ? c.id : makeId();
       const saved = { ...c, id, updatedAt: Date.now(), createdAt: c.createdAt || Date.now() };
+      if (Array.isArray(saved.notices)) saved.notices = saved.notices.map(n => ({ ...n, createdAt: n.createdAt || Date.now() }));
+      purgeOld(saved);
       await store.setJSON(id, saved);
       return json({ ok: true, case: saved });
     }
