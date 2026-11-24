@@ -71,6 +71,12 @@ export default async (req) => {
       const saved = { ...c, id, updatedAt: Date.now(), createdAt: c.createdAt || Date.now() };
       if (Array.isArray(saved.notices)) saved.notices = saved.notices.map(n => ({ ...n, createdAt: n.createdAt || Date.now() }));
       purgeOld(saved);
+      // keep the server's record of reminder emails already sent (the browser copy may be older)
+      if (saved.track && typeof saved.track === 'object') {
+        const prev = await store.get(id, { type: 'json' }).catch(() => null);
+        const prevSent = prev && prev.track && prev.track.reminders && prev.track.reminders.sent;
+        if (prevSent) { saved.track.reminders = saved.track.reminders || {}; saved.track.reminders.sent = { ...prevSent, ...(saved.track.reminders.sent || {}) }; }
+      }
       await store.setJSON(id, saved);
       return json({ ok: true, case: saved });
     }

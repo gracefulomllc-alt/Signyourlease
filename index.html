@@ -61,6 +61,35 @@
   .paper h2 { font-family: 'Playfair Display', serif; font-size: 1.5rem; font-weight: 700; text-align: center; margin: 0 0 1.75rem; }
   .paper h3 { font-size: 1rem; font-weight: 600; margin: 1.5rem 0 0.5rem; }
   .paper p { margin: 0 0 0.9rem; }
+  .tr-step { border: 1px solid var(--line); border-radius: 10px; margin-bottom: 0.75rem; background: #fff; }
+  .tr-step > summary { list-style: none; display: flex; gap: 0.75rem; align-items: center; padding: 0.9rem 1rem; cursor: pointer; }
+  .tr-step > summary::-webkit-details-marker { display: none; }
+  .tr-num { width: 2.1rem; height: 2.1rem; border-radius: 50%; display: grid; place-items: center; font-weight: 700; background: #ECE6DD; color: var(--ink); flex: none; }
+  .tr-step.done .tr-num { background: #256B45; color: #fff; }
+  .tr-step.now { border: 2px solid var(--brass); }
+  .tr-step.now .tr-num { background: var(--brass); color: #fff; }
+  .tr-head { flex: 1; min-width: 0; }
+  .tr-head strong { display: block; font-size: 1.08rem; }
+  .tr-due { display: block; font-size: 0.88rem; color: var(--ink-soft); }
+  .tr-late { display: inline-block; font-size: 0.75rem; font-weight: 700; color: #A0352C; background: #FBE9E6; border-radius: 999px; padding: 0.05rem 0.5rem; margin-top: 0.2rem; }
+  .tr-tag { font-size: 0.75rem; font-weight: 700; text-transform: uppercase; letter-spacing: 0.04em; color: #7A5410; background: #FBF1DC; border-radius: 999px; padding: 0.15rem 0.6rem; flex: none; }
+  .tr-body { padding: 0 1rem 1rem; }
+  .tr-check { display: flex; gap: 0.7rem; align-items: flex-start; padding: 0.6rem 0; border-bottom: 1px solid #F1E4D8; font-size: 1.02rem; cursor: pointer; }
+  .tr-check input, .tr-remind input { width: 1.35rem; height: 1.35rem; margin-top: 0.1rem; flex: none; }
+  .tr-check.on span { color: var(--ink-soft); text-decoration: line-through; }
+  .tr-remind { display: flex; gap: 0.7rem; align-items: flex-start; margin-top: 0.9rem; padding: 0.7rem 0.8rem; background: #E8ECF5; border-radius: 8px; color: #2A3756; cursor: pointer; }
+  .tr-pages { background: #FAF6EF; border: 1px solid var(--line); border-radius: 8px; padding: 0.75rem 1rem; margin: 0.75rem 0; }
+  .tr-plist { margin: 0; padding-left: 1.1rem; } .tr-plist li { margin: 0.3rem 0; }
+  .tr-mini { padding: 0.2rem 0.6rem !important; font-size: 0.8rem !important; margin-left: 0.3rem; }
+  .tr-how { display: grid; grid-template-columns: 1fr 1fr; gap: 0.75rem; margin: 0.5rem 0; }
+  .tr-how > div { border: 1px solid var(--line); border-radius: 8px; padding: 0.75rem; }
+  .tr-how p { margin: 0.3rem 0 0; font-size: 0.95rem; }
+  @media (max-width: 600px) { .tr-how { grid-template-columns: 1fr; } }
+  .tr-out { display: grid; grid-template-columns: 1fr 1fr; gap: 0.5rem; margin: 0.5rem 0; }
+  .tr-out .wz-opt { padding: 0.75rem; } .tr-out .wz-opt strong { font-size: 0.98rem; }
+  .tr-next { background: #FFF8EA; border: 2px solid var(--brass); border-radius: 12px; padding: 1rem 1.1rem; margin-bottom: 1rem; }
+  .tr-saved { position: fixed; bottom: 14px; right: 14px; color: #fff; padding: 0.4rem 0.9rem; border-radius: 999px; font-size: 0.88rem; opacity: 0; transition: opacity .2s; z-index: 50; pointer-events: none; }
+  .tr-saved.show { opacity: 0.94; }
   .wz { max-width: 560px; margin: 0.5rem auto 2rem; }
   .wz-top { display: flex; justify-content: space-between; align-items: center; margin-bottom: 0.75rem; }
   .wz-adv { font-size: 0.82rem; color: var(--ink-soft); }
@@ -542,6 +571,7 @@
     if (hash === '#/start') { renderTenantIntake(); return; }
     if (hash === '#/archive') { if (!landlordAuthed()) { renderGate('#/archive'); return; } renderArchive(); return; }
     if (hash === '#/evict') { if (!landlordAuthed()) { renderGate('#/evict'); return; } renderEvictWizard(); return; }
+    if (hash.startsWith('#/evict/steps/')) { if (!landlordAuthed()) { renderGate(hash); return; } openTrack(hash.slice(14)); return; }
     if (hash === '#/evict/files') { if (!landlordAuthed()) { renderGate('#/evict/files'); return; } renderCases(); return; }
     if (hash === '#/status') { if (!landlordAuthed()) { renderGate('#/status'); return; } renderLeaseStatus(); return; }
     if (hash === '#/assist') { if (!landlordAuthed()) { renderGate('#/assist'); return; } renderAssist(); return; }
@@ -804,6 +834,7 @@
 
   // ---- storage
   async function fetchCases() {
+    try { await trFlush(); } catch (e) {}
     const r = await fetch('/api/cases?key=' + encodeURIComponent(staffKey()));
     if (!r.ok) throw new Error('load failed');
     return (await r.json()).items || [];
@@ -1243,6 +1274,13 @@
           <div class="section-label" style="margin-top:1rem;">3. Wait for the deadline</div>
           <p style="margin:0;">${n.kind === 'demand' && w.reason === 'rent' ? 'If they pay <strong>all</strong> the rent listed before the deadline, you must accept it and the notice is over. ' : ''}If they don't ${n.kind === 'terminate' ? 'move out' : (w.reason === 'rent' ? 'pay or move out' : 'fix it or move out')} by <strong>${esc(fmtDate(n.moveOutISO))} at 11:59 p.m.</strong>, you can file an eviction with the ${esc(c.county || '')} County Court the next business day.${c.mediationEligible ? ' Request mediation first.' : ''}</p>
         </div>
+        <div class="card" style="margin-top:1rem;border-top-color:var(--brass);">
+          <div class="section-label">4. Every step after this</div>
+          <p style="margin-top:0;">If it goes to court, Lease Desk has a checklist for the rest: filing, serving, the court date, judgment, the writ, and the sheriff move-out.</p>
+          <label class="tr-remind" style="margin-top:0;"><input type="checkbox" id="wz-rem" checked><span>&#9993; Email me the day after the deadline</span></label>
+          <div class="field" id="wz-rem-box" style="margin-top:0.6rem;"><label>Send it to</label><input type="text" id="wz-rem-to" class="wz-input" value="${esc(c.plaintiffEmail || 'tldrenterprise@gmail.com')}"></div>
+          <button class="btn btn-primary wz-next" id="wz-track">Save and open the checklist</button>
+        </div>
         <p class="error-text" id="wz-err2" style="display:none;"></p>
         <div class="btn-row" style="flex-wrap:wrap;justify-content:center;">
           <button class="btn btn-ghost" id="wz-open">Open this tenant's file</button>
@@ -1250,6 +1288,15 @@
         </div>`);
       document.getElementById('wz-view').addEventListener('click', (e) => { e.preventDefault(); renderNotice(c, n); });
       document.getElementById('wz-open').addEventListener('click', () => renderCase(c));
+      document.getElementById('wz-rem').addEventListener('change', (e) => { document.getElementById('wz-rem-box').style.display = e.target.checked ? '' : 'none'; });
+      document.getElementById('wz-track').addEventListener('click', async function () {
+        const on = document.getElementById('wz-rem').checked; const to = document.getElementById('wz-rem-to').value.trim();
+        if (on && !/@/.test(to)) { const e = document.getElementById('wz-err2'); e.textContent = 'Enter an email address, or uncheck the reminder.'; e.style.display = ''; return; }
+        this.disabled = true; this.textContent = 'Saving…';
+        const cc = c.track ? c : Object.assign(c, { track: newTrack(c, n) });
+        if (on) { cc.track.remind.wait = true; cc.track.reminders.to = to; }
+        window.__case = cc; await trSave(cc, true); renderTrack(cc);
+      });
       document.getElementById('wz-court').addEventListener('click', function () { officialNoticePdf(c, n, this, document.getElementById('wz-note')); });
     }
     window.scrollTo(0, 0);
@@ -1291,6 +1338,7 @@
               ${t.known ? (t.isCovered ? badge('For-cause law applies', 'warn') : badge('Under 12 months until ' + esc(fmtDate(t.covered)), 'ok')) : badge('Tenant-since date missing', 'bad')}
               ${open.length ? badge(open.length + ' open notice' + (open.length === 1 ? '' : 's'), 'bad') : ''}
               ${c.subsidized || c.cares ? badge('30-day notices', 'info') : ''}
+              ${c.track ? '<br>' + trSummary(c) : ''}
               <div class="btn-row" style="margin-top:0.5rem;"><button class="btn btn-ghost" onclick="openCase('${esc(c.id)}')">Open file</button></div>
             </div>`; }).join('') : '<p class="hint" style="margin:0;">No tenant files yet. Start one from a completed lease so the details carry over.</p>'}
         </div>
@@ -1511,6 +1559,532 @@
     });
   }
 
+  // =====================================================================
+  // EVICTION STEPS: the whole case, notice to move-out (plus optional garnishment)
+  // Each step: what it is, the pages you need, a checklist, dates, and opt-in email reminders.
+  // =====================================================================
+  const COURT_INFO = {
+    Pueblo: { court: 'Pueblo County Court', addr: '501 N. Elizabeth St., Pueblo, CO 81003',
+      sheriff: 'Pueblo County Sheriff\'s Office, Civil Section', sheriffNote: 'Call the Civil Section for the current fee and how to schedule.' },
+    'El Paso': { court: 'El Paso County Court', addr: '270 S. Tejon St., Colorado Springs, CO 80903',
+      sheriff: 'El Paso County Sheriff\'s Office, Civil Office, 27 E. Vermijo Ave., Colorado Springs, (719) 520-7144',
+      sheriffNote: 'Their posted fee to post the warning and carry out the writ is $200 plus mileage. Confirm it when you call.' },
+  };
+  const COURT_SELF_HELP = 'https://www.coloradojudicial.gov/self-help/residential-evictions';
+  const EFILE_URL = 'https://www.coloradojudicial.gov/e-filing-non-attorneys';
+  const GARNISH_URL = 'https://www.coloradojudicial.gov/self-help/garnishment-wages';
+  function trCourt(c) {
+    return COURT_INFO[c.county] || { court: (c.county ? c.county + ' County Court' : 'the county court where the rental is'), addr: '',
+      sheriff: (c.county ? c.county + ' County' : 'The county') + ' Sheriff\'s Office, Civil Section', sheriffNote: 'Call them for the fee and how to schedule.' };
+  }
+  const trF = (t, k) => ((t.f || {})[k]) || '';
+  function trNotice(c) { const t = c.track; return t && t.noticeId ? (c.notices || []).find(n => n.id === t.noticeId) || null : null; }
+  function trServed(c) {
+    const n = trNotice(c);
+    if (n) { const st = serviceStatus(c, n); if (st.complete) return st.date; }
+    return trF(c.track, 'servedISO');
+  }
+  function trDeadline(c) { const s = trServed(c); return s ? legalDeadline(s, c.track.noticeDays || 10) : ''; }
+  function trFileOn(c) { const d = trDeadline(c); return d ? legalDeadline(d, 1) : ''; }
+  function trWritWait(c) { return c.mediationEligible ? 30 : 10; }
+  function trAction(c) { const t = c.track; return t.noticeKind === 'terminate' ? 'move out' : (t.rent ? 'pay or move out' : 'fix the problem or move out'); }
+  const trWho = (c) => c.tenantName + (c.tenantName2 ? ' and ' + c.tenantName2 : '');
+  const trDate = (iso) => iso ? fmtDate(iso) : '';
+  const trForm = (id, name, note, perTenant) => ({ form: id, name, note, perTenant });
+
+  const TR_STEPS = [
+    { id: 'notice', title: 'Deliver the notice', remindLabel: '',
+      due: (c, t) => null,
+      intro: (c, t) => {
+        const need = c.victimNotified ? 3 : 2; const n = trNotice(c);
+        return `<p>Hand the notice to ${esc(c.tenantName.split(' ')[0])}, or to anyone 15 or older who lives there. If nobody answers, try again on a <strong>different day</strong>. After ${need} tries on different days, tape it to the front door${c.victimNotified ? ' and mail a copy by certified mail' : ''}.</p>
+          ${n ? '' : `<p class="hint">The notice itself isn't in Lease Desk anymore (notices are deleted after 30 days). Use your signed paper copy.</p>`}`;
+      },
+      pages: (c, t) => trNotice(c) ? [{ notice: true, name: (t.noticeKind === 'terminate' ? 'JDF 99B Notice to Terminate Tenancy' : 'JDF 99A Demand for Compliance') + ' (your notice, filled in)' }] : [],
+      fields: (c, t) => {
+        const n = trNotice(c); const st = n ? serviceStatus(c, n) : null;
+        if (st && st.complete) return [{ info: 'Delivered ' + trDate(st.date) + ' (from your service log)' }];
+        return [{ key: 'servedISO', label: 'Day you delivered or posted it', type: 'date' }];
+      },
+      items: (c, t) => [
+        { id: 'print', text: 'Printed 2 copies: one to deliver, one to keep for court' },
+        { id: 'deliver', text: 'Delivered it (or posted it after ' + (c.victimNotified ? 3 : 2) + ' tries on different days)' },
+        { id: 'log', text: 'Wrote down every try: the date, the time, and who you gave it to' },
+      ],
+      reminders: () => [] },
+
+    { id: 'wait', title: 'Wait for the deadline', remindLabel: 'Email me the day after the deadline',
+      due: (c, t) => trDeadline(c) ? { iso: trDeadline(c), label: 'Deadline, 11:59 p.m.' } : null,
+      intro: (c, t) => {
+        const dl = trDeadline(c);
+        return `<p>${dl ? `They have until <strong>${esc(trDate(dl))} at 11:59 p.m.</strong> to ${trAction(c)}.` : 'Enter the day you delivered the notice in step 1, and the deadline shows here.'} Don't file before then.</p>
+          ${t.rent ? '<p>If they pay <strong>all</strong> the rent on the notice by the deadline, you have to accept it and the case is over. Tap <em>They paid or moved out</em> below to close it. Taking only part of the rent can hurt your case, so talk to an attorney before you accept a partial payment.</p>' : ''}
+          ${c.mediationEligible ? '<p><strong>Required for this tenant:</strong> because they get SSI, SSDI, or Colorado Works, you must offer mediation before you file (C.R.S. 13-40-110).</p>' : ''}`;
+      },
+      pages: () => [],
+      fields: () => [],
+      items: (c, t) => [
+        { id: 'passed', text: 'The deadline passed and they did not ' + trAction(c) },
+        c.mediationEligible ? { id: 'mediation', text: 'Offered mediation (required for this tenant)' } : null,
+      ],
+      closeButtons: true,
+      reminders: (c, t) => {
+        const dl = trDeadline(c); if (!dl) return [];
+        return [{ key: 'wait.deadline.' + dl, on: dayAfter(dl), subject: 'Notice deadline passed: ' + trWho(c),
+          text: `The notice deadline for ${trWho(c)} at ${c.propertyLine} was ${trDate(dl)} at 11:59 p.m.\n\nIf they haven't ${trAction(c)}, you can file the eviction on ${trDate(trFileOn(c))} or after. Next: get the court papers ready (step 3).` }];
+      } },
+
+    { id: 'papers', title: 'Get the court papers ready', remindLabel: '',
+      due: (c, t) => trFileOn(c) ? { iso: trFileOn(c), label: 'Have them ready by' } : null,
+      intro: () => `<p>Lease Desk fills in the official court forms from this file. Print them, check every page, and sign the complaint.</p>
+        <p><strong>Each tenant gets a full set:</strong> the summons, the complaint with its attachments, a blank answer, a blank request for documents, and blank fee waiver forms (JDF 205 and 206).</p>`,
+      pages: (c, t) => [
+        trForm('JDF101', 'JDF 101 Eviction Complaint', 'You sign this one'),
+        trForm('JDF102', 'JDF 102 Eviction Summons', 'The clerk fills in the court date'),
+        trForm('JDF103', 'JDF 103 Answer (blank, one per tenant)', '', true),
+        trForm('JDF108', 'JDF 108 Request for Documents (one per tenant)', '', true),
+        trForm('JDF98', 'JDF 98 Affidavit of Service', 'For whoever serves the papers'),
+        { link: COURT_SELF_HELP, name: 'JDF 205 and 206 fee waiver forms (blank)', note: 'On the court\'s eviction page, step 2' },
+        c.archiveId ? { lease: c.archiveId, name: 'Signed lease (Attachment 1)' } : { name: 'Copy of the lease (Attachment 1)', note: 'Use your paper copy' },
+        trNotice(c) ? { notice: true, name: 'The notice you served (Attachment 2)' } : { name: 'The notice you served (Attachment 2)', note: 'Copy your signed paper copy' },
+      ],
+      fields: () => [],
+      items: (c, t) => [
+        { id: 'print', text: 'Downloaded and printed the forms' },
+        { id: 'check', text: 'Checked every page and filled in anything left blank' },
+        { id: 'sign', text: 'Signed the complaint (JDF 101)' },
+        { id: 'attach', text: 'Attached the lease (Attachment 1) and the notice you served (Attachment 2)' },
+        { id: 'copies', text: 'Made copies: the originals for the court, a full set for each tenant, and a set for you' },
+      ],
+      reminders: () => [] },
+
+    { id: 'file', title: 'File the eviction', remindLabel: '',
+      due: (c, t) => trFileOn(c) ? { iso: trFileOn(c), label: 'Earliest day to file' } : null,
+      intro: (c, t) => { const ct = trCourt(c); return `<div class="tr-how">
+        <div><strong>In person (needed to start)</strong><p>Take the papers to the ${esc(ct.court)}${ct.addr ? ', ' + esc(ct.addr) : ''}. Pay the filing fee at the clerk's window (ask the clerk for the amount). The clerk gives you a <strong>case number</strong> and a <strong>court date</strong> (the "return date"), 7 to 14 days out.</p></div>
+        <div><strong>Online (after the case is open)</strong><p>You can't start an eviction online. Once you have a case number, you can file the later papers (affidavit of service, motion for judgment, writ) through <a href="${EFILE_URL}" target="_blank" rel="noopener">Colorado Courts E-Filing</a>. It costs $12 per filing, and you can't use it if you got a fee waiver.</p></div></div>`; },
+      pages: () => [],
+      fields: () => [
+        { key: 'filedISO', label: 'Day you filed', type: 'date' },
+        { key: 'caseNumber', label: 'Case number', type: 'text', ph: '2026C...' },
+        { key: 'returnISO', label: 'Court date (return date)', type: 'date' },
+        { key: 'returnTime', label: 'Court time', type: 'text', ph: '8:30 a.m.' },
+      ],
+      items: () => [
+        { id: 'filed', text: 'Filed the papers and paid the fee' },
+        { id: 'wrote', text: 'Entered the case number and court date above' },
+      ],
+      reminders: () => [] },
+
+    { id: 'serve', title: 'Serve the court papers', remindLabel: 'Email me 2 days before the serve-by date',
+      due: (c, t) => trF(t, 'returnISO') ? { iso: addDaysISO(trF(t, 'returnISO'), -7), label: 'Serve by' } : null,
+      intro: (c, t) => `<p>Someone <strong>18 or older who is not part of the case</strong> has to deliver the papers: the sheriff, a process server, or a friend. Not you. It has to happen at least <strong>7 days before the court date</strong>.</p>
+        <div class="tr-how">
+          <div><strong>Hand them over (best)</strong><p>The server hands a set to each tenant. This is the only way the court can also order them to pay you money.</p></div>
+          <div><strong>Post and mail</strong><p>If the tenant can't be found, the server can post the papers on the door. You must also mail a set to each tenant by first-class mail no later than the day after you filed. With posting, you can get the unit back, but not a money judgment.</p></div>
+        </div>`,
+      pages: () => [trForm('JDF98', 'JDF 98 Affidavit of Service', 'The server fills it out and signs it')],
+      fields: () => [
+        { key: 'servedHow', label: 'How were they served?', type: 'select', opts: [['', 'Choose'], ['personal', 'Handed to the tenant'], ['posted', 'Posted and mailed']] },
+        { key: 'servedOnISO', label: 'Day they were served', type: 'date' },
+      ],
+      items: (c, t) => [
+        { id: 'give', text: 'Gave a full set for each tenant to the server' },
+        { id: 'served', text: 'The papers were served at least 7 days before the court date' },
+        trF(t, 'servedHow') === 'posted' ? { id: 'mailed', text: 'Mailed a set to each tenant, first-class, by the day after filing' } : null,
+        { id: 'aff', text: 'The server signed the Affidavit of Service (JDF 98), in front of a notary if it isn\'t the sheriff' },
+        { id: 'affFiled', text: 'Filed the Affidavit of Service with the court before the court date (in person or online)' },
+      ],
+      reminders: (c, t) => {
+        const r = trF(t, 'returnISO'); if (!r) return [];
+        const by = addDaysISO(r, -7);
+        return [{ key: 'serve.by.' + by, on: addDaysISO(by, -2), subject: 'Serve the court papers by ' + trDate(by) + ': ' + trWho(c),
+          text: `The court date for ${trWho(c)} (case ${trF(t, 'caseNumber') || 'number not entered'}) is ${trDate(r)}${trF(t, 'returnTime') ? ' at ' + trF(t, 'returnTime') : ''}.\n\nThe papers must be served by ${trDate(by)} (at least 7 days before). After service, file the Affidavit of Service (JDF 98) before the court date.` }];
+      } },
+
+    { id: 'court', title: 'Court date', remindLabel: 'Email me the day before the court date',
+      due: (c, t) => trF(t, 'returnISO') ? { iso: trF(t, 'returnISO'), label: 'Court date' + (trF(t, 'returnTime') ? ', ' + trF(t, 'returnTime') : '') } : null,
+      intro: (c, t) => `<p>The tenant has until the end of the court date to file an Answer. Go to court if your summons or the clerk says to. Then tap what happened:</p>`,
+      outcome: true,
+      pages: (c, t) => {
+        const o = t.outcome;
+        if (o === 'default') return [trForm('JDF107A', 'JDF 107A Motion for Entry of Judgment'), trForm('JDF107B', 'JDF 107B Judgment (the order the judge signs)')];
+        if (o === 'answered') return [trForm('JDF105', 'JDF 105 Notice About Remote Participation', 'If the trial is by phone or video')];
+        if (o === 'settled') return [trForm('JDF106A', 'JDF 106A Stipulated Agreement'), trForm('JDF106B', 'JDF 106B Order re Stipulated Agreement')];
+        return [];
+      },
+      fields: (c, t) => t.outcome === 'answered' ? [{ key: 'trialISO', label: 'Trial date', type: 'date' }, { key: 'trialTime', label: 'Trial time', type: 'text', ph: '9:00 a.m.' }] : [],
+      items: (c, t) => {
+        const o = t.outcome;
+        if (o === 'default') return [
+          { id: 'wait', text: 'Waited until after the clerk\'s office closed on the court date (the court can\'t grant it sooner)' },
+          { id: 'motion', text: 'Filed JDF 107A and JDF 107B (in person or online)' },
+        ];
+        if (o === 'answered') return [{ id: 'trial', text: 'Entered the trial date above (it\'s usually 7 to 10 days after the Answer)' }];
+        if (o === 'settled') return [
+          { id: 'signed', text: 'You and the tenant signed JDF 106A and filed it with JDF 106B' },
+          { id: 'watch', text: 'Wrote down the agreement\'s dates. If they break it, ask the court for judgment (JDF 91)' },
+        ];
+        return [{ id: 'pick', text: 'Tap what happened above' }];
+      },
+      reminders: (c, t) => {
+        const r = trF(t, 'returnISO'); if (!r) return [];
+        return [{ key: 'court.' + r, on: addDaysISO(r, -1), subject: 'Court date tomorrow: ' + trWho(c),
+          text: `Court date for ${trWho(c)} is tomorrow, ${trDate(r)}${trF(t, 'returnTime') ? ' at ' + trF(t, 'returnTime') : ''}, at the ${trCourt(c).court}.\n\nMake sure the Affidavit of Service (JDF 98) is filed. If the tenant doesn't file an Answer, after the clerk's office closes you can file JDF 107A and 107B for judgment.` }];
+      } },
+
+    { id: 'trial', title: 'Trial', remindLabel: 'Email me the day before the trial',
+      show: (c, t) => t.outcome === 'answered',
+      due: (c, t) => trF(t, 'trialISO') ? { iso: trF(t, 'trialISO'), label: 'Trial' + (trF(t, 'trialTime') ? ', ' + trF(t, 'trialTime') : '') } : null,
+      intro: () => '<p>The judge decides who gets the unit. Bring your proof, and bring 3 copies of everything you\'ll show: one for the judge, one for the tenant, one for you.</p>',
+      pages: () => [],
+      fields: () => [],
+      items: () => [
+        { id: 'docs', text: 'Have 3 copies of: the lease, the notice you served, the affidavit of service, a rent ledger or receipts, and photos' },
+        { id: 'wit', text: 'Asked anyone who saw what happened to come (the clerk can issue a subpoena)' },
+        { id: 'went', text: 'Went to the trial (in person, by phone, or online, as the court says)' },
+      ],
+      reminders: (c, t) => {
+        const d = trF(t, 'trialISO'); if (!d) return [];
+        return [{ key: 'trial.' + d, on: addDaysISO(d, -1), subject: 'Trial tomorrow: ' + trWho(c),
+          text: `Trial for ${trWho(c)} is tomorrow, ${trDate(d)}${trF(t, 'trialTime') ? ' at ' + trF(t, 'trialTime') : ''}.\n\nBring 3 copies of the lease, the notice you served, the affidavit of service, your rent ledger or receipts, and photos.` }];
+      } },
+
+    { id: 'judgment', title: 'Judgment', remindLabel: '',
+      due: () => null,
+      intro: (c, t) => `<p>If you win, the judge gives you <strong>possession</strong> (the unit back). If the tenant was handed the papers in person, the judgment can also include <strong>money</strong> (rent owed, and costs the court allows). Get a copy of the signed order.</p>
+        ${t.outcome === 'settled' ? '<p class="hint">With an agreement, there\'s only a judgment if the tenant breaks it and you ask for one. If they keep the agreement, close the case below when it\'s done.</p>' : ''}`,
+      pages: () => [],
+      fields: (c, t) => [
+        { key: 'judgmentISO', label: 'Day the judge granted judgment', type: 'date' },
+        { key: 'money', label: 'The judgment includes money', type: 'check' },
+      ],
+      items: () => [{ id: 'copy', text: 'Got a copy of the signed judgment' }],
+      reminders: () => [] },
+
+    { id: 'writ', title: 'Get the writ of restitution', remindLabel: 'Email me when I can ask for the writ',
+      due: (c, t) => trF(t, 'judgmentISO') ? { iso: addDaysISO(trF(t, 'judgmentISO'), 2), label: 'Can be issued from' } : null,
+      intro: (c, t) => `<p>The writ is the order that lets the sheriff remove the tenant. The court can issue it <strong>48 hours after judgment</strong>. File JDF 109 with the clerk (in person or online) and pay the fee. The judge signs it.</p>
+        <p class="hint">Writs usually expire after 49 days, so take it to the sheriff right away.</p>`,
+      pages: () => [trForm('JDF109', 'JDF 109 Writ of Restitution')],
+      fields: () => [{ key: 'writISO', label: 'Day the writ was issued', type: 'date' }],
+      items: () => [
+        { id: 'filed', text: 'Filed JDF 109 with the clerk' },
+        { id: 'got', text: 'Picked up the signed writ, with 2 copies' },
+      ],
+      reminders: (c, t) => {
+        const j = trF(t, 'judgmentISO'); if (!j) return [];
+        return [{ key: 'writ.' + j, on: addDaysISO(j, 2), subject: 'You can ask for the writ now: ' + trWho(c),
+          text: `Judgment for ${trWho(c)} was ${trDate(j)}. As of today (48 hours later) you can file JDF 109 Writ of Restitution with the clerk. Then take the signed writ to the sheriff.` }];
+      } },
+
+    { id: 'sheriff', title: 'Sheriff move-out', remindLabel: 'Email me when the sheriff can act, and the day before move-out',
+      due: (c, t) => trF(t, 'lockoutISO') ? { iso: trF(t, 'lockoutISO'), label: 'Move-out' } : (trF(t, 'judgmentISO') ? { iso: addDaysISO(trF(t, 'judgmentISO'), trWritWait(c)), label: 'Sheriff can act on or after' } : null),
+      intro: (c, t) => { const ct = trCourt(c); const j = trF(t, 'judgmentISO');
+        return `<p><strong>Only the sheriff can remove a tenant.</strong> Don't change the locks or move their things before the deputy gives you the unit back.</p>
+          <p>Take the writ to the <strong>${esc(ct.sheriff)}</strong>. ${esc(ct.sheriffNote)}</p>
+          <p>The sheriff can't carry out the writ until ${trWritWait(c)} days after judgment${j ? ` (<strong>${esc(trDate(addDaysISO(j, trWritWait(c))))}</strong>)` : ''}${c.mediationEligible ? '. It\'s 30 days for this tenant because they get SSI, SSDI, or Colorado Works' : ''}.</p>`; },
+      pages: () => [],
+      fields: () => [{ key: 'lockoutISO', label: 'Move-out date the sheriff set', type: 'date' }],
+      items: () => [
+        { id: 'took', text: 'Took the writ to the sheriff and paid the fee' },
+        { id: 'date', text: 'Got a move-out date and entered it above' },
+        { id: 'lock', text: 'Lined up a locksmith for that day' },
+        { id: 'there', text: 'Met the deputy at the unit on move-out day' },
+        { id: 'keys', text: 'Changed the locks after the deputy gave the unit back' },
+        { id: 'things', text: 'Followed the sheriff\'s instructions for anything left behind' },
+        { id: 'photos', text: 'Took photos of the unit\'s condition' },
+        { id: 'deposit', text: 'Sent the security deposit statement within 30 days of move-out (up to 60 if the lease says so)' },
+      ],
+      reminders: (c, t) => {
+        const out = []; const j = trF(t, 'judgmentISO'), w = trF(t, 'writISO'), l = trF(t, 'lockoutISO');
+        if (j) { const ex = addDaysISO(j, trWritWait(c)); out.push({ key: 'sheriff.exec.' + ex, on: ex, subject: 'The sheriff can carry out the writ now: ' + trWho(c),
+          text: `It has been ${trWritWait(c)} days since judgment for ${trWho(c)}. The sheriff can carry out the writ starting today. If you haven't yet, take the writ to the ${trCourt(c).sheriff} to schedule the move-out.` }); }
+        if (w && !l) out.push({ key: 'sheriff.expire.' + w, on: addDaysISO(w, 42), subject: 'Writ expires soon: ' + trWho(c),
+          text: `The writ for ${trWho(c)} was issued ${trDate(w)}. Writs usually expire after 49 days (about ${trDate(addDaysISO(w, 49))}). Make sure the sheriff has it scheduled.` });
+        if (l) out.push({ key: 'sheriff.lockout.' + l, on: addDaysISO(l, -1), subject: 'Move-out tomorrow: ' + trWho(c),
+          text: `The sheriff's move-out for ${trWho(c)} at ${c.propertyLine} is tomorrow, ${trDate(l)}. Have the locksmith lined up and meet the deputy at the unit.` });
+        return out;
+      } },
+
+    { id: 'garnish', title: 'Collect the money (wage garnishment)', remindLabel: 'Email me a week before the garnishment ends',
+      show: (c, t) => !!t.garnish,
+      due: (c, t) => trF(t, 'garnishISO') ? { iso: addDaysISO(trF(t, 'garnishISO'), 180), label: 'Garnishment ends about' } : null,
+      intro: (c, t) => `${!trF(t, 'money') ? warnBox('This only works if your judgment includes money, which needs the tenant to have been handed the papers in person. Check the box in the Judgment step if yours does.') : ''}
+        <p>A <strong>writ of continuing garnishment</strong> has the tenant's employer take part of each paycheck and send it to you until the judgment is paid. It lasts 180 days. Colorado limits how much can be taken from each check. The court will usually wait about 14 days after judgment before issuing one, so ask the clerk.</p>
+        <p>Forms and instructions are on the court's <a href="${GARNISH_URL}" target="_blank" rel="noopener">wage garnishment page</a> (guide JDF 82).</p>`,
+      pages: () => [
+        { link: GARNISH_URL, name: 'Form 26 Writ of Continuing Garnishment', note: '1 original and 3 copies' },
+        { link: GARNISH_URL, name: 'Form 27 Calculation of the Amount of Exempt Earnings' },
+        { link: GARNISH_URL, name: 'JDF 111 Satisfaction of Judgment', note: 'When it\'s paid in full' },
+      ],
+      fields: () => [{ key: 'garnishISO', label: 'Day the employer was served', type: 'date' }],
+      items: () => [
+        { id: 'ask', text: 'Sent the tenant a letter asking them to pay the judgment' },
+        { id: 'job', text: 'Found out where they work (rental application, or ask the court for interrogatories)' },
+        { id: 'forms', text: 'Filled out Form 26 and Form 27' },
+        { id: 'issued', text: 'The clerk issued the writ (pay the fee)' },
+        { id: 'served', text: 'The sheriff or a process server served the employer' },
+        { id: 'answer', text: 'Got the employer\'s answer, and payments are coming' },
+        { id: 'paid', text: 'Paid in full: filed JDF 111 Satisfaction of Judgment' },
+      ],
+      reminders: (c, t) => {
+        const g = trF(t, 'garnishISO'); if (!g) return [];
+        return [{ key: 'garnish.' + g, on: addDaysISO(g, 173), subject: 'Wage garnishment ends in a week: ' + trWho(c),
+          text: `The writ of continuing garnishment for ${trWho(c)} was served on the employer ${trDate(g)}. It ends after 180 days (about ${trDate(addDaysISO(g, 180))}). If the judgment isn't paid off, you can file a new one.` }];
+      } },
+  ];
+
+  function trSteps(c) { const t = c.track; return TR_STEPS.filter(s => !s.show || s.show(c, t)); }
+  function trItems(c, s) { return s.items(c, c.track).filter(Boolean); }
+  function trStepDone(c, s) {
+    const t = c.track; if (s.outcome && !t.outcome) return false;
+    const its = trItems(c, s); return its.length > 0 && its.every(i => (t.checks || {})[s.id + '.' + i.id]);
+  }
+  function trCurrent(c) { return trSteps(c).find(s => !trStepDone(c, s)) || null; }
+  function trQueue(c) {
+    const t = c.track; if (!t || t.closed) return [];
+    const link = location.origin + '/#/evict/steps/' + c.id;
+    const out = [];
+    trSteps(c).forEach(s => { if ((t.remind || {})[s.id]) (s.reminders(c, t) || []).forEach(r => out.push({ ...r, step: s.id, link })); });
+    return out;
+  }
+  function trSummary(c) {
+    const t = c.track; if (!t) return '';
+    if (t.closed) return badge('Case closed: ' + esc(t.closed.why), 'ok');
+    const all = trSteps(c); const cur = trCurrent(c);
+    if (!cur) return badge('All steps done', 'ok');
+    const due = cur.due(c, t);
+    return badge('Step ' + (all.indexOf(cur) + 1) + ' of ' + all.length + ': ' + esc(cur.title) + (due ? ' · ' + esc(trDate(due.iso)) : ''), 'info');
+  }
+  function syncCaseFromTrack(c) {
+    const t = c.track; const ct = trCourt(c);
+    if (trF(t, 'caseNumber')) c.caseNumber = trF(t, 'caseNumber');
+    if (trF(t, 'returnISO')) c.returnDate = fmtDate(trF(t, 'returnISO')) + (trF(t, 'returnTime') ? ' ' + trF(t, 'returnTime') : '');
+    if (!c.courtName && COURT_INFO[c.county]) c.courtName = ct.court;
+    if (!c.courtAddress && ct.addr) c.courtAddress = ct.addr;
+  }
+
+  // ---- start a tracker on a tenant file
+  function newTrack(c, n, extra) {
+    const st = n ? serviceStatus(c, n) : null;
+    return Object.assign({ startedAt: Date.now(), noticeId: n ? n.id : '', noticeKind: n ? n.kind : 'demand', noticeDays: n ? (n.days || 10) : ((c.subsidized || c.cares) ? 30 : 10),
+      rent: !!(n && n.grounds && n.grounds.rent && n.grounds.rent.on),
+      f: { servedISO: st && st.complete ? st.date : (n ? (n.plannedServiceISO || '') : '') }, checks: {}, remind: {}, outcome: '', garnish: false, closed: null,
+      reminders: { to: c.plaintiffEmail || 'tldrenterprise@gmail.com', sent: {}, queue: [] } }, extra || {});
+  }
+  window.startTrack = function () {
+    const c = window.__case; const notices = (c.notices || []).slice().reverse();
+    app.innerHTML = header() + `
+      <button class="step-back" onclick="openCase('${esc(c.id)}')">&larr; ${esc(c.tenantName)}</button>
+      <div class="wz">
+        <h1 class="wz-q">Which notice starts this case?</h1>
+        <p class="wz-help">The checklist counts every date from the day the notice was delivered.</p>
+        <div class="wz-list">
+          ${notices.map(n => { const st = serviceStatus(c, n); return wzBig('', n.kind === 'terminate' ? 'Notice to terminate' : 'Demand for compliance',
+            'Made ' + esc(fmtDate(isoOf(new Date(n.createdAt || Date.now())))) + (st.complete ? ' · delivered ' + esc(fmtDate(st.date)) : ' · planned for ' + esc(fmtDate(n.plannedServiceISO || ''))), `data-n="${esc(n.id)}"`); }).join('')}
+          ${wzBig('tr-manual', 'A notice that isn\'t in Lease Desk', 'Paper notice, or one deleted after 30 days. You\'ll enter the dates.', 'style="border-style:dashed;"')}
+        </div>
+        <div class="card big-form" id="tr-man" style="display:none;margin-top:1rem;">
+          <div class="field"><label>Day it was delivered or posted</label><input type="date" id="tr-m-served"></div>
+          <div class="field"><label>Notice period</label><select id="tr-m-days"><option value="10">10 days</option><option value="30" ${(c.subsidized || c.cares) ? 'selected' : ''}>30 days (voucher, subsidy, or federally backed mortgage)</option></select></div>
+          <div class="field"><label>What was it for?</label><select id="tr-m-kind"><option value="rent">Unpaid rent</option><option value="demand">A lease violation or bothering neighbors</option><option value="terminate">Repeat or dangerous violation (no time to fix)</option></select></div>
+          <button class="btn btn-primary wz-next" id="tr-m-go">Start the checklist</button>
+        </div>
+        <p class="error-text" id="wz-err" style="display:none;"></p>
+      </div>`;
+    const go = async (track) => {
+      c.track = track; try { const s = await saveCase(c); Object.assign(c, s); } catch (e) {}
+      renderTrack(c);
+    };
+    document.querySelectorAll('[data-n]').forEach(b => b.addEventListener('click', () => go(newTrack(c, (c.notices || []).find(x => x.id === b.dataset.n)))));
+    document.getElementById('tr-manual').addEventListener('click', () => { document.getElementById('tr-man').style.display = ''; });
+    document.getElementById('tr-m-go').addEventListener('click', () => {
+      const s = document.getElementById('tr-m-served').value, k = document.getElementById('tr-m-kind').value;
+      if (!s) { const e = document.getElementById('wz-err'); e.textContent = 'Enter the day it was delivered.'; e.style.display = ''; return; }
+      go(newTrack(c, null, { noticeDays: +document.getElementById('tr-m-days').value, noticeKind: k === 'terminate' ? 'terminate' : 'demand', rent: k === 'rent', f: { servedISO: s } }));
+    });
+    window.scrollTo(0, 0);
+  };
+  window.openTrack = async function (id) {
+    let c = (window.__case && window.__case.id === id) ? window.__case : null;
+    if (!c) { try { const r = await fetch('/api/cases?id=' + encodeURIComponent(id) + '&key=' + encodeURIComponent(staffKey())); if (r.ok) c = await r.json(); } catch (e) {} }
+    if (!c) { goHash('#/evict/files'); return; }
+    window.__case = c; if (c.track) renderTrack(c); else { renderCase(c); }
+  };
+
+  // ---- saving (debounced; keeps the server's record of sent emails)
+  let trTimer = null, trPending = null, trChain = Promise.resolve();
+  function trToast(msg, bad) {
+    let el = document.getElementById('tr-saved');
+    if (!el) { el = document.createElement('div'); el.id = 'tr-saved'; el.className = 'tr-saved'; document.body.appendChild(el); }
+    el.textContent = msg; el.style.background = bad ? '#A0352C' : '#1E2A3A'; el.classList.add('show');
+    clearTimeout(el._t); if (!bad) el._t = setTimeout(() => el.classList.remove('show'), 1400);
+  }
+  function trSave(c, now) {
+    const t = c.track; t.reminders = t.reminders || { sent: {} };
+    t.reminders.queue = trQueue(c);
+    syncCaseFromTrack(c);
+    clearTimeout(trTimer);
+    const run = () => (trChain = trChain.then(async () => {
+      trToast('Saving…');
+      try { const s = await saveCase(c); c.id = s.id; c.updatedAt = s.updatedAt; c.notices = s.notices;
+        if (s.track && s.track.reminders) t.reminders.sent = s.track.reminders.sent || {}; trToast('Saved'); }
+      catch (e) { trToast('Not saved. Check your connection.', true); }
+    }));
+    if (now) { trPending = null; return run(); }
+    trPending = run; trTimer = setTimeout(() => { trPending = null; run(); }, 450);
+  }
+  function trFlush() { if (trPending) { clearTimeout(trTimer); const r = trPending; trPending = null; r(); } return trChain; }
+
+  // ---- the checklist screen
+  function trPagesHtml(c, s) {
+    const pages = s.pages(c, c.track); if (!pages.length) return '';
+    const forms = pages.filter(p => p.form);
+    return `<div class="tr-pages"><div class="section-label" style="margin:0 0 0.4rem;">Pages you need</div>
+      <ul class="tr-plist">${pages.map(p => `<li>${p.link ? `<a href="${p.link}" target="_blank" rel="noopener">${esc(p.name)}</a>` : esc(p.name)}${p.note ? ` <span class="hint" style="display:inline;">(${esc(p.note)})</span>` : ''}
+        ${p.lease ? ` <button class="btn btn-ghost tr-mini" onclick="archivePdf('${esc(p.lease)}', this)">Download</button>` : ''}
+        ${p.notice ? ` <button class="btn btn-ghost tr-mini" data-tr-notice="1">Download</button>` : ''}</li>`).join('')}</ul>
+      ${forms.length ? `<button class="btn btn-primary" data-tr-forms="${s.id}" style="margin-top:0.4rem;">Download ${forms.length === 1 ? 'this form' : 'these ' + forms.length + ' forms'}, filled in</button><div data-tr-note="${s.id}"></div>` : ''}
+    </div>`;
+  }
+  function trFieldsHtml(c, s) {
+    const t = c.track; const fs = s.fields(c, t); if (!fs.length) return '';
+    return `<div class="grid" style="margin:0.5rem 0;">${fs.map(f => {
+      if (f.info) return `<div class="field full"><p class="hint" style="margin:0;">&#10003; ${esc(f.info)}</p></div>`;
+      const v = trF(t, f.key);
+      if (f.type === 'check') return `<label class="checkbox-row full" style="grid-column:1/-1;"><input type="checkbox" data-tr-f="${f.key}" ${v ? 'checked' : ''}><span>${esc(f.label)}</span></label>`;
+      if (f.type === 'select') return `<div class="field"><label>${esc(f.label)}</label><select data-tr-f="${f.key}">${f.opts.map(o => `<option value="${o[0]}" ${v === o[0] ? 'selected' : ''}>${esc(o[1])}</option>`).join('')}</select></div>`;
+      return `<div class="field"><label>${esc(f.label)}</label><input type="${f.type}" data-tr-f="${f.key}" value="${esc(v)}" ${f.ph ? `placeholder="${esc(f.ph)}"` : ''}></div>`;
+    }).join('')}</div>`;
+  }
+  function trStepHtml(c, s, i, cur) {
+    const t = c.track; const done = trStepDone(c, s); const isCur = cur === s;
+    const due = s.due(c, t); const items = trItems(c, s);
+    const nChecked = items.filter(it => (t.checks || {})[s.id + '.' + it.id]).length;
+    const rem = s.reminders(c, t); const canRemind = !!s.remindLabel;
+    const late = due && !done && due.iso < todayISO() && /Serve by|Court|Trial|Move-out|Deadline/.test(due.label) && s.id !== 'wait';
+    return `<details class="tr-step ${done ? 'done' : ''} ${isCur ? 'now' : ''}" data-step="${s.id}" ${isCur ? 'open' : ''}>
+      <summary><span class="tr-num">${done ? '&#10003;' : i + 1}</span>
+        <span class="tr-head"><strong>${esc(s.title)}</strong>
+          <span class="tr-due">${due ? esc(due.label) + ': ' + esc(trDate(due.iso)) : ''}${items.length ? (due ? ' · ' : '') + nChecked + ' of ' + items.length + ' done' : ''}</span>
+          ${late ? '<span class="tr-late">Date has passed</span>' : ''}</span>
+        ${isCur ? '<span class="tr-tag">Up next</span>' : ''}</summary>
+      <div class="tr-body">
+        ${s.intro(c, t)}
+        ${s.outcome ? `<div class="tr-out">${[['default', 'They didn\'t answer'], ['answered', 'They filed an Answer'], ['settled', 'We made an agreement'], ['over', 'They paid or moved out']].map(o => `<button type="button" class="wz-opt ${t.outcome === o[0] ? 'on' : ''}" data-tr-out="${o[0]}"><strong>${o[1]}</strong></button>`).join('')}</div>` : ''}
+        ${trPagesHtml(c, s)}
+        ${trFieldsHtml(c, s)}
+        ${items.length ? `<div class="section-label" style="margin:0.75rem 0 0.2rem;">Checklist</div>
+          ${items.map(it => { const k = s.id + '.' + it.id; const on = !!(t.checks || {})[k];
+            return `<label class="tr-check ${on ? 'on' : ''}"><input type="checkbox" data-tr-c="${k}" ${on ? 'checked' : ''}><span>${esc(it.text)}</span></label>`; }).join('')}` : ''}
+        ${s.closeButtons ? `<div class="btn-row" style="flex-wrap:wrap;"><button class="btn btn-ghost" data-tr-close="They paid or did what the notice asked">They paid or fixed it</button><button class="btn btn-ghost" data-tr-close="They moved out">They moved out</button></div>` : ''}
+        ${canRemind ? `<label class="tr-remind"><input type="checkbox" data-tr-r="${s.id}" ${(t.remind || {})[s.id] ? 'checked' : ''}><span>&#9993; ${esc(s.remindLabel)}${(t.remind || {})[s.id] && rem.length ? `<br><span class="hint" style="margin:0;">${rem.map(r => (t.reminders.sent || {})[r.key] ? 'Sent ' + esc(trDate(isoOf(new Date(t.reminders.sent[r.key])))) : 'Sends ' + esc(trDate(r.on))).join(' · ')}</span>` : (t.remind || {})[s.id] ? '<br><span class="hint" style="margin:0;">Sends once the dates are filled in</span>' : ''}</span></label>` : ''}
+      </div></details>`;
+  }
+  function renderTrack(c) {
+    window.__case = c; const t = c.track;
+    t.f = t.f || {}; t.checks = t.checks || {}; t.remind = t.remind || {}; t.reminders = t.reminders || { to: '', sent: {}, queue: [] };
+    const all = trSteps(c); const cur = trCurrent(c);
+    const doneN = all.filter(s => trStepDone(c, s)).length;
+    const due = cur ? cur.due(c, t) : null;
+    const openSet = new Set(Array.from(document.querySelectorAll('.tr-step[open]')).map(d => d.dataset.step));
+    const keepScroll = window.__trKeep ? window.scrollY : 0;
+    app.innerHTML = header() + `
+      <button class="step-back" onclick="openCase('${esc(c.id)}')">&larr; ${esc(c.tenantName)}'s file</button>
+      <div style="max-width:720px;margin:0 auto;">
+        <h1 style="margin-bottom:0.2rem;">Eviction steps</h1>
+        <p class="subhead" style="margin-bottom:0.8rem;">${esc(trWho(c))} &middot; ${esc(c.propertyLine || '')}${trF(t, 'caseNumber') ? ' &middot; Case ' + esc(trF(t, 'caseNumber')) : ''}</p>
+        <div class="wz-bar" style="margin-bottom:1rem;"><div style="width:${Math.round(doneN / all.length * 100)}%;"></div></div>
+        ${t.closed ? `<div class="tr-next" style="border-color:#256B45;background:#E7F4EC;"><strong style="font-size:1.15rem;">Case closed</strong><p style="margin:0.3rem 0 0;">${esc(t.closed.why)} &middot; ${esc(trDate(t.closed.date))}. No more reminders will be sent.</p><button class="btn btn-ghost" id="tr-reopen" style="margin-top:0.6rem;">Reopen</button></div>`
+          : cur ? `<div class="tr-next"><span class="tr-tag">Up next &middot; step ${all.indexOf(cur) + 1} of ${all.length}</span><strong style="display:block;font-size:1.25rem;margin-top:0.35rem;">${esc(cur.title)}</strong>${due ? `<p style="margin:0.25rem 0 0;">${esc(due.label)}: <strong>${esc(trDate(due.iso))}</strong></p>` : ''}</div>`
+          : `<div class="tr-next" style="border-color:#256B45;background:#E7F4EC;"><strong>Every step is checked off.</strong> Close the case when you're done.</div>`}
+        <div class="card" style="padding:1.1rem 1.25rem;">
+          <div class="section-label" style="margin-top:0;">&#9993; Email reminders</div>
+          <p class="hint" style="margin-top:0;">Turn on reminders step by step with the &#9993; box inside each step. They go out around 7 a.m. on the day shown.</p>
+          <div class="field"><label>Send reminders to</label><input type="text" id="tr-to" value="${esc(t.reminders.to || '')}" placeholder="you@example.com, partner@example.com"></div>
+          <div class="btn-row" style="margin-top:0.4rem;flex-wrap:wrap;"><button class="btn btn-ghost" id="tr-test">Send a test email</button></div>
+          <div id="tr-test-out"></div>
+          <label class="checkbox-row" style="margin-top:0.8rem;"><input type="checkbox" id="tr-garnish" ${t.garnish ? 'checked' : ''}><span><strong>Add the money step:</strong> collect what they owe by garnishing wages<br><span class="hint">Only works if the judgment includes money.</span></span></label>
+        </div>
+        ${all.map((s, i) => trStepHtml(c, s, i, cur)).join('')}
+        <div class="card" style="margin-top:1rem;">
+          <div class="section-label" style="margin-top:0;">End the case early</div>
+          <p class="hint" style="margin-top:0;">If the tenant pays, moves out, or you drop the case, close it here. Reminders stop.</p>
+          <div class="btn-row" style="flex-wrap:wrap;">${t.closed ? '' : ['They paid', 'They moved out', 'We settled', 'I dropped the case'].map(w => `<button class="btn btn-ghost" data-tr-close="${w}">${w}</button>`).join('')}
+            <button class="btn btn-ghost" style="color:#A8372D;" id="tr-remove">Remove this checklist</button></div>
+        </div>
+        <p class="hint" style="text-align:center;">Lease Desk is not a lawyer. Dates follow Colorado law (C.R.S. 13-40-104 to 13-40-123) and court rules as of 2026; your court's papers and the judge's orders control. Talk to a Colorado eviction attorney if anything is unclear.</p>
+      </div>`;
+    if (openSet.size) document.querySelectorAll('.tr-step').forEach(d => { if (openSet.has(d.dataset.step) && !d.classList.contains('done')) d.open = true; });
+    if (window.__trKeep) { window.scrollTo(0, keepScroll); window.__trKeep = false; } else window.scrollTo(0, 0);
+    bindTrack(c);
+  }
+  window.renderTrack = renderTrack;
+  function trRedraw(c) { window.__trKeep = true; renderTrack(c); }
+  function bindTrack(c) {
+    const t = c.track;
+    document.querySelectorAll('[data-tr-c]').forEach(x => x.addEventListener('change', () => {
+      if (x.checked) t.checks[x.dataset.trC] = todayISO(); else delete t.checks[x.dataset.trC];
+      trSave(c); trRedraw(c);
+    }));
+    document.querySelectorAll('[data-tr-f]').forEach(x => x.addEventListener('change', () => {
+      t.f[x.dataset.trF] = x.type === 'checkbox' ? x.checked : x.value.trim();
+      trSave(c); trRedraw(c);
+    }));
+    document.querySelectorAll('[data-tr-r]').forEach(x => x.addEventListener('change', () => {
+      t.remind[x.dataset.trR] = x.checked;
+      if (x.checked && !(t.reminders.to || '').trim()) { const to = document.getElementById('tr-to'); to.focus(); trToast('Add an email address above', true); }
+      trSave(c); trRedraw(c);
+    }));
+    document.querySelectorAll('[data-tr-out]').forEach(b => b.addEventListener('click', () => {
+      if (b.dataset.trOut === 'over') { t.closed = { why: 'They paid or moved out', date: todayISO() }; }
+      else t.outcome = b.dataset.trOut;
+      trSave(c); trRedraw(c);
+    }));
+    document.querySelectorAll('[data-tr-close]').forEach(b => b.addEventListener('click', () => {
+      t.closed = { why: b.dataset.trClose, date: todayISO() }; trSave(c, true); renderTrack(c);
+    }));
+    const ro = document.getElementById('tr-reopen'); if (ro) ro.addEventListener('click', () => { t.closed = null; trSave(c); trRedraw(c); });
+    document.getElementById('tr-to').addEventListener('change', (e) => { t.reminders.to = e.target.value.trim(); trSave(c); });
+    document.getElementById('tr-garnish').addEventListener('change', (e) => { t.garnish = e.target.checked; trSave(c); trRedraw(c); });
+    document.getElementById('tr-remove').addEventListener('click', async function () {
+      if (this.dataset.confirm !== '1') { this.dataset.confirm = '1'; this.textContent = 'Tap again to remove the checklist'; return; }
+      delete c.track; try { const s = await saveCase(c); Object.assign(c, s); delete c.track; } catch (e) {}
+      renderCase(c);
+    });
+    document.getElementById('tr-test').addEventListener('click', async function () {
+      const to = document.getElementById('tr-to').value.trim(); const out = document.getElementById('tr-test-out');
+      t.reminders.to = to; trSave(c);
+      if (!to) { out.innerHTML = badBox('Enter an email address first.'); return; }
+      this.disabled = true; this.textContent = 'Sending…';
+      try {
+        const r = await fetch('/api/reminders', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ key: staffKey(), action: 'test', to }) });
+        const j = await r.json().catch(() => ({}));
+        if (r.ok && j.ok) out.innerHTML = `<div class="banner" style="background:#E7F4EC;border:1px solid #BFE0CB;color:#1F5A38;"><span>&#10003; Test email sent to ${esc(to)}. Check your inbox (and spam).</span></div>`;
+        else if (j.error === 'not set up') out.innerHTML = warnBox('Email sending isn\'t switched on yet. One setting has to be added in Netlify first. Your reminders are saved and will start once it\'s on.');
+        else out.innerHTML = badBox('Could not send: ' + esc(j.error || 'unknown error'));
+      } catch (e) { out.innerHTML = badBox('Could not reach Lease Desk. Check your connection.'); }
+      this.disabled = false; this.textContent = 'Send a test email';
+    });
+    document.querySelectorAll('[data-tr-notice]').forEach(b => b.addEventListener('click', function () { const n = trNotice(c); if (n) officialNoticePdf(c, n, this, null); }));
+    document.querySelectorAll('[data-tr-forms]').forEach(b => b.addEventListener('click', async function () {
+      const s = TR_STEPS.find(x => x.id === b.dataset.trForms); const note = document.querySelector(`[data-tr-note="${s.id}"]`);
+      const pages = s.pages(c, t).filter(p => p.form);
+      syncCaseFromTrack(c);
+      const data = courtData(c, trNotice(c)); const spanish = /span|espa/i.test(c.language || '');
+      const esOk = new Set(['JDF99A', 'JDF99B', 'JDF99C', 'JDF101', 'JDF102', 'JDF103', 'JDF106A']);
+      const forms = pages.map(p => ({ form: p.form, lang: spanish && esOk.has(p.form) ? 'es' : 'en', copies: p.perTenant ? Math.max(1, data.tenants.length) : 1 }));
+      const orig = b.textContent; b.disabled = true; b.textContent = 'Getting the newest forms from the court…';
+      try {
+        const info = await downloadOfficial(forms, data, s.title + ' - ' + c.tenantName + '.pdf', s.title + ' - ' + c.tenantName);
+        note.innerHTML = officialNote(info) + (trNotice(c) || s.id !== 'papers' ? '' : warnBox('The notice details (delivery date, amounts) aren\'t in Lease Desk anymore, so fill those in on the complaint from your paper copy.'));
+        b.textContent = 'Downloaded. Download again';
+      } catch (e) { note.innerHTML = badBox('The court website didn\'t answer. Try again in a minute, or get the forms from the <a href="' + COURT_SELF_HELP + '" target="_blank" rel="noopener">court\'s eviction page</a>.'); b.textContent = orig; }
+      b.disabled = false;
+    }));
+  }
+
   // ---- one tenant file
   function caseWarnings(c) {
     const w = [];
@@ -1540,6 +2114,11 @@
         <h1 style="margin-bottom:0.2rem;">${esc(c.tenantName)}${c.tenantName2 ? ' and ' + esc(c.tenantName2) : ''}</h1>
         <p class="subhead" style="margin-bottom:1rem;">${esc(c.propertyLine || '')}${c.city ? ', ' + esc(c.city) : ''}${c.rent ? ' &middot; ' + fmtMoney(c.rent) + '/month' : ''}</p>
         ${caseWarnings(c)}
+        <div class="card" style="border-top-color:var(--brass);">
+          <div class="section-label">Eviction steps, start to finish</div>
+          ${c.track ? `<p style="margin-top:0;">${trSummary(c)}</p><div class="btn-row"><button class="btn btn-primary" onclick="renderTrack(window.__case)">Open the checklist</button></div>`
+            : `<p style="margin-top:0;">An ordered checklist from the notice to the sheriff move-out: what to do, which pages to print, and optional email reminders.</p><div class="btn-row"><button class="btn btn-primary" onclick="startTrack()">Start the checklist</button></div>`}
+        </div>
         <div class="card">
           <div class="section-label">For-cause law (12 months)</div>
           <p>${t.known ? (t.isCovered ? `This tenant has lived here at least 12 months (since ${esc(fmtDate(c.tenancyStart))}). You need a legal cause to evict or to refuse renewal, such as nonpayment, a lease violation, or a no-fault ground with 90 days' notice (C.R.S. 38-12-1303).` : `Under 12 months. The for-cause law starts applying on <strong>${esc(fmtDate(t.covered))}</strong>. Until then, you may decline to renew with proper notice and no reason (C.R.S. 38-12-1302(1)(e)).`) : 'Add the tenant-since date to see this.'}</p>
