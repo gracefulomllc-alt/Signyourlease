@@ -17,12 +17,12 @@ const SEED = [
   P('catalina312', '312 Catalina Ct', 'Colorado Springs', '80906'),
   P('catalina310', '310 Catalina Ct', 'Colorado Springs', '80906'),
   P('catalina310h', '310 1/2 Catalina Ct', 'Colorado Springs', '80906', { type: 'Cottage' }),
-  P('brinn625', '625 Brinn Ct', 'Colorado Springs', '80911'),
+  P('brinn625', '625 Brinn Ct', 'Colorado Springs', '80911', { available: true, forSale: true, rent: '2500', salePrice: '400000', availableNote: 'For rent or for sale', notes: 'Some photos are virtually staged.', migrations: ['brinn-rent-sale'] }),
   P('willamette2420', '2420 E Willamette Ave', 'Colorado Springs', '80909'),
   P('casden2728', '2728 Casden Cir', 'Colorado Springs', '80909'),
   P('deerfield4258', '4258 Deerfield Hills Rd', 'Colorado Springs', '80916'),
   P('deerfield4166', '4166 Deerfield Hills Rd', 'Colorado Springs', '80916'),
-  P('platte544', '544 E Platte Ave', 'Colorado Springs', '80903'),
+  P('platte544', '544 E Platte Ave', 'Colorado Springs', '80903', { available: true, forSale: true, availableNote: 'For rent or for sale', migrations: ['platte-rent-sale'] }),
   P('london4445', '4445 London Ln', 'Colorado Springs', '80916'),
   P('loomis4206', '4206 Loomis Ave', 'Colorado Springs', '80906'),
   P('loomis4208', '4208 Loomis Ave', 'Colorado Springs', '80906'),
@@ -33,7 +33,7 @@ const SEED = [
   P('windsor416', '416 Windsor Ln', 'Fountain', '80817'),
 ];
 const CITY_CENTER = { pueblo: [38.2544, -104.6091], 'colorado springs': [38.8339, -104.8214], fountain: [38.6822, -104.7008] };
-const FIELDS = ['id', 'address', 'unit', 'city', 'state', 'zip', 'type', 'beds', 'baths', 'rent', 'rentNote', 'available', 'availableNote', 'show', 'applyUrl', 'notes', 'lat', 'lng', 'approx'];
+const FIELDS = ['id', 'address', 'unit', 'city', 'state', 'zip', 'type', 'beds', 'baths', 'rent', 'rentNote', 'available', 'availableNote', 'show', 'applyUrl', 'notes', 'lat', 'lng', 'approx', 'forRent', 'forSale', 'salePrice', 'migrations'];
 const str = (v, n = 300) => String(v == null ? '' : v).slice(0, n);
 
 function clean(it) {
@@ -44,6 +44,8 @@ function clean(it) {
   o.notes = str(o.notes, 600);
   o.applyUrl = /^(https?:|mailto:|tel:)/i.test(String(o.applyUrl || '')) ? str(o.applyUrl, 400) : '';
   o.available = !!o.available; o.show = o.show !== false;
+  o.forRent = o.forRent !== false; o.forSale = !!o.forSale; o.salePrice = str(o.salePrice, 20).replace(/[^\d.]/g, '');
+  o.migrations = Array.isArray(o.migrations) ? o.migrations.slice(0, 20).map(x => str(x, 40)) : [];
   o.lat = typeof o.lat === 'number' ? o.lat : null; o.lng = typeof o.lng === 'number' ? o.lng : null; o.approx = !!o.approx;
   return o;
 }
@@ -95,6 +97,17 @@ async function load(store) {
   // Oct 2026: Troy Ave was renamed Thunderwolf Dr (same number and ZIP). Same building, so the pin stays where it is.
   let moved = false;
   for (const it of items) if (/^411 Troy Ave$/i.test(String(it.address || '').trim())) { it.address = '411 Thunderwolf Dr'; moved = true; }
+  // Nov 2026: 544 E Platte is listed for rent or sale (owner's request). Applied once.
+  for (const it of items) {
+    if (it.id === 'platte544' && !(it.migrations || []).includes('platte-rent-sale')) {
+      Object.assign(it, { available: true, forRent: true, forSale: true, show: true, type: it.type || 'House', availableNote: it.availableNote || 'For rent or for sale' });
+      it.migrations = (it.migrations || []).concat(['platte-rent-sale']); moved = true;
+    }
+    if (it.id === 'brinn625' && !(it.migrations || []).includes('brinn-rent-sale')) {
+      Object.assign(it, { available: true, forRent: true, forSale: true, show: true, rent: '2500', salePrice: '400000', type: it.type || 'House', availableNote: 'For rent or for sale', notes: it.notes || 'Some photos are virtually staged.' });
+      it.migrations = (it.migrations || []).concat(['brinn-rent-sale']); moved = true;
+    }
+  }
   if (moved && saved) await store.setJSON('items', { items, updatedAt: Date.now() }).catch(() => {});
   return items;
 }

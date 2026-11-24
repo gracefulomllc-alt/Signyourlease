@@ -546,6 +546,7 @@
     if (hash === '#/status') { if (!landlordAuthed()) { renderGate('#/status'); return; } renderLeaseStatus(); return; }
     if (hash === '#/assist') { if (!landlordAuthed()) { renderGate('#/assist'); return; } renderAssist(); return; }
     if (hash === '#/receipts') { if (!landlordAuthed()) { renderGate('#/receipts'); return; } renderReceipts(); return; }
+    if (hash === '#/inquiries') { if (!landlordAuthed()) { renderGate('#/inquiries'); return; } renderInquiries(); return; }
     if (hash === '#/listings') { if (!landlordAuthed()) { renderGate('#/listings'); return; } renderListings(); return; }
     if (hash === '#/staff') { if (!landlordAuthed()) { renderGate('#/staff'); return; } renderStaffMenu(); return; }
     renderHome();
@@ -600,6 +601,7 @@
             ${tile('#/status', 'Lease status', 'See who still needs to sign or countersign.', false)}
             ${tile('#/archive', 'Completed leases', 'Every fully signed lease, saved until you delete it. Download any as a PDF.', false)}
             ${tile('#/evict', 'Eviction notice', 'Answer a few questions and get the right notice, filled in.', false)}
+            ${tile('#/inquiries', 'Inquiries', 'People who asked about renting or buying a property.', false)}
             ${tile('#/listings', 'Property listings', 'Mark properties available or not for the website map.', false)}
           </div>
           <p style="text-align:center;margin:0.75rem 0 0;"><a href="#" style="font-size:0.82rem;" onclick="lockDevice();return false;">Sign out on this device</a></p>
@@ -1918,7 +1920,7 @@
             <div style="display:flex;justify-content:space-between;align-items:center;gap:0.75rem;padding:0.7rem 0;border-bottom:1px solid #F1E4D8;flex-wrap:wrap;">
               <div style="min-width:0;flex:1;">
                 <strong>${esc(it.address)}${it.unit ? ', ' + esc(it.unit) : ''}</strong>
-                <span class="hint" style="display:block;margin:0;">${esc(it.type || '')}${it.rent ? ' &middot; $' + esc(it.rent) : ''}${it.photoCount ? ' &middot; ' + it.photoCount + ' photo' + (it.photoCount === 1 ? '' : 's') : ' &middot; no photos'}${it.show ? '' : ' &middot; hidden from website'}${it.lat == null ? ' &middot; pin location pending' : ''}</span>
+                <span class="hint" style="display:block;margin:0;">${esc(it.type || '')}${it.forSale ? ' &middot; for sale' : ''}${it.rent ? ' &middot; $' + esc(it.rent) : ''}${it.photoCount ? ' &middot; ' + it.photoCount + ' photo' + (it.photoCount === 1 ? '' : 's') : ' &middot; no photos'}${it.show ? '' : ' &middot; hidden from website'}${it.lat == null ? ' &middot; pin location pending' : ''}</span>
               </div>
               <button class="btn ${it.available ? 'btn-primary' : 'btn-ghost'}" style="padding:0.45rem 0.9rem;font-size:0.85rem;min-width:118px;" onclick="toggleAvail(${i}, this)">${it.available ? 'Available' : 'Not available'}</button>
               <button class="btn btn-ghost" style="padding:0.45rem 0.9rem;font-size:0.85rem;" onclick="editListing(${i})">Edit</button>
@@ -2048,12 +2050,14 @@
           ${f('pl-unit', 'Unit (optional)', it.unit)}${f('pl-type', 'Type', it.type, 'text', 'House, Studio apartments, Duplex unit, Cottage…')}
           ${f('pl-city', 'City', it.city)}${f('pl-zip', 'ZIP', it.zip)}
           ${f('pl-beds', 'Beds', it.beds)}${f('pl-baths', 'Baths', it.baths)}
-          ${f('pl-rent', 'Rent per month', it.rent, 'number', 'Shown only when available.')}${f('pl-rentnote', 'Rent note', it.rentNote, 'text', 'e.g. all utilities included')}
+          ${f('pl-rent', 'Rent per month', it.rent, 'number', 'Shown only when available.')}${f('pl-sale', 'Sale price (if for sale)', it.salePrice, 'number', 'Leave blank to show \'Ask about price\'.')}${f('pl-rentnote', 'Rent note', it.rentNote, 'text', 'e.g. all utilities included')}
           ${f('pl-availnote', 'Availability note', it.availableNote, 'text', 'e.g. Available December 1, or Limited space', true)}
           ${f('pl-apply', 'Apply link', it.applyUrl, 'text', 'Innago or other application link. Blank = the Call / Email buttons only.', true)}
           <div class="field full"><label>Description</label><textarea id="pl-notes" rows="3">${esc(it.notes || '')}</textarea></div>
         </div>
         <label class="checkbox-row"><input type="checkbox" id="pl-avail" ${it.available ? 'checked' : ''}><span><strong>Available</strong> (red pin)</span></label>
+        <label class="checkbox-row"><input type="checkbox" id="pl-forrent" ${it.forRent !== false ? 'checked' : ''}><span>For rent</span></label>
+        <label class="checkbox-row"><input type="checkbox" id="pl-forsale" ${it.forSale ? 'checked' : ''}><span>For sale</span></label>
         <label class="checkbox-row"><input type="checkbox" id="pl-show" ${it.show !== false ? 'checked' : ''}><span>Show on the website map</span></label>
         </div>
         <div class="card no-print">
@@ -2074,7 +2078,8 @@
     document.getElementById('pl-save').addEventListener('click', async function () {
       const next = { ...it, address: v('pl-addr'), unit: v('pl-unit'), type: v('pl-type'), city: v('pl-city'), zip: v('pl-zip'), beds: v('pl-beds'), baths: v('pl-baths'),
         rent: v('pl-rent'), rentNote: v('pl-rentnote'), availableNote: v('pl-availnote'), applyUrl: v('pl-apply'), notes: document.getElementById('pl-notes').value.trim(),
-        available: document.getElementById('pl-avail').checked, show: document.getElementById('pl-show').checked };
+        available: document.getElementById('pl-avail').checked, show: document.getElementById('pl-show').checked,
+        forRent: document.getElementById('pl-forrent').checked, forSale: document.getElementById('pl-forsale').checked, salePrice: v('pl-sale') };
       const err = document.getElementById('pl-err');
       if (!next.address || !next.city) { err.textContent = 'Enter the street address and city.'; err.style.display = ''; return; }
       if (next.applyUrl && !/^https?:\/\//i.test(next.applyUrl)) next.applyUrl = 'https://' + next.applyUrl;
@@ -2172,6 +2177,44 @@
     window.scrollTo(0, 0);
   }
 
+  // ---------- INQUIRIES from the website (rent or buy) ----------
+  async function renderInquiries() {
+    app.innerHTML = header() + `<p class="hint" style="text-align:center;padding:2rem 0;">Loading inquiries&hellip;</p>`;
+    let items = [];
+    try { const r = await fetch('/api/inquiries?key=' + encodeURIComponent(staffKey())); if (!r.ok) throw 0; items = (await r.json()).items || []; }
+    catch (e) { app.innerHTML = header() + badBoxSimple('Could not load inquiries. Check your connection and try again.'); return; }
+    const open = items.filter(i => !i.done).length;
+    const row = (q) => `
+      <div class="card" style="${q.done ? 'opacity:.6;' : ''}">
+        <div style="display:flex;justify-content:space-between;gap:0.5rem;flex-wrap:wrap;align-items:baseline;">
+          <strong style="font-size:1.1rem;">${esc(q.name)}</strong>
+          <span style="font-size:0.78rem;font-weight:700;padding:0.15rem 0.6rem;border-radius:999px;${q.interest === 'buy' ? 'color:#7A5410;background:#FBF1DC;' : 'color:#256B45;background:#E7F4EC;'}">${q.interest === 'buy' ? 'Wants to buy' : 'Wants to rent'}</span>
+        </div>
+        <p style="margin:0.25rem 0;color:var(--ink-soft);font-size:0.9rem;">${esc(q.property || 'General question')} &middot; ${esc(fmtDateTime(q.at))}</p>
+        ${q.message ? `<p style="margin:0.5rem 0;white-space:pre-wrap;">${esc(q.message)}</p>` : ''}
+        <div class="btn-row" style="flex-wrap:wrap;margin-top:0.5rem;">
+          ${q.phone ? `<a class="btn btn-primary" href="tel:${esc(q.phone.replace(/[^\d+]/g, ''))}">Call ${esc(q.phone)}</a><a class="btn btn-ghost" href="sms:${esc(q.phone.replace(/[^\d+]/g, ''))}">Text</a>` : ''}
+          ${q.email ? `<a class="btn btn-ghost" href="mailto:${esc(q.email)}?subject=${encodeURIComponent('Re: ' + (q.property || 'your inquiry'))}">Email</a>` : ''}
+          <button class="btn btn-ghost" onclick="inqAct('done','${esc(q.id)}',this)">${q.done ? 'Mark not handled' : 'Mark handled'}</button>
+          <button class="btn btn-ghost" style="color:#A8372D;" onclick="inqAct('delete','${esc(q.id)}',this)">Delete</button>
+        </div>
+      </div>`;
+    app.innerHTML = header() + `
+      <div style="max-width:640px;margin:1rem auto;">
+        <h1 style="text-align:center;margin-bottom:0.3rem;">Inquiries</h1>
+        <p class="subhead" style="text-align:center;margin:0 auto 1rem;">People who asked about renting or buying from the website. ${open} not handled yet.</p>
+        ${items.length ? items.map(row).join('') : '<div class="card"><p class="hint" style="margin:0;">No inquiries yet. They show up here when someone fills out the form on your All Properties page.</p></div>'}
+      </div>`;
+    window.scrollTo(0, 0);
+  }
+  function badBoxSimple(t) { return `<div class="banner" style="background:#FBE9E6;border:1px solid #EBB9B2;color:#7A231B;">${t}</div>`; }
+  window.inqAct = async function (action, id, btn) {
+    if (action === 'delete' && btn.dataset.confirm !== '1') { btn.dataset.confirm = '1'; btn.textContent = 'Tap again to delete'; return; }
+    btn.disabled = true;
+    try { await fetch('/api/inquiries', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ key: staffKey(), action, id }) }); } catch (e) {}
+    renderInquiries();
+  };
+
   function renderStaffMenu() {
     const tile = (hsh, title, sub, primary) => `
       <button class="btn ${primary ? 'btn-primary' : 'btn-ghost'}" style="width:100%;text-align:left;display:block;padding:0.9rem 1rem;" onclick="goHash('${hsh}')">
@@ -2187,7 +2230,8 @@
           ${tile('#/receipts', 'Find a receipt', 'Every receipt you have made, listed by property.', false)}
           ${tile('#/status', 'Lease status', 'Who still needs to sign or countersign.', false)}
           ${tile('#/archive', 'Completed leases', 'Every fully signed lease. Download any as a PDF.', false)}
-          ${tile('#/listings', 'Property listings', 'Mark properties available or not for the website map.', false)}
+          ${tile('#/inquiries', 'Inquiries', 'People who asked about renting or buying a property.', false)}
+            ${tile('#/listings', 'Property listings', 'Mark properties available or not for the website map.', false)}
           ${tile('#/evict', 'Eviction notice', 'Answer a few questions and get the right notice, filled in.', false)}
         </div></div>
         <p style="text-align:center;"><a href="#" style="font-size:0.82rem;" onclick="lockDevice();return false;">Sign out on this device</a></p>
