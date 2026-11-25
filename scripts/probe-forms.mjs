@@ -5,8 +5,13 @@ const BASE = 'https://www.coloradojudicial.gov';
 const LIST = (process.env.FORMS || '').split(/\s+/).filter(Boolean);
 fs.mkdirSync('probe-out', { recursive: true });
 for (const item of LIST) {
-  const [id, path] = item.split('=');
+  let [id, path] = item.split('=');
   try {
+    if (path.startsWith('page:')) {
+      const html = await (await fetch(BASE + '/self-help-and-forms/self-help-forms/' + path.slice(5), { headers: { 'User-Agent': 'Mozilla/5.0' } })).text();
+      const found = [...html.matchAll(new RegExp('(/sites/default/files/[0-9]{4}-[0-9]{2}/' + id + '(?:_[0-9]+)?\\.pdf)', 'g'))].map(m => m[1]).sort();
+      path = found[found.length - 1]; console.log(id, path);
+    }
     const r = await fetch(BASE + path, { headers: { 'User-Agent': 'Mozilla/5.0' } });
     const bytes = new Uint8Array(await r.arrayBuffer());
     fs.writeFileSync('probe-out/' + id + '.pdf', bytes);
