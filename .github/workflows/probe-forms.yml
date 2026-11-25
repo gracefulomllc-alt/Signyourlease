@@ -1,0 +1,20 @@
+name: Probe court forms
+on:
+  workflow_dispatch:
+    inputs:
+      forms:
+        description: 'id=/sites/default/files/... pairs, space separated'
+        required: true
+jobs:
+  probe:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with: { node-version: 20 }
+      - run: npm install pdf-lib@1.17.1 --no-save
+      - run: node scripts/probe-forms.mjs
+        env:
+          FORMS: ${{ github.event.inputs.forms }}
+      - uses: actions/upload-artifact@v4
+        with: { name: probe-out, path: probe-out }
