@@ -107,6 +107,14 @@ export const MAPPERS = {
   },
   JDF109: (d) => ({ ...caption(d), '√ All Other Tenants': true, '2.1': d.street, '2.2': d.city, 'County': d.county, '3.1': true }),
 };
+MAPPERS.LDREP = (d) => {
+  const r = d.rep || {};
+  return { county: d.county, courtAddress: d.courtAddress, plaintiff: d.landlord, defendants: d.tenants.join(', ') + (d.tenants.length ? ', and all other occupants' : ''),
+    caseNumber: d.caseNumber, premises: [d.street, d.city, 'CO', d.zip].filter(Boolean).join(', '), entity: d.landlord,
+    entityType: r.entityType || 'Colorado limited liability company', isLLC: /LLC|L\.L\.C|limited liability/i.test(d.landlord + ' ' + (r.entityType || '')),
+    owners: r.owners || '1', members: r.members || [], affiant: r.affiant || '', affiantTitle: r.affiantTitle || 'Member', affiantRole: r.affiantRole || 'a member',
+    rep: r.name || '', repRole: r.role || '' };
+};
 export function valuesFor(form, d) {
   const fn = MAPPERS[form];
   const v = fn ? fn(d) : caption(d);

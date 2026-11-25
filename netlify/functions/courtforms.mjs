@@ -1,5 +1,6 @@
 import { getStore } from '@netlify/blobs';
 import { valuesFor } from '../lib/court-mappers.mjs';
+import { buildOwn } from '../lib/own-forms.mjs';
 import { PDFDocument, PDFName, PDFTextField, PDFCheckBox, PDFRadioGroup, PDFDropdown, PDFOptionList, StandardFonts } from 'pdf-lib';
 
 // Official Colorado eviction court forms, always pulled from the court's own form pages
@@ -21,7 +22,18 @@ const PAGES = {
   JDF107B: 'judgment-order',
   JDF108: 'request-documents-evictions-jdf-185-sc-and-jdf-187-sc',
   JDF109: 'writ-restitution-eviction',
+  // money collection (these forms have no page of their own; found on the court's forms list pages)
+  FORM7: '@' + '/taxonomy/term/452?form_category=570',
+  FORM26: '@' + '/taxonomy/term/449?form_category=449',
+  FORM27: '@' + '/taxonomy/term/449?form_category=449',
+  FORM29: '@' + '/taxonomy/term/449?form_category=449',
+  JDF89: '@' + '/taxonomy/term/449?form_category=449',
+  JDF111: '@' + '/taxonomy/term/449?form_category=449',
 };
+// file name on the court site, when it isn't the form id
+const FILE = { FORM7: 'Form7', FORM26: 'Form26', FORM27: 'Form27', FORM29: 'Form29', JDF89: 'JDF89', JDF111: 'JDF111' };
+// Forms Lease Desk writes itself (no court version exists statewide)
+const OWN = new Set(['LDREP']);
 // Last known good links, used only if the form page can't be read.
 const FALLBACK = {
   JDF98: '/sites/default/files/2025-04/JDF98.pdf',
@@ -32,6 +44,12 @@ const FALLBACK = {
   JDF102: '/sites/default/files/2025-08/JDF102.pdf',
   JDF103: '/sites/default/files/2024-11/JDF103.pdf',
   JDF106A: '/sites/default/files/2024-05/JDF106A.pdf',
+  FORM7: '/sites/default/files/2024-04/Form7.pdf',
+  FORM26: '/sites/default/files/2024-08/Form26.pdf',
+  FORM27: '/sites/default/files/2024-08/Form27.pdf',
+  FORM29: '/sites/default/files/2024-08/Form29.pdf',
+  JDF89: '/sites/default/files/2023-07/JDF89_0.pdf',
+  JDF111: '/sites/default/files/2023-07/JDF111_1.pdf',
 };
 const SPANISH_OK = new Set(['JDF99A', 'JDF99B', 'JDF99C', 'JDF101', 'JDF102', 'JDF103', 'JDF106A']);
 const DAY = 86400000;
@@ -49,11 +67,12 @@ async function currentUrl(form, lang, store) {
   if (hit && hit.live && Date.now() - hit.at < RECHECK) return { url: hit.url, live: true, checkedAt: hit.at };
   let url = '';
   try {
-    const r = await fetch(BASE + '/self-help-and-forms/self-help-forms/' + PAGES[form], { headers: UA, signal: AbortSignal.timeout(8000) });
+    const pg = PAGES[form].startsWith('@') ? PAGES[form].slice(1) : '/self-help-and-forms/self-help-forms/' + PAGES[form];
+    const r = await fetch(BASE + pg, { headers: UA, signal: AbortSignal.timeout(8000) });
     if (r.ok) {
       const html = await r.text();
-      const file = form + (lang === 'es' ? '.spanish' : '') + '.pdf';
-      const re = new RegExp('(?:https://www\\.coloradojudicial\\.gov)?(/sites/default/files/[0-9]{4}-[0-9]{2}/' + file.replace(/\./g, '\\.') + ')', 'gi');
+      const base = (FILE[form] || form) + (lang === 'es' ? '.spanish' : '');
+      const re = new RegExp('(?:https://www\\.coloradojudicial\\.gov)?(/sites/default/files/[0-9]{4}-[0-9]{2}/' + base.replace(/\./g, '\\.') + '(?:_[0-9]+)?\\.pdf)', 'gi');
       const found = [...html.matchAll(re)].map(m => m[1]).sort();
       if (found.length) url = BASE + found[found.length - 1];
     }
@@ -121,6 +140,7 @@ function findField(form, fields, key) {
 }
 
 async function fillOne(formId, lang, values, store) {
+  if (OWN.has(formId)) return { doc: await buildOwn(formId, values), misses: [], srcUrl: '', live: true, own: true };
   const { bytes, url: srcUrl, live } = await formBytes(formId, lang, store);
   const doc = await PDFDocument.load(bytes, { ignoreEncryption: true, updateMetadata: false });
   let f = null; try { f = doc.getForm(); } catch (e) {}
@@ -194,7 +214,7 @@ export default async (req) => {
   if (req.method === 'POST') {
     let body; try { body = await req.json(); } catch (e) { return json({ error: 'bad json' }, 400); }
     if (!STAFF_CODES.includes(String(body.key || ''))) return json({ error: 'unauthorized' }, 401);
-    const list = Array.isArray(body.forms) ? body.forms.filter(x => x && PAGES[x.form]).slice(0, 20) : [];
+    const list = Array.isArray(body.forms) ? body.forms.filter(x => x && (PAGES[x.form] || OWN.has(x.form))).slice(0, 20) : [];
     if (!list.length) return json({ error: 'no forms' }, 400);
     try {
       const out = await PDFDocument.create();
@@ -203,7 +223,7 @@ export default async (req) => {
         const lang = item.lang === 'es' ? 'es' : 'en';
         const data = { tenants: [], ...(body.data || {}) };
         const { doc, misses: m, srcUrl, live } = await fillOne(item.form, lang, valuesFor(item.form, data), store);
-        info.push({ form: item.form, lang, posted: ((srcUrl || '').match(/files\/(\d{4}-\d{2})\//) || [])[1] || '', live, url: srcUrl });
+        info.push({ form: item.form, lang, own: OWN.has(item.form), posted: ((srcUrl || '').match(/files\/(\d{4}-\d{2})\//) || [])[1] || '', live, url: srcUrl });
         if (m.length) misses[item.form] = m;
         try { doc.getForm().flatten(); } catch (e) {}
         const copies = Math.max(1, Math.min(4, parseInt(item.copies, 10) || 1));
