@@ -1,0 +1,25 @@
+FORM JDF107B status=200 pages=2
+RadioGroup | GroupA.1 | 1@89,645=A District Court 1@139,645=A County Court | In which type of court is the case filed? opts=A District Court/A County Court
+TextField | Court County | 1@161,631 | Enter the county where the court is located.
+TextField | Court Address | 1@158,617 | Enter the court's mailing address.
+TextField | π | 1@128,576 | Enter the Landlord's names.
+TextField | ∆ | 1@140,552 | Enter names.
+TextField | Case Number | 1@420,516 | Enter the case number.
+TextField | Division | 1@419,503 | Enter the assigned division (if any).
+CheckBox | 1.0 | 1@108,339=Yes | Check if the judgment debtor is in default.
+TextField | Courtroom | 1@430,490 | Enter the assigned courtroom (if any).
+TextField | 2.0 | 1@260,233 | Enter the name of the judgment creditor.
+TextField | 2.1 | 1@254,186 | Enter the name of the judgment debtor.
+TextField | 2.2 | 1@192,157 | Enter the amount of the judgment.
+TextField | 2.4 | 1@186,93 | Enter the addresses the judgmet creditor is entitle to possess.
+CheckBox | 2.3 | 1@108,122=Yes | Check if the judgment creditor is also entitle to possession of apremises. Enter the address in the next field.
+CheckBox | 3.0 | 2@126,649=Yes | Check if the Court authorizes the Judgment Creditor to serve interrogatories.
+CheckBox | 3.3 | 2@126,309=Yes | Check if the Court authorizes a writ of restitution to issue. Enter the date in the provided field.
+TextField | 3.4 | 2@329,309 | Enter the date the Writ of Restitution may enter in (MM/DD/YYYY) format.
+CheckBox | 3.1 | 2@126,411=Yes | Check if the Court is making orders anout the money in the Court Registry. Enter those orders in the next field.
+TextField | 3.2 | 2@144,361 | Enter what to do with the funds in the court registry.
+CheckBox | 3.5 | 2@126,250=Yes | Check if the Court is making orders anout the money in the Court Registry. Enter those orders in the next field.
+TextField | 3.6 | 2@144,200 | Enter what to do with the funds in the court registry.
+TextField | Sig_1 | 2@125,141 | Space for Judge to sign.
+RadioGroup | GroupSig_JO | 2@125,127=a Judge 2@180,127=A Magistrate. | Space for Judge to sign. opts=a Judge/A Magistrate.
+TextField | Sig_Date | 2@392,141 | Enter date the order was signed.

@@ -1,0 +1,23 @@
+FORM JDF105 status=200 pages=1
+RadioGroup | Group1.1 | 1@87,645=Check if in District court. 1@138,645=Check if in County Court. | What court type was the case filed? opts=Check if in District court./Check if in County Court.
+TextField | Court County | 1@161,629 | Enter the county where the court is located.
+TextField | Court Address | 1@158,616 | Enter the court's mailing address.
+TextField | π | 1@129,577 | Enter the names of the Landlords.
+TextField | ∆ | 1@122,537 | Enter the names of the Tenants.
+TextField | Street address | 1@158,471 | Enter your street address. Enter the city, state, and zip-code in the next fields.
+TextField | City | 1@157,458 | Enter city.
+TextField | State | 1@277,458 | Enter state.
+TextField | Zip | 1@317,458 | Enter zip code.
+TextField | Phone | 1@121,445 | Enter your phone number.
+TextField | Email | 1@117,432 | Enter your email address.
+TextField | Case Number | 1@419,484 | Enter the case number. Or leave blank if a new case, the clerk will assign a case number when filed.
+TextField | Division | 1@419,468 | Enter the assigned division (if any). Leave blank for new cases.
+TextField | Courtroom | 1@429,453 | Enter the assigned courtroom (if any). Leave blank for new cases.
+RadioGroup | Group6.1 | 1@296,324=In-Person. 1@377,324=Remotely by phone or video. | How will you be attending Court events? opts=In-Person./Remotely by phone or video.
+CheckBox | √ Efile | 1@121,195=Yes | Check if served through the Colorado Courts Efiling system.
+CheckBox | √ Other | 1@121,178=Yes | Check if you provided a copy by other means allowed by Rule 5 or 305.
+TextField | CoS_Other | 1@174,176 | Enter how you served a copy of this form to the other parties to the case.
+TextField | Name | 1@119,484 1@186,122 | Enter your name.
+TextField | Sig1_Signature | 1@156,99 | Print and sign form. Or, type "/s/" and then full name for e-signature.
+TextField | CoS_Date | 1@226,234 | Enter date you sent/gave a copy of your Answer to the other parties in the case.
+TextField | Sig_Date | 1@387,98 | Enter date you signed the form.

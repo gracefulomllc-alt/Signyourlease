@@ -1,0 +1,19 @@
+FORM JDF106B status=200 pages=1
+TextField | Court Address | 1@157,628 | Enter the court's mailing address.
+TextField | Court County | 1@161,642 | Enter the county where the court is located.
+TextField | π | 1@129,585 | Enter the Landlord's names.
+TextField | ∆ | 1@122,545 | Enter names.
+TextField | Case Number | 1@419,524 | Enter the case number.
+TextField | Division | 1@419,511 | Enter the assigned division (if any).
+TextField | Courtroom | 1@429,499 | Enter the assigned courtroom (if any).
+TextField | 2C | 1@144,259 | Enter reason stipulation was denied.
+CheckBox | 2D | 1@126,243=Yes | Check if there are orders as to how the funds in the Court Registry will be dispursed.
+TextField | 2E | 1@144,206 | Enter instructions for how funds will be dispursed.
+TextField | 2G | 1@142,152 | Enter any other orders.
+CheckBox | 2F | 1@126,189=Yes | Check if there are any other orders. Enter those orders in the next field.
+TextField | 1 | 1@280,426 | Enter the date the stipulation was filed.
+TextField | Sig_Date | 1@360,86 | Enter date signed.
+RadioGroup | GroupA.1 | 1@144,661=A District Court 1@194,661=A County Court | In which type of court is the case filed? opts=A District Court/A County Court
+RadioGroup | Group2.1 | 1@125,331=Yes. 1@125,308=No. Enter reasons in the next field. | Is the Stipulation approved? opts=Yes./No. Enter reasons in the next field.
+RadioGroup | GroupSig_JO | 1@107,74=a Judge 1@162,74=A Magistrate. | Space for Judge to sign. opts=a Judge/A Magistrate.
+TextField | Sig_1 | 1@107,88 | Enter the date the stipulation was filed.

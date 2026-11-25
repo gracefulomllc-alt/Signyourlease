@@ -1,0 +1,27 @@
+FORM JDF99A status=200 pages=4
+TextField | 0.0 | 1@155,629 | Enter the Tenant's name.
+CheckBox | 0.1 | 1@413,632=Yes | Check to include any other occupants.
+TextField | 0.2 | 2@233,416 | Enter the date by when the Tenancy must leave. (use MM/DD/YYYY format)
+TextField | 0.3 | 2@169,394 | Enter the time by when the Tenancy must leave. Use h:MM tt (ex: 9:30 am) format.
+RadioGroup | Group3.0 | 1@116,508=The tenant had a regular residential agreement. 1@116,485=The tenant had an exempt residential agreement. 1@116,462=The home was employer-provided housing. 1@116,438=The property is a 15 U.S.C. § 9058(a)(2) CARES Act property. | What type of agreement / property is the rental? opts=The tenant had a regular residential agreement./The tenant had an exempt residential agreement./The home was employer-provided housing./The property is a 15 U.S.C. § 9058(a)(2) CARES Act property.
+CheckBox | 1A.0 | 1@109,351=Yes | Check if evicting for unpaid rent. Enter amount and due dates in the following fields.
+TextField | 1A.1 | 1@217,325 | Enter amount of past due rent.
+TextField | 1A.2 | 1@361,301 | Enter the due dates of missing rent payments.
+CheckBox | 1B.0 | 1@109,275=Yes | Check if evicting for lease violations. Explain in the next field.
+TextField | 1B.1 | 1@236,248 | Explain what material lease provisions were violated by the Tenant.
+TextField | 1B.2 | 1@144,72 | Explain how the material lease term was violated by the Tenant.
+CheckBox | 1C.0 | 2@109,710=Yes | Check if evicting for distrubing/nuiance content. Explain in the provided fields.
+TextField | 1C.1 | 2@144,591 | Explain the conduct and how it's disturbing the quiet enjoyment of the people checked.
+TextField | 4.1 | 2@175,536 | Enter the street address of the rental property. Enter the city, county, and other location information in the next fields.
+TextField | 4.2 | 2@129,519 | Enter the city the residential property is in.
+TextField | 4.3 | 2@341,519 | Enter the county the rental property is in.
+TextField | 4.7 | 2@238,495 | Enter the amount of rent. Enter the frequency due in the next field.
+Dropdown | 4.8 | 2@340,495 | Enter the frequency of rent. For example, weekly, monthly or yearly. opts= /Day/Week/Month/Year
+RadioGroup | Group5.0 | 2@161,288=The Landlord 2@242,288=The Landlord's Agent 2@359,288=The Landlord's Attorney | Who is signing the form? opts=The Landlord/The Landlord's Agent/The Landlord's Attorney
+TextField | 6.1 | 2@154,302 | Place for signature signature. Print and sign the form, or type "/S/" and type name for e-signature.
+TextField | 6.2 | 2@138,268 | Enter the date the form was signed. Use MM/DD/YYYY format.
+TextField | 7.1 | 2@231,202 | Enter the date this notice was served. Use MM/DD/YYYY format.
+TextField | 7.2 | 2@284,127 | Enter the date personal service was attempted and failed. Use MM/DD/YYYY format.
+TextField | 7.3 | 2@154,71 | Space for signature of person who served the form. Print and sign the form, or type "/S/" and type name for e-signature.
+RadioGroup | Group6.0 | 2@143,164=By Personal Service 2@143,147=By Posting on the property.  Enter the date personal service was attempted in the space provided. | How was this form served? opts=By Personal Service/By Posting on the property.  Enter the date personal service was attempted in the space provided.
+RadioGroup | Group4.0 | 2@251,395=AM 2@309,395=PM | Am or PM? opts=AM/PM

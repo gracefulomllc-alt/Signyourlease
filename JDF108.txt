@@ -1,0 +1,41 @@
+FORM JDF108 status=200 pages=2
+RadioGroup | Group1.1 | 1@91,645=Check if in County Court. 1@141,645=Check if in District court. | What court type was the case filed? opts=Check if in County Court./Check if in District court.
+TextField | Court County | 1@164,631 | Enter the county where the court is located.
+TextField | Court Address | 1@160,618 | Enter the court's mailing address.
+TextField | π | 1@165,576 | Enter the names of the Landlords.
+TextField | ∆ | 1@169,546 | Enter the names of the Tenants.
+TextField | Street address | 1@160,491 | Enter your address: street and number. Add city, state, and zip code in the following fields.
+TextField | City | 1@158,478 | Enter the city in your mailing address.
+TextField | State | 1@277,478 | Enter the state (Two letter abbreviation) in your mailing address.
+TextField | Zip | 1@317,478 | Enter the zip-code in your mailing address.
+TextField | Phone | 1@122,465 | Enter your phone number.
+TextField | Email | 1@119,452 | Enter your email address.
+TextField | Case Number | 1@427,504 | Enter the case number. Or leave blank if a new case, the clerk will assign a case number when filed.
+TextField | Division | 1@426,488 | Enter the assigned division (if any). Leave blank for new cases.
+TextField | Courtroom | 1@437,473 | Enter the assigned courtroom (if any). Leave blank for new cases.
+CheckBox | 5B | 1@127,321=Yes | Check if you request any rent ledger or payment histories.
+CheckBox | 5C | 1@127,297=Yes | Check if you request the eviction notice.
+CheckBox | 5D | 1@127,274=Yes | Check if you request documents relevant to a breach of habitability claim or defense.
+CheckBox | 5E.0 | 1@127,235=Yes | Check if you request another documents. Specify in the provided field.
+TextField | 5E.1 | 1@174,235 | Specify the document you want the other party to provide.
+CheckBox | 5F.0 | 1@127,212=Yes | Check if you request another documents. Specify in the provided field.
+TextField | 5F.1 | 1@175,212 | Specify the document you want the other party to provide.
+CheckBox | 5G.0 | 1@127,189=Yes | Check if you request another documents. Specify in the provided field.
+TextField | 5G.1 | 1@174,188 | Specify the document you want the other party to provide.
+CheckBox | 5H.0 | 1@127,166=Yes | Check if you request another documents. Specify in the provided field.
+TextField | 5H.1 | 1@175,164 | Specify the document you want the other party to provide.
+TextField | 6.0 | 1@108,94 | State how you want to receive the documents (mailing or email address).
+TextField | CoS_Date | 2@205,678 | Enter the date you sent a copy of this document to the other party.
+RadioGroup | Group_CoS | 2@120,630=By Colorado Courts Efiling. 2@120,613=By regular mail.  Enter their name and mailing address in the provided field. 2@120,583=By other means.  Explain in the provided field. | How did you provide a copy to the other party? opts=By Colorado Courts Efiling./By regular mail.  Enter their name and mailing address in the provided field./By other means.  Explain in the provided field.
+TextField | CoS_Mail | 2@230,600 | Enter the party's name and mailing address (include city, state, and zip-code).
+TextField | CoS_Other | 2@212,584 | Enter the means used to serve the other party.
+TextField | Name | 1@120,504 2@188,519 | Enter your name.
+TextField | 108_Sig | 2@157,489 | Space for your signature. Print and sign form. Or type "/s/" and type your full name of an esignature.
+TextField | Sig_Date | 2@392,489 | Enter date you signed the form.
+RadioGroup | Group9 | 2@125,363=Yes. 2@125,346=No | Does the Court approved the request? opts=Yes./No
+TextField | 10.1 | 2@143,235 | Court - enter any other orders made.
+CheckBox | 5A | 1@127,344=Yes | Check if you request the lease.
+CheckBox | 9.2 | 2@127,212=Yes | Judge - check if the doucments must be provided at least 96 hours before the day of trial.
+TextField | CourtSig1 | 2@125,131 | Space for Judicial Officer signature.
+RadioGroup | Group4 | 2@125,118=A Judge. 2@180,118=A Magistrate. | Who is signing the form? opts=A Judge./A Magistrate.
+TextField | CourtSig_Date | 2@140,97 | Judge - Enter date you signed the form.

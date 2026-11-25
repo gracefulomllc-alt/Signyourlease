@@ -1,0 +1,20 @@
+FORM JDF109 status=200 pages=2
+Dropdown | Court | 1@207,608 | Select in which type of court the case is filed. opts= /County Court/District Court
+TextField | Court Address | 1@162,560 | Enter the court's mailing address.
+TextField | π | 1@128,513 | Enter the names of the Petitioner.
+TextField | ∆ | 1@139,482 | Enter the names of the Respondent.
+TextField | Case Number | 1@419,499 | Enter the case number.
+TextField | Division | 1@465,486 | Enter the assigned division and/or courtroom.
+CheckBox | √ All Other Tenants | 1@145,472=Yes | Check to include "any and all other occupants" as defendants.
+TextField | Court County | 1@163,592 1@145,440 | Enter the county where the court is located.
+TextField | 1.1 | 1@173,373 | Enter the judgement date that plaintiff received legal possesion of the premises. Use mm/dd/yyyy date format.
+TextField | 2.1 | 1@176,290 | Enter the street address of the premises.
+TextField | 2.2 | 1@128,272 | Enter the city the premises is located in.
+TextField | County | 1@341,273 | Enter the county.
+CheckBox | 3.1 | 1@108,190=Yes | Check if thi is an eviction of a residential tenant.
+RadioGroup | Group3.2 | 1@143,165=10 Days 1@143,142=30 Days. | For how long should the Stay of Execution last? opts=10 Days/30 Days.
+RadioGroup | Group4.1 | 2@143,617=All defendants and occupants. 2@143,594=Specific defendants.  Enter their names in the provided field. | Who should be removed from the premises? opts=All defendants and occupants./Specific defendants.  Enter their names in the provided field.
+TextField | 4.2 | 2@303,595 | Enter the names of the Defendants to be removed.
+TextField | Sig | 2@125,332 | Space for Judicial Officer's signature.
+RadioGroup | Group Sig | 2@124,317=A Judge 2@187,318=A Magistrate | What type of Judicial Officer is signing the form? opts=A Judge/A Magistrate
+TextField | Sig_Date | 2@138,351 | Enter date signed. Use mm/dd/yyyy date format.
