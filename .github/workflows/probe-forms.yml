@@ -5,6 +5,8 @@ on:
       forms:
         description: 'id=/sites/default/files/... pairs, space separated'
         required: true
+permissions:
+  contents: write
 jobs:
   probe:
     runs-on: ubuntu-latest
@@ -16,5 +18,12 @@ jobs:
       - run: node scripts/probe-forms.mjs
         env:
           FORMS: ${{ github.event.inputs.forms }}
-      - uses: actions/upload-artifact@v4
-        with: { name: probe-out, path: probe-out }
+      - name: Save results to the probe-out branch
+        run: |
+          mkdir /tmp/po && cp -r probe-out/* /tmp/po/
+          git config user.name "probe-bot"; git config user.email "probe-bot@users.noreply.github.com"
+          git checkout --orphan probe-out-tmp
+          git rm -rfq . && rm -rf node_modules probe-out
+          cp -r /tmp/po/* .
+          git add -A && git commit -qm "probe results"
+          git push -f origin HEAD:refs/heads/probe-out
