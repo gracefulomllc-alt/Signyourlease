@@ -61,6 +61,15 @@
   .paper h2 { font-family: 'Playfair Display', serif; font-size: 1.5rem; font-weight: 700; text-align: center; margin: 0 0 1.75rem; }
   .paper h3 { font-size: 1rem; font-weight: 600; margin: 1.5rem 0 0.5rem; }
   .paper p { margin: 0 0 0.9rem; }
+  .ask-other { margin-top: 0.9rem; } .ask-other label { display: block; font-weight: 600; font-size: 0.92rem; margin-bottom: 0.3rem; }
+  .ask-money { display: flex; align-items: center; gap: 0.35rem; } .ask-money span { font-size: 1.2rem; font-weight: 700; }
+  .ask-stop, .ask-warn, .ask-ok { border-radius: 8px; padding: 0.75rem 0.9rem; margin: 0.7rem 0 0; font-size: 0.98rem; }
+  .ask-stop { background: #FBE9E6; border: 1px solid #EBBDB5; color: #7A2318; }
+  .ask-warn { background: #FBF1DC; border: 1px solid #E9D3A3; color: #5A3E0B; }
+  .ask-ok { background: #E7F4EC; border: 1px solid #BFE0CB; color: #1F5A38; }
+  .ask-row { display: grid; grid-template-columns: 1fr auto; gap: 0.1rem 0.6rem; padding: 0.55rem 0; border-bottom: 1px solid #F1E4D8; font-size: 0.92rem; }
+  .ask-row span { color: var(--ink-soft); grid-column: 1 / -1; } .ask-row strong { font-weight: 600; } .ask-row a { font-size: 0.85rem; }
+  .tr-check.off span { color: var(--ink-soft); }
   .ev-tabs { display: flex; gap: 0.3rem; margin-bottom: -1px; flex-wrap: wrap; }
   .ev-tab { font: inherit; font-weight: 700; padding: 0.6rem 1rem; border: 1px solid var(--line); border-bottom: none; border-radius: 8px 8px 0 0; background: #F4EEE5; color: var(--ink-soft); cursor: pointer; }
   .ev-tab.on { background: var(--card); color: var(--ink); border-top: 3px solid var(--burgundy); }
@@ -1665,6 +1674,7 @@
   const trDate = (iso) => iso ? fmtDate(iso) : '';
   const trForm = (id, name, note, perTenant) => ({ form: id, name, note, perTenant });
 
+  const TR_PHASE = { papers: 'file', file: 'filed', serve: 'serve', court: 'court', trial: 'court', judgment: 'writ', writ: 'writ', sheriff: 'writ', garnish: 'collect' };
   const TR_STEPS = [
     { id: 'notice', title: 'Deliver the notice', remindLabel: '',
       due: (c, t) => null,
@@ -2046,6 +2056,7 @@
         ${isCur ? '<span class="tr-tag">Up next</span>' : ''}</summary>
       <div class="tr-body">
         ${s.intro(c, t)}
+        ${TR_PHASE[s.id] ? `<button class="btn ${isCur ? 'btn-primary' : 'btn-ghost'}" style="margin:0.3rem 0 0.6rem;" onclick="askStart('${TR_PHASE[s.id]}')">&#9654; ${(askA(c).done || {})[TR_PHASE[s.id]] ? 'Review or change the answers' : 'Answer the questions'}: ${esc(ASK_PHASES[TR_PHASE[s.id]].short)}</button>` : ''}
         ${s.outcome ? `<div class="tr-out">${[['default', 'They didn\'t answer'], ['answered', 'They filed an Answer'], ['settled', 'We made an agreement'], ['over', 'They paid or moved out']].map(o => `<button type="button" class="wz-opt ${t.outcome === o[0] ? 'on' : ''}" data-tr-out="${o[0]}"><strong>${o[1]}</strong></button>`).join('')}</div>` : ''}
         ${trPagesHtml(c, s)}
         ${trFieldsHtml(c, s)}
@@ -2071,7 +2082,8 @@
         <p class="subhead" style="margin-bottom:0.8rem;">${esc(trWho(c))} &middot; ${esc(c.propertyLine || '')}${trF(t, 'caseNumber') ? ' &middot; Case ' + esc(trF(t, 'caseNumber')) : ''}</p>
         <div class="wz-bar" style="margin-bottom:1rem;"><div style="width:${Math.round(doneN / all.length * 100)}%;"></div></div>
         ${t.closed ? `<div class="tr-next" style="border-color:#256B45;background:#E7F4EC;"><strong style="font-size:1.15rem;">Case closed</strong><p style="margin:0.3rem 0 0;">${esc(t.closed.why)} &middot; ${esc(trDate(t.closed.date))}. No more reminders will be sent.</p><button class="btn btn-ghost" id="tr-reopen" style="margin-top:0.6rem;">Reopen</button></div>`
-          : cur ? `<div class="tr-next"><span class="tr-tag">Up next &middot; step ${all.indexOf(cur) + 1} of ${all.length}</span><strong style="display:block;font-size:1.25rem;margin-top:0.35rem;">${esc(cur.title)}</strong>${due ? `<p style="margin:0.25rem 0 0;">${esc(due.label)}: <strong>${esc(trDate(due.iso))}</strong></p>` : ''}</div>`
+          : cur ? `<div class="tr-next"><span class="tr-tag">Up next &middot; step ${all.indexOf(cur) + 1} of ${all.length}</span><strong style="display:block;font-size:1.25rem;margin-top:0.35rem;">${esc(cur.title)}</strong>${due ? `<p style="margin:0.25rem 0 0;">${esc(due.label)}: <strong>${esc(trDate(due.iso))}</strong></p>` : ''}
+              ${TR_PHASE[cur.id] ? `<button class="btn btn-primary" style="margin-top:0.7rem;" onclick="askStart('${TR_PHASE[cur.id]}')">Answer the questions for this step</button>` : ''}</div>`
           : `<div class="tr-next" style="border-color:#256B45;background:#E7F4EC;"><strong>Every step is checked off.</strong> Close the case when you're done.</div>`}
         <div class="card" style="padding:1.1rem 1.25rem;">
           <div class="section-label" style="margin-top:0;">&#9993; Email reminders</div>
@@ -2158,6 +2170,550 @@
       b.disabled = false;
     }));
   }
+
+  // =====================================================================
+  // ASK: one question per screen, from filing to garnishment.
+  // Answers live on the case (track.a). They fill the official forms, and a
+  // court-ready check runs before any packet prints.
+  // =====================================================================
+  const KNOWN_PEOPLE = ['Leslie French', 'Bregitta Hughes', 'Trumaine Hughes'];
+  const SCRA_URL = 'https://scra.dmdc.osd.mil/scra/';
+  const FHFA_LOOKUPS = [['Fannie Mae', 'https://www.knowyouroptions.com/loanlookup'], ['Freddie Mac', 'https://myhome.freddiemac.com/resources/loanlookup']];
+  const isCompany = (s) => /\b(LLC|L\.L\.C\.?|Inc\.?|Corp\.?|Corporation|Company|Co\.|LP|LLP|Trust)\b/i.test(s || '');
+  const money2 = (v) => '$' + (Math.round((parseFloat(v) || 0) * 100) / 100).toFixed(2).replace(/\B(?=(\d{3})+(?!\d))/g, ',');
+  const num = (v) => parseFloat(String(v == null ? '' : v).replace(/[^\d.-]/g, '')) || 0;
+  function askA(c) { const t = c.track; t.a = t.a || {}; return t.a; }
+  function askTenants(c) { const a = askA(c); return (a.tenants && a.tenants.length ? a.tenants : [c.tenantName, c.tenantName2]).filter(Boolean); }
+  function askEntityProps(name) { return PROPERTIES.filter(p => p.entity === name); }
+  function askNoticeSnap(c) {
+    // keep what the court needs about the notice (the notice itself is deleted after 30 days)
+    const a = askA(c); const n = trNotice(c);
+    if (n) { const d = courtData(c, n).notice; if (d) { if (!d.served && trServed(c)) d.served = trServed(c); if (d.served) a.noticeSnap = d; } }
+    if (!a.noticeSnap && trServed(c)) a.noticeSnap = { kind: c.track.noticeKind, served: trServed(c), moveOut: trDeadline(c), serviceMethod: '', attempts: [], rentOn: !!c.track.rent, rentRows: [], rentTotal: '0' };
+    return a.noticeSnap || null;
+  }
+  function askRent(c) { return num(askA(c).rent || c.rent); }
+  function addMonthISO(iso, k) { const [y, m, d] = iso.split('-').map(Number); const t = new Date(Date.UTC(y, m - 1 + k, 1)); const last = new Date(Date.UTC(t.getUTCFullYear(), t.getUTCMonth() + 1, 0)).getUTCDate(); return t.getUTCFullYear() + '-' + String(t.getUTCMonth() + 1).padStart(2, '0') + '-' + String(Math.min(d, last)).padStart(2, '0'); }
+  // rent lines: the notice's, then each month that came due since, up to a date
+  function askRentLines(c, upto) {
+    const a = askA(c); const snap = askNoticeSnap(c); const rent = askRent(c);
+    const base = (snap && snap.rentOn ? snap.rentRows : []).map(r => ({ id: 'n' + r.due, due: r.due, amount: num(r.amount), label: (r.period || fmtDate(r.due)) + ' (on the notice)', src: 'notice' }));
+    const last = base.length ? base[base.length - 1].due : (snap && snap.served ? snap.served.slice(0, 8) + '01' : '');
+    const out = base.slice();
+    if (last && rent) { for (let k = 1; k <= 18; k++) { const due = addMonthISO(last, k); if (due > (upto || todayISO())) break; out.push({ id: 'm' + due, due, amount: rent, label: new Date(due + 'T12:00').toLocaleDateString('en-US', { month: 'long', year: 'numeric' }) + ' rent (came due since)', src: 'later' }); } }
+    (a.ledgerRent || []).forEach((r, i) => out.push({ id: 'l' + i, due: r.date || '', amount: num(r.amount), label: r.desc + ' (from Innago)', src: 'ledger' }));
+    (a.extraRent || []).forEach((r, i) => out.push({ id: 'x' + i, due: r.due || '', amount: num(r.amount), label: r.label || 'Rent', src: 'manual' }));
+    return out;
+  }
+  function askRentOwed(c, upto) {
+    const a = askA(c); const sel = a.rentSel || {};
+    const lines = askRentLines(c, upto).filter(l => sel[l.id] !== false && (l.src !== 'ledger' || sel[l.id]));
+    const gross = lines.reduce((s, l) => s + l.amount, 0);
+    return { lines, gross, paid: num(a.paidSince), owed: Math.max(0, gross - num(a.paidSince)) };
+  }
+  function askLateCap(c) { const r = askRent(c); return Math.max(50, Math.round(r * 0.05 * 100) / 100); }
+  function askInterest(c, asOf) {
+    // Colorado post-judgment interest: 8% a year, compounded yearly (C.R.S. 5-12-102(4)), unless the lease sets another rate
+    const a = askA(c); const j = a.judgmentISO; const amt = num(a.judgmentAmount); if (!j || !amt) return 0;
+    const rate = num(a.rate || 8) / 100; const days = Math.max(0, (parseISO(asOf || todayISO()) - parseISO(j)) / 86400000);
+    const yrs = Math.floor(days / 365), rem = (days - yrs * 365) / 365;
+    const total = amt * Math.pow(1 + rate, yrs) * (1 + rate * rem);
+    return Math.round((total - amt) * 100) / 100;
+  }
+
+  // ---- everything the forms need, built from the case + answers
+  function courtDataFull(c) {
+    const t = c.track; const a = askA(c); const n = trNotice(c); const ct = trCourt(c);
+    const d = courtData(c, n);
+    const snap = askNoticeSnap(c); if (!d.notice && snap) d.notice = snap;
+    if (d.notice && a.nsvc && !d.notice.serviceMethod) { d.notice.posted = a.nsvc === 'posted'; d.notice.serviceMethod = a.nsvc === 'posted' ? 'Posted after 2 attempts' : 'Handed to tenant'; if (a.nsvcAttempts) d.notice.attempts = a.nsvcAttempts.map(x => ({ date: x, result: 'noanswer' })); }
+    d.tenants = askTenants(c);
+    d.landlord = a.plaintiff || d.landlord; d.signer = a.signer === 'attorney' ? '' : (a.signer || d.signer);
+    d.plaintiffAddress = a.paddr || d.plaintiffAddress; d.plaintiffPhone = a.pphone || d.plaintiffPhone; d.plaintiffEmail = a.pemail || d.plaintiffEmail;
+    d.courtAddress = d.courtAddress || ct.addr; d.caseNumber = a.caseNumber || trF(t, 'caseNumber') || d.caseNumber;
+    if (a.rent) d.rent = String(a.rent);
+    d.mediationEligible = !!c.mediationEligible || a.benefits === 'yes';
+    const owed = askRentOwed(c, a.filedISO || todayISO());
+    const owedNow = askRentOwed(c, a.returnISO || todayISO());
+    const costs = num(a.costFiling) + num(a.costService) + num(a.costOther);
+    const principal = Math.round((owedNow.owed + num(a.lateFees) + num(a.damages)) * 100) / 100;
+    const money = a.service === 'personal' && a.askMoney !== 'no';
+    const debtor = (a.debtor ? a.debtor : d.tenants[0]) || '';
+    const asOf = todayISO(); const interestAmt = askInterest(c, asOf);
+    const collectCosts = num(a.judgmentCosts) + num(a.writCost);
+    d.rep = { entityType: a.ptype === 'person' ? 'individual' : 'Colorado limited liability company', owners: String(a.owners || 1), members: a.members || [],
+      affiant: (a.members || [])[0] || a.signer || '', affiantTitle: 'Member', affiantRole: (a.owners || 1) == 1 ? 'the sole member' : 'a member',
+      name: a.signer || '', role: a.signerRole === 'manager' ? 'Manager' : 'Member' };
+    d.x = {
+      interpreter: a.interpreter === 'yes' ? (a.interpreterLang || '') : '', attend: a.attend || '', fedMortgage: a.fedMortgage || '', military: a.military === 'not' ? 'no' : a.military === 'yes' ? 'yes' : '',
+      mediation: a.benefits === 'yes' ? (a.mediation === 'attended' ? 'attended' : a.under6 ? 'under6' : '') : a.benefits === 'no' ? 'not_receive' : a.benefits === 'unknown' ? 'not_said' : '',
+      rentOwed: owed.owed, rentDates: owed.lines.map(l => l.due).filter(Boolean).map(x => { const m = x.split('-'); return m[1] + '/' + m[2] + '/' + m[0]; }).join(', '),
+      lateFees: num(a.lateFees), damages: num(a.damages), damagesText: a.damagesText || '',
+      division: a.division || '', courtroom: a.courtroom || '', returnISO: a.returnISO || '', returnTime: a.returnTime || '', signerTitle: a.signerRole === 'manager' ? 'Manager' : (a.ptype === 'person' ? '' : 'Member'),
+      service: { serverName: a.serverName || '', serverType: a.serverType === 'sheriff' ? 'sheriff' : a.serverType ? 'private' : '', how: a.service === 'posted' ? 'posted' : a.service ? 'personal' : '', servedISO: a.servedISO || '', mailedISO: a.mailedISO || '' },
+      judgment: { iso: a.judgmentISO || '', money, principal: money ? principal : 0, interest: 0, costs: money ? costs : 0, total: money ? Math.round((principal + costs) * 100) / 100 : 0 },
+      cos: { iso: a.cosISO || '' },
+      debtor: { name: debtor, address: a.debtorAddr || [d.street, d.city, 'CO ' + d.zip].join(', '), employer: { name: a.empName || '', address: a.empAddr || '' }, bank: { name: a.bankName || '', address: a.bankAddr || '' } },
+      collect: { judgmentISO: a.judgmentISO || '', judgmentAmount: num(a.judgmentAmount), rate: num(a.rate || 8), interestAmt, costs: collectCosts, paid: num(a.paidAfter), owing: Math.round((num(a.judgmentAmount) + interestAmt + collectCosts - num(a.paidAfter)) * 100) / 100, asOfISO: asOf },
+      courtCity: (ct.addr.match(/,\s*([^,]+),\s*CO/) || [])[1] || d.city,
+      militaryCheck: { result: a.military === 'not' ? 'not' : a.military === 'yes' ? 'yes' : '', dateText: a.scraISO ? fmtMDY(a.scraISO) : '' },
+    };
+    return d;
+  }
+  const fmtMDY = (iso) => { const m = /^(\d{4})-(\d{2})-(\d{2})$/.exec(iso || ''); return m ? m[2] + '/' + m[3] + '/' + m[1] : ''; };
+
+  // ---- the questions. Each: id, phase, when(c,a), q(c,a) -> {title, help, type, options...}
+  const STOP = (msg) => ({ stop: msg });
+  const ASK_PHASES = {
+    file: { title: 'Get ready to file', short: 'Filing papers' },
+    filed: { title: 'After the clerk opens the case', short: 'Case number and court date' },
+    serve: { title: 'Serving the court papers', short: 'Service' },
+    court: { title: 'The court date', short: 'Court date and judgment' },
+    writ: { title: 'The writ and move-out', short: 'Writ' },
+    collect: { title: 'Collecting the money', short: 'Garnishment' },
+  };
+  const ASK = [
+    // ---------- FILE ----------
+    { id: 'plaintiff', phase: 'file', q: (c, a) => {
+      const guess = c.entity || (PROPERTIES.find(p => normStreet(p.street) && normStreet(c.propertyLine || '').indexOf(normStreet(p.street)) === 0) || {}).entity || '';
+      const opts = Array.from(new Set([guess, ...PROPERTIES.map(p => p.entity)].filter(Boolean))).slice(0, 8);
+      return { title: 'Who is the landlord on the lease?', help: 'This name goes on every court paper as the Plaintiff. It must match the owner on the lease exactly, including "LLC".', type: 'choice', other: 'Someone else (type the exact name)',
+        options: opts.map(o => ({ v: o, label: o, sub: o === guess ? 'Owner of ' + (c.propertyLine || 'this property') : '' })) }; } },
+    { id: 'ptype', phase: 'file', default: (c, a) => isCompany(a.plaintiff) ? 'company' : 'person', q: (c, a) => ({ title: 'Is ' + a.plaintiff + ' a company or a person?', type: 'choice',
+      options: [{ v: 'company', label: 'A company (LLC, corporation)', sub: 'Someone authorized has to speak for it' }, { v: 'person', label: 'A person', sub: 'That person files, or their attorney' }] }) },
+    { id: 'owners', phase: 'file', when: (c, a) => a.ptype === 'company', q: (c, a) => ({ title: 'How many owners (members) does ' + a.plaintiff + ' have?', help: 'Colorado lets a small company go to county court without a lawyer only if it has 3 or fewer owners (C.R.S. 13-1-127).', type: 'choice',
+      options: [{ v: 1, label: '1' }, { v: 2, label: '2' }, { v: 3, label: '3' }, { v: 4, label: '4 or more', ...STOP('A company with more than 3 owners needs a Colorado attorney to file. Lease Desk can still make the papers for the attorney: go back and pick "An attorney" as who signs.') }] }) },
+    { id: 'signer', phase: 'file', q: (c, a) => {
+      const people = Array.from(new Set([...(a.ptype === 'person' ? [a.plaintiff] : []), ...KNOWN_PEOPLE, c.signerName].filter(Boolean)));
+      return { title: 'Who will sign the papers and speak in court?', help: a.ptype === 'person' ? 'Only ' + a.plaintiff + ' or their attorney can file for ' + a.plaintiff + '.' : 'It has to be an owner or the company\'s manager. A property manager or employee can\'t.', type: 'choice', other: 'Someone else (type their full legal name)',
+        options: [...people.map(p => ({ v: p, label: p, ...(a.ptype === 'person' && p !== a.plaintiff ? STOP('Only ' + a.plaintiff + ' (or an attorney) can file an eviction for ' + a.plaintiff + '. Someone else, even family or a property manager, can\'t speak for them in court.') : {}) })),
+          { v: 'attorney', label: 'An attorney', sub: 'Lease Desk fills the forms; the attorney signs and files' }] }; },
+      check: (c, a) => a.ptype === 'person' && a.signer && a.signer !== 'attorney' && a.signer !== a.plaintiff ? 'Only ' + a.plaintiff + ' or an attorney can file for ' + a.plaintiff + '.' : '' },
+    { id: 'signerRole', phase: 'file', when: (c, a) => a.ptype === 'company' && a.signer !== 'attorney', q: (c, a) => ({ title: 'What is ' + a.signer + '\'s role in ' + a.plaintiff + '?', type: 'choice',
+      options: [{ v: 'member', label: 'An owner (member)' }, { v: 'manager', label: 'The company\'s manager', sub: 'Named as manager in the company\'s records' },
+        { v: 'pm', label: 'Property manager or employee', ...STOP('A property manager or employee can\'t represent the company in court. Pick an owner or the company\'s manager to sign, or use an attorney.') }] }) },
+    { id: 'members', phase: 'file', when: (c, a) => a.ptype === 'company' && a.signer !== 'attorney', q: (c, a) => ({ title: 'Who are the owners (members) of ' + a.plaintiff + '?', help: 'Pick all ' + a.owners + '. They sign a short consent naming ' + a.signer + ' to handle the case.', type: 'multi', other: 'Add a name',
+      options: Array.from(new Set([a.signerRole === 'member' ? a.signer : '', ...KNOWN_PEOPLE, ...(a.members || [])].filter(Boolean))).map(p => ({ v: p, label: p })), need: num(a.owners) }) },
+    { id: 'paddr', phase: 'file', default: (c, a) => c.plaintiffAddress || '', q: (c, a) => {
+      const seen = Array.from(new Set((window.__cases || []).filter(x => x.track && x.track.a && x.track.a.plaintiff === a.plaintiff).map(x => x.track.a.paddr).concat([c.plaintiffAddress]).filter(Boolean)));
+      return { title: 'Mailing address for court papers', help: 'Where ' + a.plaintiff + ' gets mail. The court and tenant send papers here. Use street, city, CO and ZIP.', type: 'choice', other: 'A different address', otherPh: '123 Main St, Pueblo, CO 81003',
+        options: seen.map(s => ({ v: s, label: s })) }; }, check: (c, a) => /,\s*[A-Za-z .]+,\s*[A-Z]{2}\s+\d{5}/.test(a.paddr || '') ? '' : 'Write the address as: street, city, CO ZIP.' },
+    { id: 'pphone', phase: 'file', default: (c) => c.plaintiffPhone || '', q: (c, a) => ({ title: 'Phone number for the court', type: 'choice', other: 'A different number', otherPh: '(719) 555-0100', options: [c.plaintiffPhone].filter(Boolean).map(v => ({ v, label: v })) }) },
+    { id: 'pemail', phase: 'file', default: (c) => c.plaintiffEmail || 'tldrenterprise@gmail.com', q: (c, a) => ({ title: 'Email for the court', type: 'choice', other: 'A different email', options: Array.from(new Set([c.plaintiffEmail, 'tldrenterprise@gmail.com'].filter(Boolean))).map(v => ({ v, label: v })) }) },
+    { id: 'tenants', phase: 'file', default: (c) => [c.tenantName, c.tenantName2].filter(Boolean), q: (c, a) => ({ title: 'Who is being evicted?', help: 'Pick every adult who signed the lease or lives there as a tenant, with their full legal names as on the lease. Anyone left out can\'t be removed by name.', type: 'multi', other: 'Add another adult',
+      options: Array.from(new Set([c.tenantName, c.tenantName2, ...(a.tenants || [])].filter(Boolean))).map(p => ({ v: p, label: p })), need: 1 }) },
+    { id: 'rent', phase: 'file', when: (c, a) => !num(c.rent), q: () => ({ title: 'What is the monthly rent?', type: 'money' }) },
+    { id: 'nsvc', phase: 'file', when: (c, a) => !(askNoticeSnap(c) || {}).serviceMethod, q: (c, a) => ({ title: 'How was the notice delivered?', help: 'Lease Desk doesn\'t have a delivery log for this notice, and the complaint asks.', type: 'choice',
+      options: [{ v: 'personal', label: 'Handed to the tenant (or someone 15+ who lives there)' }, { v: 'posted', label: 'Posted on the door after 2 tries on different days' }] }) },
+    { id: 'nsvcAttempts', phase: 'file', when: (c, a) => !(askNoticeSnap(c) || {}).serviceMethod && a.nsvc === 'posted', q: () => ({ title: 'The 2 days you tried to hand it over', type: 'dates2' }) },
+    { id: 'rentSel', phase: 'file', when: (c, a) => (askNoticeSnap(c) || {}).rentOn || c.track.rent, q: (c, a) => ({ title: 'How much rent do they owe today?', help: 'Tap to include or leave out each month. You can add from an Innago ledger screenshot.', type: 'rent' }) },
+    { id: 'lateFees', phase: 'file', when: (c, a) => (askNoticeSnap(c) || {}).rentOn || c.track.rent, q: (c, a) => {
+      const cap = askLateCap(c); const months = askRentOwed(c).lines.length;
+      return { title: 'Late fees to ask for?', help: 'Colorado caps a late fee at $50 or 5% of the month\'s rent, whichever is more (' + money2(cap) + ' here), once per late month, and only if the lease sets it. Asking for more can get the money part thrown out.', type: 'choice', other: 'A different amount', otherType: 'money',
+        options: [{ v: '0', label: 'No late fees', sub: 'Safest. Rent only.' }, ...(months && askRent(c) ? [{ v: String(Math.round(cap * months * 100) / 100), label: money2(cap * months), sub: money2(cap) + ' x ' + months + ' late month' + (months === 1 ? '' : 's') + ' (the most allowed)' }] : []), ...(a.ledgerLate ? [{ v: String(a.ledgerLate), label: money2(a.ledgerLate), sub: 'From your Innago ledger' }] : [])] }; },
+      check: (c, a) => num(a.lateFees) > askLateCap(c) * Math.max(1, askRentOwed(c).lines.length) + 0.01 ? 'Late fees are more than Colorado allows (' + money2(askLateCap(c)) + ' per late month).' : '' },
+    { id: 'damages', phase: 'file', q: () => ({ title: 'Claim money for damage to the unit now?', help: 'Most landlords leave this out of the eviction and handle damage with the security deposit after move-out. That keeps the court date simple.', type: 'choice', other: 'Yes, this amount', otherType: 'money',
+      options: [{ v: '0', label: 'No, not in this case', sub: 'Recommended' }] }) },
+    { id: 'damagesText', phase: 'file', when: (c, a) => num(a.damages) > 0, q: () => ({ title: 'What was damaged?', type: 'text', ph: 'Broken bedroom door and window, $350 repair estimate' }) },
+    { id: 'fedMortgage', phase: 'file', default: (c) => c.cares ? 'yes' : '', q: (c, a) => ({ title: 'Does the property have a federally backed mortgage?', help: 'Fannie Mae, Freddie Mac, FHA, VA, or USDA loans. If yes, notices for unpaid rent must give 30 days (CARES Act). Look it up: ' + FHFA_LOOKUPS.map(l => `<a href="${l[1]}" target="_blank" rel="noopener">${l[0]}</a>`).join(' · '), type: 'choice',
+      options: [{ v: 'no', label: 'No', sub: 'Paid off, private loan, or bank portfolio loan' }, { v: 'yes', label: 'Yes' }, { v: 'unsure', label: 'Not sure', ...STOP('Check with the lookups above or your loan servicer first. The complaint asks, and a wrong answer can get the case dismissed.') }] }),
+      check: (c, a) => { const snap = askNoticeSnap(c); return a.fedMortgage === 'yes' && snap && snap.rentOn && (c.track.noticeDays || 10) < 30 ? 'This property has a federally backed mortgage, so a notice for unpaid rent needed 30 days. This notice gave ' + (c.track.noticeDays || 10) + '. Serve a new 30-day notice before filing.' : ''; } },
+    { id: 'benefits', phase: 'file', default: (c) => c.mediationEligible ? 'yes' : '', q: (c, a) => ({ title: 'Did the tenant tell you they get SSI, SSDI, or Colorado Works cash assistance?', help: 'The notice asks them to tell you. If they did, mediation is required before you file (C.R.S. 13-40-110).', type: 'choice',
+      options: [{ v: 'no', label: 'They said they don\'t' }, { v: 'unknown', label: 'They never said' }, { v: 'yes', label: 'Yes, they said they do' }] }) },
+    { id: 'mediation', phase: 'file', when: (c, a) => a.benefits === 'yes', q: (c, a) => ({ title: 'Did you go to mediation with the tenant?', type: 'choice',
+      options: [{ v: 'attended', label: 'Yes, and it didn\'t resolve it' },
+        ...(askEntityProps(a.plaintiff).length && askEntityProps(a.plaintiff).length < 6 ? [{ v: 'under6', label: 'No: ' + a.plaintiff + ' owns fewer than 6 rental units', sub: 'Exempt from mediation' }] : []),
+        { v: 'no', label: 'Not yet', ...STOP('Mediation is required before you file for this tenant. Ask the court or a community mediation service to schedule it, then come back.') }] }),
+      after: (c, a) => { a.under6 = a.mediation === 'under6'; } },
+    { id: 'military', phase: 'file', q: () => ({ title: 'Is any tenant on active military duty?', help: 'Check each tenant on the free Defense Department site: <a href="' + SCRA_URL + '" target="_blank" rel="noopener">scra.dmdc.osd.mil</a>. You need their date of birth or Social Security number from the application. Save the PDF it gives you; the court needs it for a default judgment.', type: 'choice',
+      options: [{ v: 'not', label: 'No, I checked the SCRA site', sub: 'Save the status report for each tenant' }, { v: 'yes', label: 'Yes', sub: 'Special protections apply; talk to an attorney' }, { v: 'unsure', label: 'Haven\'t checked yet', ...STOP('Check the SCRA site first. It takes a minute per tenant, and the complaint asks.') }] }),
+      after: (c, a) => { if (a.military === 'not' && !a.scraISO) a.scraISO = todayISO(); } },
+    { id: 'attend', phase: 'file', q: () => ({ title: 'How will you go to court?', type: 'choice', options: [{ v: 'person', label: 'In person at the courthouse' }, { v: 'remote', label: 'By phone or video', sub: 'If the court allows it' }] }) },
+    { id: 'interpreter', phase: 'file', default: () => 'no', q: () => ({ title: 'Do you need an interpreter?', type: 'choice', options: [{ v: 'no', label: 'No' }, { v: 'yes', label: 'Yes' }] }) },
+    { id: 'interpreterLang', phase: 'file', when: (c, a) => a.interpreter === 'yes', q: () => ({ title: 'Which language?', type: 'text', ph: 'Spanish' }) },
+
+    // ---------- FILED ----------
+    { id: 'filedISO', phase: 'filed', q: () => ({ title: 'What day did you file?', type: 'date', quick: [['Today', 0], ['Yesterday', -1]] }) },
+    { id: 'caseNumber', phase: 'filed', q: () => ({ title: 'Case number', help: 'It\'s stamped on your copy of the complaint, like 2026C001234.', type: 'text', ph: '2026C001234' }), check: (c, a) => /^\d{2,4}\s*C\s*\d+/i.test(a.caseNumber || '') ? '' : 'That doesn\'t look like a county court case number (like 2026C001234). Check your stamped copy.' },
+    { id: 'returnISO', phase: 'filed', q: () => ({ title: 'Court date (the "return date" on the summons)', type: 'date' }),
+      check: (c, a) => { if (!a.returnISO || !a.filedISO) return ''; const d = (parseISO(a.returnISO) - parseISO(a.filedISO)) / 86400000; return d < 7 || d > 14 ? 'The court date is usually 7 to 14 days after filing. Double-check the date on the summons.' : ''; } },
+    { id: 'returnTime', phase: 'filed', q: () => ({ title: 'What time?', type: 'choice', other: 'A different time', options: ['8:00 a.m.', '8:30 a.m.', '9:00 a.m.', '1:30 p.m.'].map(v => ({ v, label: v })) }) },
+    { id: 'division', phase: 'filed', default: () => '', q: () => ({ title: 'Division or courtroom (if the summons shows one)', type: 'choice', other: 'Type it', options: [{ v: '', label: 'None shown' }] }) },
+
+    // ---------- SERVE ----------
+    { id: 'serverType', phase: 'serve', q: () => ({ title: 'Who will deliver the court papers?', help: 'Anyone 18 or older who isn\'t part of the case. Not you, and not anyone named in the case.', type: 'choice',
+      options: [{ v: 'sheriff', label: 'The sheriff' }, { v: 'process', label: 'A process server' }, { v: 'friend', label: 'A friend or relative, 18+', sub: 'Not an owner of the company' }, { v: 'me', label: 'Me', ...STOP('You can\'t serve your own case. Ask the sheriff, a process server, or another adult who isn\'t part of the case.') }] }) },
+    { id: 'serverName', phase: 'serve', when: (c, a) => a.serverType !== 'sheriff', q: () => ({ title: 'The server\'s full name', type: 'text', ph: 'Pat Server' }), check: (c, a) => (a.members || []).includes(a.serverName) || a.serverName === a.signer ? 'Someone who owns or signs for the company can\'t serve the papers.' : '' },
+    { id: 'service', phase: 'serve', q: () => ({ title: 'How were the papers delivered?', type: 'choice',
+      options: [{ v: 'personal', label: 'Handed to each tenant', sub: 'You can ask for money too' }, { v: 'household', label: 'Left with someone 18+ who lives there' }, { v: 'posted', label: 'Posted on the door', sub: 'Only after trying to hand them over. Unit back only, no money.' }, { v: 'notyet', label: 'Not served yet', ...STOP('Come back after they\'re served. They must be served at least 7 days before the court date.') }] }) },
+    { id: 'servedISO', phase: 'serve', q: () => ({ title: 'What day were they served?', type: 'date', quick: [['Today', 0], ['Yesterday', -1]] }),
+      check: (c, a) => a.servedISO && a.returnISO && (parseISO(a.returnISO) - parseISO(a.servedISO)) / 86400000 < 7 ? 'Service has to be at least 7 days before the court date (' + fmtDate(a.returnISO) + '). Ask the clerk to reset the court date and serve again.' : '' },
+    { id: 'mailedISO', phase: 'serve', when: (c, a) => a.service === 'posted', q: () => ({ title: 'What day did you mail a copy to each tenant?', help: 'With posting, you must also mail a full set to each tenant by first-class mail no later than the day after you filed.', type: 'date', quick: [['Today', 0], ['Yesterday', -1]] }),
+      check: (c, a) => a.mailedISO && a.filedISO && a.mailedISO > addDaysISO(a.filedISO, 1) ? 'The mailing has to be done by the day after filing (' + fmtDate(addDaysISO(a.filedISO, 1)) + '). Ask the clerk whether to reset the court date.' : '' },
+
+    // ---------- COURT ----------
+    { id: 'answered', phase: 'court', q: (c, a) => ({ title: 'What happened by the court date?', type: 'choice',
+      options: [{ v: 'no', label: 'No tenant filed an Answer' }, { v: 'yes', label: 'A tenant filed an Answer', sub: 'The court sets a trial' }, { v: 'settled', label: 'We signed an agreement' }, { v: 'over', label: 'They paid or moved out', sub: 'Close the case' }] }) },
+    { id: 'trialISO', phase: 'court', when: (c, a) => a.answered === 'yes', q: () => ({ title: 'Trial date', type: 'date' }) },
+    { id: 'askMoney', phase: 'court', when: (c, a) => a.answered === 'no' || a.answered === 'yes', q: (c, a) => a.service === 'personal'
+      ? { title: 'Ask for money too, or just the unit back?', type: 'choice', options: [{ v: 'yes', label: 'Unit back and money', sub: 'Rent owed and court costs' }, { v: 'no', label: 'Just the unit back' }] }
+      : { title: 'This case can get the unit back, but not money', help: a.service === 'posted' ? 'The papers were posted, not handed over, so the court can\'t order money. You can sue for the money later in a separate case.' : 'The papers were left with someone else, so ask the clerk whether the judge will order money. Lease Desk asks for the unit only, to be safe.', type: 'info', value: 'no' } },
+    { id: 'rentSel2', phase: 'court', when: (c, a) => a.askMoney === 'yes', q: (c, a) => ({ title: 'Rent owed as of the court date', help: 'Months that came due since filing can be added now.', type: 'rent', upto: a.returnISO }) },
+    { id: 'costFiling', phase: 'court', when: (c, a) => a.askMoney === 'yes', q: () => ({ title: 'What was the filing fee you paid?', help: 'It\'s on your court receipt.', type: 'money' }) },
+    { id: 'costService', phase: 'court', when: (c, a) => a.askMoney === 'yes', q: () => ({ title: 'What did serving the papers cost?', help: 'Sheriff or process server fees and mileage. Enter 0 if a friend served them.', type: 'money' }) },
+    { id: 'scraFresh', phase: 'court', when: (c, a) => a.answered === 'no', q: (c, a) => ({ title: 'Run the military check again', help: 'For a default judgment, the court wants a recent SCRA status report for each tenant. Run it on <a href="' + SCRA_URL + '" target="_blank" rel="noopener">scra.dmdc.osd.mil</a> and print the results.', type: 'choice',
+      options: [{ v: 'done', label: 'Done: no tenant is on active duty' }, { v: 'yes', label: 'A tenant is on active duty', ...STOP('Don\'t ask for a default judgment. The court has to appoint an attorney for a service member first. Talk to an attorney.') }] }),
+      after: (c, a) => { if (a.scraFresh === 'done') { a.military = 'not'; a.scraISO = todayISO(); } } },
+    { id: 'cosISO', phase: 'court', when: (c, a) => a.answered === 'no', q: () => ({ title: 'When will you mail a copy of the motion to each tenant?', help: 'The motion says you mailed it to them. Mail it the same day you file it.', type: 'date', quick: [['Today', 0], ['Tomorrow', 1]] }) },
+
+    // ---------- WRIT (after judgment) ----------
+    { id: 'judgmentISO', phase: 'writ', q: () => ({ title: 'What day did the judge grant judgment?', type: 'date', quick: [['Today', 0], ['Yesterday', -1]] }) },
+    { id: 'judgmentMoney', phase: 'writ', q: (c, a) => ({ title: 'Did the judgment include money?', type: 'choice', options: [{ v: 'yes', label: 'Yes' }, { v: 'no', label: 'No, just the unit' }] }) },
+    { id: 'judgmentAmount', phase: 'writ', when: (c, a) => a.judgmentMoney === 'yes', default: (c, a) => { const x = courtDataFull(c).x.judgment; return x.total ? String(x.total) : ''; }, q: () => ({ title: 'Total money judgment', help: 'Copy it from the signed judgment, including costs.', type: 'money' }) },
+
+    // ---------- COLLECT ----------
+    { id: 'debtor', phase: 'collect', q: (c, a) => ({ title: 'Collect from which tenant?', help: 'Each garnishment is for one person. Do one at a time.', type: 'choice', options: askTenants(c).map(t => ({ v: t, label: t })) }) },
+    { id: 'debtorAddr', phase: 'collect', default: (c) => [c.propertyLine, c.city, 'CO ' + (c.zip || '')].join(', '), q: (c, a) => ({ title: a.debtor + '\'s last known address', type: 'choice', other: 'A newer address', options: [{ v: [c.propertyLine, c.city, 'CO ' + (c.zip || '')].join(', '), label: 'The rental (' + c.propertyLine + ')' }] }) },
+    { id: 'know', phase: 'collect', q: (c, a) => ({ title: 'What do you know about where ' + a.debtor + ' works or banks?', type: 'choice',
+      options: [{ v: 'job', label: 'Where they work', sub: 'Wage garnishment' }, { v: 'bank', label: 'Where they bank', sub: 'Bank account garnishment' }, { v: 'both', label: 'Both' }, { v: 'neither', label: 'Neither', sub: 'Send interrogatories to find out' }] }) },
+    { id: 'empName', phase: 'collect', when: (c, a) => a.know === 'job' || a.know === 'both', q: () => ({ title: 'Employer\'s full business name', help: 'From the rental application or a pay stub. Use the legal name if you know it.', type: 'text', ph: 'Acme Foods Inc.' }) },
+    { id: 'empAddr', phase: 'collect', when: (c, a) => a.know === 'job' || a.know === 'both', q: () => ({ title: 'Employer\'s address (where papers can be served)', type: 'text', ph: '100 Main St, Pueblo, CO 81003' }) },
+    { id: 'bankName', phase: 'collect', when: (c, a) => a.know === 'bank' || a.know === 'both', q: () => ({ title: 'Bank\'s name', help: 'Often on a rent check or payment record.', type: 'text', ph: 'First Pueblo Bank' }) },
+    { id: 'bankAddr', phase: 'collect', when: (c, a) => a.know === 'bank' || a.know === 'both', q: () => ({ title: 'Bank branch address (where papers can be served)', type: 'text', ph: '200 Union Ave, Pueblo, CO 81003' }) },
+    { id: 'paidAfter', phase: 'collect', default: () => '0', q: () => ({ title: 'Has the tenant paid anything since the judgment?', type: 'choice', other: 'Yes, this much in total', otherType: 'money', options: [{ v: '0', label: 'No' }] }) },
+    { id: 'judgmentCosts', phase: 'collect', default: () => '0', q: () => ({ title: 'Costs since the judgment', help: 'Writ fees and service costs you\'ve paid since judgment. Include what serving this writ will cost (the sheriff or process server can tell you).', type: 'money' }) },
+  ];
+
+  // ---- court-ready check for a phase: [{lvl:'stop'|'warn', msg, q}]
+  function askCheck(c, phase) {
+    const a = askA(c); const out = []; const t = c.track;
+    ASK.filter(q => q.phase === phase && askShow(c, q)).forEach(q => {
+      const v = a[q.id];
+      if ((v == null || v === '' || (Array.isArray(v) && !v.length)) && q.q(c, a).type !== 'info' && !['division', 'damagesText', 'interpreterLang'].includes(q.id)) out.push({ lvl: 'stop', msg: 'Not answered yet: ' + q.q(c, a).title, q: q.id });
+      const opt = (q.q(c, a).options || []).find(o => String(o.v) === String(v)); if (opt && opt.stop) out.push({ lvl: 'stop', msg: opt.stop, q: q.id });
+      if (q.check) { const m = q.check(c, a); if (m) out.push({ lvl: /can't|has to|must|needed|Only/.test(m) ? 'stop' : 'warn', msg: m, q: q.id }); }
+    });
+    if (phase === 'file') {
+      const fo = trFileOn(c);
+      if (fo && todayISO() < fo) out.push({ lvl: 'warn', msg: 'Don\'t file until ' + fmtDate(fo) + ' (the day after the deadline, or the next business day). You can print now and file then.' });
+      if (a.members && a.owners && a.members.length !== num(a.owners) && a.ptype === 'company' && a.signer !== 'attorney') out.push({ lvl: 'stop', msg: 'You said ' + a.plaintiff + ' has ' + a.owners + ' owner(s) but picked ' + a.members.length + '. They need to match.', q: 'members' });
+      const total = askRentOwed(c).owed + num(a.lateFees) + num(a.damages);
+      if (a.ptype === 'company' && a.signer !== 'attorney' && total > 15000) out.push({ lvl: 'stop', msg: 'The claim is over $15,000. Without an attorney, a company can only claim up to $15,000 in county court.', q: 'rentSel' });
+      if (!c.archiveId) out.push({ lvl: 'warn', msg: 'The signed lease isn\'t linked to this file. Bring your own copy to attach as Attachment 1.' });
+      if (!askNoticeSnap(c) && !trServed(c)) out.push({ lvl: 'stop', msg: 'Lease Desk doesn\'t know when the notice was delivered. Enter it in step 1 of the checklist.' });
+    }
+    if (phase === 'court' && a.answered === 'no' && a.returnISO && todayISO() < a.returnISO) out.push({ lvl: 'stop', msg: 'You can\'t ask for default judgment before the court date (' + fmtDate(a.returnISO) + '), and only after the clerk\'s office closes that day. You can print now and file then.' });
+    if (phase === 'court' && a.answered === 'no' && a.returnISO === todayISO()) out.push({ lvl: 'warn', msg: 'File this after the clerk\'s office closes today, not before.' });
+    if (phase === 'writ' && a.judgmentISO && todayISO() < addDaysISO(a.judgmentISO, 2)) out.push({ lvl: 'warn', msg: 'The court can issue the writ 48 hours after judgment (' + fmtDate(addDaysISO(a.judgmentISO, 2)) + ').' });
+    if (phase === 'collect') {
+      if (a.judgmentMoney !== 'yes') out.push({ lvl: 'stop', msg: 'There\'s no money judgment to collect. Enter it in "The writ and move-out" questions if the judge ordered money.' });
+      if (a.judgmentISO && todayISO() < addDaysISO(a.judgmentISO, 14)) out.push({ lvl: 'warn', msg: 'Courts usually won\'t issue a garnishment until 14 days after judgment (' + fmtDate(addDaysISO(a.judgmentISO, 14)) + ').' });
+    }
+    return out;
+  }
+
+  // ---- packets: which forms, how many, and the cover sheet
+  function askPacket(c, phase) {
+    const a = askA(c); const d = courtDataFull(c); const n = d.tenants.length; const ct = trCourt(c);
+    const entity = a.ptype === 'company' && a.signer !== 'attorney';
+    const P = { forms: [], cover: { title: '', sections: [] }, name: '' };
+    const add = (form, copies, label) => P.forms.push({ form, copies: copies || 1, label });
+    if (phase === 'file') {
+      P.name = 'Filing packet';
+      add('JDF101', n + 2, 'Complaint'); add('JDF102', n + 2, 'Summons'); add('JDF103', n, 'Answer (blank)'); add('JDF108', n, 'Request for Documents (blank)'); add('JDF98', n, 'Affidavit of Service');
+      if (entity) add('LDREP', 1, 'Authority to represent ' + a.plaintiff);
+      P.cover = { title: 'Filing packet: ' + ct.court, sections: [
+        { h: 'Before you go', lines: [
+          'Sign the complaint (JDF 101) on page 6' + (entity ? '; ' + a.signer + ' signs for ' + a.plaintiff : '') + '.',
+          entity ? 'Authority to represent: ' + (a.members || []).join(', ') + ' sign page 2. ' + ((a.members || [])[0] || a.signer) + ' signs page 1 in front of a notary or the clerk.' : '',
+          'Attach the lease as Attachment 1 and the notice you served as Attachment 2 to EVERY copy of the complaint.',
+          'Print blank fee waiver forms JDF 205 and JDF 206 (court eviction page, step 2): 1 set for each tenant (' + n + ').',
+          'Bring the filing fee. Ask the clerk for the amount; keep the receipt.' ].filter(Boolean) },
+        { h: 'In this packet', lines: [
+          'JDF 101 Complaint: ' + (n + 2) + ' copies (court, each tenant, you)', 'JDF 102 Summons: ' + (n + 2) + ' copies (the clerk signs and sets the court date)',
+          'JDF 103 Answer, blank: ' + n + ' (one per tenant)', 'JDF 108 Request for Documents, blank: ' + n + ' (one per tenant)', 'JDF 98 Affidavit of Service: ' + n + ' (one per tenant, for the server)',
+          entity ? 'Authority to represent ' + a.plaintiff + ': 1, filed with the complaint' : '' ].filter(Boolean) },
+        { h: 'At the clerk\'s window: ' + ct.court + (ct.addr ? ', ' + ct.addr : ''), lines: [
+          'File the complaint and summons, and pay the fee.', 'Get the case number and the court date (return date).', 'Get your copies stamped.',
+          'Then open Lease Desk: "After the clerk opens the case" questions.' ] },
+        { h: 'Each tenant\'s set, for the server', lines: ['Summons + complaint with both attachments + blank Answer + blank Request for Documents + blank fee waiver forms + eviction information form (it comes with the summons).'] },
+      ] };
+    }
+    if (phase === 'serve') {
+      P.name = 'Service papers';
+      add('JDF98', n, 'Affidavit of Service'); if (a.service === 'posted') add('JDF102', 1, 'Summons (mailing section filled in)');
+      P.cover = { title: 'After service', sections: [{ h: 'Do these', lines: [
+        'Give the server one Affidavit of Service (JDF 98) for each tenant. They fill in the details and sign' + (a.serverType === 'sheriff' ? '.' : ' in front of a notary.'),
+        a.service === 'posted' ? 'Sign the mailing section on page 3 of the summons (you mailed copies ' + fmtDate(a.mailedISO) + ').' : '',
+        'File the signed affidavits with the court before ' + fmtDate(a.returnISO) + ' (in person, or online with Colorado Courts E-Filing).' ].filter(Boolean) }] };
+    }
+    if (phase === 'court' && a.answered === 'no') {
+      P.name = 'Default judgment packet';
+      add('JDF107A', 1 + n + 1, 'Motion for Entry of Judgment'); add('JDF107B', 1, 'Judgment (proposed)'); add('LDMIL', 1, 'Military status declaration');
+      P.cover = { title: 'Ask for judgment (the tenant didn\'t answer)', sections: [{ h: 'Do these, after the clerk\'s office closes on ' + fmtDate(a.returnISO), lines: [
+        'Sign the motion (JDF 107A) on page 2 and the military declaration.', 'Attach the SCRA status report for each tenant to the declaration.',
+        'File JDF 107A, JDF 107B and the declaration (in person or online). The Affidavit of Service must already be filed.',
+        'Mail a copy of the motion to each tenant on ' + fmtDate(a.cosISO) + ', first-class mail (' + n + ' cop' + (n === 1 ? 'y' : 'ies') + ' in this packet).',
+        d.x.judgment.money ? 'You are asking for ' + money2(d.x.judgment.total) + ': rent ' + money2(d.x.judgment.principal) + ' and costs ' + money2(d.x.judgment.costs) + '.' : 'You are asking for possession only (no money).' ] }] };
+    }
+    if (phase === 'court' && a.answered === 'yes') {
+      P.name = 'Trial papers'; add('JDF105', 1, 'Notice about remote participation');
+      P.cover = { title: 'Trial on ' + fmtDate(a.trialISO), sections: [{ h: 'Bring 3 copies of each', lines: ['The lease', 'The notice you served and your service log', 'The Affidavit of Service', 'Rent ledger or receipts (print the Innago ledger)', 'Photos, texts, or anything else you\'ll show', 'Witnesses: ask them to come, or get a subpoena from the clerk'] }] };
+    }
+    if (phase === 'court' && a.answered === 'settled') { P.name = 'Agreement papers'; add('JDF106A', 1, 'Stipulation'); add('JDF106B', 1, 'Order'); P.cover = { title: 'Agreement', sections: [{ h: 'Do these', lines: ['Fill in the agreement terms together and both sign JDF 106A.', 'File JDF 106A with JDF 106B.', 'If they break it, ask the court for judgment (JDF 91).'] }] }; }
+    if (phase === 'writ') {
+      P.name = 'Writ packet'; add('JDF109', 1, 'Writ of Restitution');
+      const exec = a.judgmentISO ? addDaysISO(a.judgmentISO, d.mediationEligible ? 30 : 10) : '';
+      P.cover = { title: 'Writ of restitution', sections: [{ h: 'Do these', lines: [
+        'File JDF 109 with the clerk on or after ' + fmtDate(addDaysISO(a.judgmentISO, 2)) + ' (48 hours after judgment) and pay the fee.', 'Pick up the signed writ with 2 copies.',
+        'Take it to the ' + ct.sheriff + '. ' + ct.sheriffNote, 'The sheriff can carry it out on or after ' + fmtDate(exec) + '. Writs usually expire after 49 days.',
+        'Never change the locks or remove belongings before the deputy gives the unit back.' ] }] };
+    }
+    if (phase === 'collect') {
+      const k = a.know;
+      P.name = 'Collection packet';
+      if (k === 'neither') add('FORM7', 2, 'Interrogatories');
+      if (k === 'job' || k === 'both') { add('FORM26', 4, 'Writ of Continuing Garnishment'); add('FORM27', 2, 'Calculation of Exempt Earnings (for the employer)'); }
+      if (k === 'bank' || k === 'both') add('FORM29', 3, 'Writ of Garnishment, bank');
+      const x = d.x.collect;
+      P.cover = { title: 'Collect from ' + a.debtor, sections: [
+        { h: 'The numbers on the writ', lines: ['Judgment ' + fmtDate(a.judgmentISO) + ': ' + money2(x.judgmentAmount), 'Interest at ' + x.rate + '% a year to ' + fmtDate(x.asOfISO) + ': ' + money2(x.interestAmt), 'Costs: ' + money2(x.costs), 'Paid: ' + money2(x.paid), 'Total owed: ' + money2(x.owing)] },
+        k === 'neither' ? { h: 'Interrogatories (to find a job or bank)', lines: ['Have the interrogatories (Form 7) served on ' + a.debtor + ' with a copy of the judgment, the same way as the summons.', 'They must answer under oath within the time on the form. If they don\'t, ask the court for an order to appear (C.R.C.P. 369(g)).', 'When you learn the employer or bank, come back and pick it.'] } : null,
+        k === 'job' || k === 'both' ? { h: 'Wage garnishment (Form 26)', lines: ['Sign Form 26 page 1 in front of a notary or the clerk.', 'File it with the clerk, who issues it (pay the fee). Keep the original + 3 copies.', 'Have the sheriff or a process server serve 2 copies of the writ and 2 blank Form 27s on the employer.', 'Payments go to the Clerk of the County Court, who sends them to you.', 'The writ lasts 182 days. Lease Desk can remind you a week before it ends.'] } : null,
+        k === 'bank' || k === 'both' ? { h: 'Bank garnishment (Form 29)', lines: ['Sign Form 29 on page 1.', 'File it with the clerk, who issues it (pay the fee).', 'Have it served on the bank, and a copy served on ' + a.debtor + ' (they can claim exemptions).', 'After the bank answers and the exemption time passes, file JDF 89 (Notice to Garnishee to release funds) so the money is paid out.'] } : null,
+        { h: 'When it\'s paid in full', lines: ['File JDF 111 Satisfaction of Judgment within 14 days. Write in: case ' + (d.caseNumber || '') + ', judgment date ' + fmtDate(a.judgmentISO) + ', amount ' + money2(x.judgmentAmount) + ', paid in full.'] },
+      ].filter(Boolean) };
+    }
+    P.forms.unshift({ form: 'LDCOVER', copies: 1, label: 'Checklist (read first)' });
+    return P;
+  }
+
+  // ---- navigation
+  function askShow(c, q) { const a = askA(c); return !q.when || q.when(c, a); }
+  function askList(c, phase) { return ASK.filter(q => q.phase === phase && askShow(c, q)); }
+  function askNextPhase(c) {
+    const a = askA(c); const done = a.done || {};
+    if (!done.file) return 'file'; if (!done.filed) return 'filed'; if (!done.serve) return 'serve'; if (!done.court) return 'court';
+    if (a.answered === 'over') return null;
+    if (!done.writ) return 'writ'; if (!done.collect && a.judgmentMoney === 'yes' && c.track.garnish) return 'collect';
+    return null;
+  }
+  window.askStart = function (phase, qid) {
+    const c = window.__case; if (!c || !c.track) return;
+    const a = askA(c); phase = phase || askNextPhase(c) || 'file';
+    askNoticeSnap(c);
+    ASK.filter(q => q.phase === phase && q.default && a[q.id] == null).forEach(q => { try { const v = q.default(c, a); if (v !== '' && v != null) a[q.id] = v; } catch (e) {} });
+    const list = askList(c, phase); let i = qid ? Math.max(0, list.findIndex(q => q.id === qid)) : 0;
+    if (!qid) { const firstOpen = list.findIndex(q => a[q.id] == null || a[q.id] === ''); i = firstOpen < 0 ? list.length : firstOpen; }
+    askDraw(c, phase, i);
+  };
+  function askDraw(c, phase, i) {
+    const a = askA(c); const list = askList(c, phase);
+    if (i >= list.length) return askReview(c, phase);
+    const q = list[i]; const spec = q.q(c, a);
+    if (q.default && a[q.id] == null) { try { const v = q.default(c, a); if (v != null && v !== '') a[q.id] = v; } catch (e) {} }
+    if (spec.type === 'info' && spec.value != null) a[q.id] = spec.value;
+    const cur = a[q.id];
+    let body = '';
+    const opts = spec.options || [];
+    const isOther = spec.type === 'choice' && cur != null && cur !== '' && !opts.some(o => String(o.v) === String(cur));
+    if (spec.type === 'choice') {
+      body = `<div class="wz-list">${opts.map((o, k) => `<button type="button" class="wz-opt ${String(cur) === String(o.v) ? 'on' : ''}" data-k="${k}"><strong>${esc(o.label)}</strong>${o.sub ? `<span>${esc(o.sub)}</span>` : ''}</button>`).join('')}</div>
+        ${spec.other ? `<div class="ask-other"><label>${esc(spec.other)}</label><div style="display:flex;gap:0.5rem;"><input class="wz-input" id="ask-other" ${spec.otherType === 'money' ? 'inputmode="decimal"' : ''} value="${isOther ? esc(String(cur)) : ''}" placeholder="${esc(spec.otherPh || '')}"><button class="btn btn-primary" id="ask-other-go">Use this</button></div></div>` : ''}`;
+    } else if (spec.type === 'multi') {
+      const sel = new Set(Array.isArray(cur) ? cur : []);
+      const allOpts = Array.from(new Set([...opts.map(o => o.v), ...sel]));
+      body = `<div class="wz-list">${allOpts.map((v, k) => `<button type="button" class="wz-opt ${sel.has(v) ? 'on' : ''}" data-m="${esc(v)}"><strong>${sel.has(v) ? '&#10003; ' : ''}${esc(v)}</strong></button>`).join('')}</div>
+        <div class="ask-other"><label>${esc(spec.other || 'Add')}</label><div style="display:flex;gap:0.5rem;"><input class="wz-input" id="ask-other" placeholder="Full legal name"><button class="btn btn-ghost" id="ask-add">Add</button></div></div>
+        <button class="btn btn-primary wz-next" id="ask-next">Next</button>`;
+    } else if (spec.type === 'date') {
+      body = `<div class="wz-list">${(spec.quick || []).map(([l, k]) => `<button type="button" class="wz-opt ${cur === addDaysISO(todayISO(), k) ? 'on' : ''}" data-d="${addDaysISO(todayISO(), k)}"><strong>${l}</strong><span>${esc(fmtDate(addDaysISO(todayISO(), k)))}</span></button>`).join('')}</div>
+        <div class="ask-other"><label>${spec.quick ? 'Or pick the date' : 'Pick the date'}</label><input type="date" class="wz-input" id="ask-date" value="${esc(cur || '')}"></div>
+        <button class="btn btn-primary wz-next" id="ask-next">Next</button>`;
+    } else if (spec.type === 'dates2') {
+      const v = Array.isArray(cur) ? cur : ['', ''];
+      body = `<div class="ask-other"><label>First try</label><input type="date" class="wz-input" id="ask-d1" value="${esc(v[0] || '')}"></div><div class="ask-other"><label>Second try (a different day)</label><input type="date" class="wz-input" id="ask-d2" value="${esc(v[1] || '')}"></div><button class="btn btn-primary wz-next" id="ask-next">Next</button>`;
+    } else if (spec.type === 'text' || spec.type === 'money') {
+      body = `<div class="ask-other">${spec.type === 'money' ? '<div class="ask-money"><span>$</span>' : ''}<input class="wz-input" id="ask-text" ${spec.type === 'money' ? 'inputmode="decimal"' : ''} value="${esc(cur == null ? '' : String(cur))}" placeholder="${esc(spec.ph || (spec.type === 'money' ? '0.00' : ''))}">${spec.type === 'money' ? '</div>' : ''}</div><button class="btn btn-primary wz-next" id="ask-next">Next</button>`;
+    } else if (spec.type === 'info') {
+      body = `<button class="btn btn-primary wz-next" id="ask-next">OK, next</button>`;
+    } else if (spec.type === 'rent') {
+      body = askRentHtml(c, spec.upto);
+    }
+    const chk = q.check && cur != null && cur !== '' ? q.check(c, a) : '';
+    const selOpt = opts.find(o => String(o.v) === String(cur));
+    app.innerHTML = header() + `
+      <button class="step-back" id="ask-back">&larr; ${i === 0 ? 'Back to the checklist' : 'Back'}</button>
+      <div class="wz">
+        <div class="wz-bar"><div style="width:${Math.round(i / list.length * 100)}%;"></div></div>
+        <p class="wz-step">${esc(ASK_PHASES[phase].title)} &middot; question ${i + 1} of ${list.length}</p>
+        <h1 class="wz-q">${esc(spec.title)}</h1>
+        ${spec.help ? `<p class="wz-help">${spec.help}</p>` : ''}
+        ${body}
+        ${selOpt && selOpt.stop ? `<div class="ask-stop"><strong>Stop here.</strong> ${esc(selOpt.stop)}</div>` : ''}
+        ${chk ? `<div class="ask-${/can't|has to|must|needed|Only/.test(chk) ? 'stop' : 'warn'}">${esc(chk)}</div>` : ''}
+        ${cur != null && cur !== '' && spec.type === 'choice' && !(selOpt && selOpt.stop) ? '<button class="btn btn-ghost wz-next" id="ask-skip">Keep this answer &rarr;</button>' : ''}
+      </div>`;
+    window.scrollTo(0, 0);
+    const go = (v) => { a[q.id] = v; if (q.after) q.after(c, a); trSave(c);
+      const o = (spec.options || []).find(x => String(x.v) === String(v));
+      const ck = q.check ? q.check(c, a) : '';
+      if ((o && o.stop) || (ck && /can't|has to|must|needed|Only/.test(ck))) { askDraw(c, phase, i); return; }
+      askDraw(c, phase, askList(c, phase).indexOf(q) + 1); };
+    document.getElementById('ask-back').addEventListener('click', () => { if (i === 0) renderTrack(c); else askDraw(c, phase, i - 1); });
+    const skip = document.getElementById('ask-skip'); if (skip) skip.addEventListener('click', () => askDraw(c, phase, i + 1));
+    document.querySelectorAll('[data-k]').forEach(b => b.addEventListener('click', () => go(opts[+b.dataset.k].v)));
+    document.querySelectorAll('[data-d]').forEach(b => b.addEventListener('click', () => go(b.dataset.d)));
+    const og = document.getElementById('ask-other-go'); if (og) og.addEventListener('click', () => { const v = document.getElementById('ask-other').value.trim(); if (v) go(spec.otherType === 'money' ? String(num(v)) : v); });
+    if (spec.type === 'multi') {
+      const sel = new Set(Array.isArray(cur) ? cur : []);
+      document.querySelectorAll('[data-m]').forEach(b => b.addEventListener('click', () => { const v = b.dataset.m; sel.has(v) ? sel.delete(v) : sel.add(v); a[q.id] = Array.from(sel); askDraw(c, phase, i); }));
+      document.getElementById('ask-add').addEventListener('click', () => { const v = document.getElementById('ask-other').value.trim(); if (v) { sel.add(v); a[q.id] = Array.from(sel); askDraw(c, phase, i); } });
+      document.getElementById('ask-next').addEventListener('click', () => { if (sel.size < (spec.need || 1)) { trToast('Pick ' + (spec.need || 1) + (spec.need > 1 ? ' names' : ' name'), true); return; } go(Array.from(sel)); });
+    } else if (spec.type === 'date') document.getElementById('ask-next').addEventListener('click', () => { const v = document.getElementById('ask-date').value; if (!v) { trToast('Pick a date', true); return; } go(v); });
+    else if (spec.type === 'dates2') document.getElementById('ask-next').addEventListener('click', () => { const v = [document.getElementById('ask-d1').value, document.getElementById('ask-d2').value]; if (!v[0] || !v[1] || v[0] === v[1]) { trToast('Pick 2 different days', true); return; } go(v); });
+    else if (spec.type === 'text' || spec.type === 'money') document.getElementById('ask-next').addEventListener('click', () => { const raw = document.getElementById('ask-text').value.trim(); if (!raw) { trToast('Fill this in', true); return; } go(spec.type === 'money' ? String(num(raw)) : raw); });
+    else if (spec.type === 'info') document.getElementById('ask-next').addEventListener('click', () => go(spec.value));
+    else if (spec.type === 'rent') askRentBind(c, phase, i, q, spec.upto);
+  }
+
+  // ---- the rent screen (notice months, months since, Innago ledger)
+  function askRentHtml(c, upto) {
+    const a = askA(c); const sel = a.rentSel || {}; const lines = askRentLines(c, upto); const r = askRentOwed(c, upto);
+    return `<div class="card" style="padding:0.4rem 1rem;">
+        ${lines.length ? lines.map(l => { const on = l.src === 'ledger' ? !!sel[l.id] : sel[l.id] !== false;
+          return `<label class="tr-check ${on ? '' : 'off'}" style="justify-content:space-between;"><span style="display:flex;gap:0.6rem;"><input type="checkbox" data-rl="${l.id}" ${on ? 'checked' : ''}><span>${esc(l.label)}${l.due ? `<br><span class="hint" style="margin:0;">Due ${esc(fmtDate(l.due))}</span>` : ''}</span></span><strong>${money2(l.amount)}</strong></label>`; }).join('')
+          : '<p class="hint">No rent lines yet. Add them below or from Innago.</p>'}
+        <div style="display:flex;gap:0.5rem;align-items:center;padding:0.6rem 0;border-bottom:1px solid #F1E4D8;"><span style="flex:1;">Paid since the notice</span><div class="ask-money" style="width:9rem;"><span>$</span><input class="wz-input" id="rl-paid" inputmode="decimal" value="${esc(a.paidSince || '')}" placeholder="0.00"></div></div>
+        <div style="display:flex;justify-content:space-between;padding:0.7rem 0;font-size:1.15rem;"><strong>Rent owed</strong><strong id="rl-total">${money2(r.owed)}</strong></div>
+      </div>
+      <div class="btn-row" style="flex-wrap:wrap;margin-top:0.6rem;">
+        <label class="btn btn-ghost" style="cursor:pointer;">&#128247; Add from Innago screenshot<input type="file" accept="image/*" id="rl-shot" style="position:absolute;width:1px;height:1px;opacity:0;"></label>
+        <button class="btn btn-ghost" id="rl-add">+ Add a month</button>
+      </div>
+      <div id="rl-ocr"></div>
+      <button class="btn btn-primary wz-next" id="ask-next">Next</button>`;
+  }
+  function askRentBind(c, phase, i, q, upto) {
+    const a = askA(c); a.rentSel = a.rentSel || {};
+    document.querySelectorAll('[data-rl]').forEach(x => x.addEventListener('change', () => { a.rentSel[x.dataset.rl] = x.checked; trSave(c); askDraw(c, phase, i); }));
+    document.getElementById('rl-paid').addEventListener('change', (e) => { a.paidSince = String(num(e.target.value) || ''); trSave(c); askDraw(c, phase, i); });
+    document.getElementById('rl-add').addEventListener('click', () => {
+      const lines = askRentLines(c, upto); const last = lines.filter(l => l.due).map(l => l.due).sort().pop() || todayISO().slice(0, 8) + '01';
+      a.extraRent = (a.extraRent || []).concat([{ due: addMonthISO(last, 1), amount: askRent(c), label: new Date(addMonthISO(last, 1) + 'T12:00').toLocaleDateString('en-US', { month: 'long', year: 'numeric' }) + ' rent' }]);
+      trSave(c); askDraw(c, phase, i);
+    });
+    document.getElementById('rl-shot').addEventListener('change', async (e) => {
+      const f = e.target.files[0]; if (!f) return; const box = document.getElementById('rl-ocr');
+      box.innerHTML = '<p class="hint">Reading the screenshot… <span id="rl-pct">0%</span></p>';
+      try {
+        const text = window.__ocrOverride ? await window.__ocrOverride(f) : await ocrImage(f, (p) => { const el = document.getElementById('rl-pct'); if (el) el.textContent = Math.round(p * 100) + '%'; });
+        const led = parseLedgerText(text);
+        if (!led.items.length && led.balance == null) { box.innerHTML = warnBox('Couldn\'t read any charges. Try a closer, straight-on screenshot of the ledger, or add months by hand.'); return; }
+        const charges = led.items.filter(x => x.kind === 'rent');
+        a.ledgerRent = charges.map(x => ({ date: x.date, amount: x.amount, desc: x.desc }));
+        const late = led.items.filter(x => x.kind === 'late').reduce((s, x) => s + x.amount, 0);
+        a.ledgerLate = late || null;
+        charges.forEach((x, k) => { a.rentSel['l' + k] = false; });
+        trSave(c); askDraw(c, phase, i);
+        document.getElementById('rl-ocr').innerHTML = `<div class="banner" style="background:#E8ECF5;border:1px solid #C9D2E8;color:#2A3756;"><span>Found ${charges.length} rent charge${charges.length === 1 ? '' : 's'}${late ? ', ' + money2(late) + ' in late fees' : ''}${led.balance != null ? ', balance ' + money2(led.balance) : ''}. Tick the Innago lines that aren't already on the list${led.balance != null ? ', and make sure the total matches the balance' : ''}.</span></div>`;
+      } catch (err) { box.innerHTML = badBox('Couldn\'t read that image. Check your connection and try again.'); }
+    });
+    document.getElementById('ask-next').addEventListener('click', () => { a[q.id] = a.rentSel || {}; trSave(c); askDraw(c, phase, askList(c, phase).indexOf(q) + 1); });
+  }
+  // Innago ledger text -> charges, late fees, payments, balance
+  function parseLedgerText(text) {
+    const items = []; let balance = null;
+    String(text || '').split(/\n+/).forEach(line => {
+      const L = line.replace(/[|]/g, ' ').replace(/\s+/g, ' ').trim(); if (!L) return;
+      const bm = /(balance|total due|amount due|outstanding|past due)\D{0,12}\(?-?\$?\s?([\d,]+\.\d{2})/i.exec(L);
+      if (bm) { balance = num(bm[2]); return; }
+      const dm = /(\d{1,2})[\/\-.](\d{1,2})[\/\-.](\d{2,4})/.exec(L); const am = L.match(/\(?-?\$\s?[\d,]+\.\d{2}\)?|\(?-?[\d,]+\.\d{2}\)?/g);
+      if (!dm || !am) return;
+      const amt = num(am[0].replace(/[()]/g, '')); if (!amt) return;
+      const y = dm[3].length === 2 ? '20' + dm[3] : dm[3]; const date = y + '-' + dm[1].padStart(2, '0') + '-' + dm[2].padStart(2, '0');
+      const desc = L.replace(dm[0], '').replace(am[0], '').replace(/\s+/g, ' ').trim().slice(0, 60) || 'Charge';
+      const kind = /late/i.test(L) ? 'late' : /payment|paid|credit|refund|receipt/i.test(L) || /^\(|^-/.test(am[0]) ? 'payment' : /rent/i.test(L) ? 'rent' : /deposit/i.test(L) ? 'deposit' : 'other';
+      items.push({ date, amount: Math.abs(amt), desc, kind });
+    });
+    return { items, balance };
+  }
+  window.__parseLedgerText = parseLedgerText;
+
+  // ---- review, court-ready check, download
+  function askReview(c, phase) {
+    const a = askA(c); const list = askList(c, phase); const issues = askCheck(c, phase);
+    const stops = issues.filter(x => x.lvl === 'stop'), warns = issues.filter(x => x.lvl === 'warn');
+    const P = askPacket(c, phase); const show = (q) => { const v = a[q.id]; const spec = q.q(c, a);
+      if (spec.type === 'rent') return money2(askRentOwed(c, spec.upto).owed) + ' rent owed';
+      if (Array.isArray(v)) return v.join(', '); if (spec.type === 'date' || /ISO$/.test(q.id)) return fmtDate(v);
+      const o = (spec.options || []).find(x => String(x.v) === String(v)); if (o) return o.label; if (spec.type === 'money' || spec.otherType === 'money') return money2(v); return v == null ? '' : String(v); };
+    app.innerHTML = header() + `
+      <button class="step-back" id="ask-back">&larr; Back</button>
+      <div class="wz" style="max-width:640px;">
+        <div class="wz-bar"><div style="width:100%;"></div></div>
+        <p class="wz-step">${esc(ASK_PHASES[phase].title)} &middot; review</p>
+        <h1 class="wz-q">${stops.length ? 'Fix these before printing' : 'Court-ready check passed'}</h1>
+        ${stops.map(s => `<div class="ask-stop">${esc(s.msg)}${s.q ? ` <a href="#" data-fix="${s.q}">Fix it</a>` : ''}</div>`).join('')}
+        ${warns.map(s => `<div class="ask-warn">${esc(s.msg)}${s.q ? ` <a href="#" data-fix="${s.q}">Change</a>` : ''}</div>`).join('')}
+        ${!stops.length ? '<div class="ask-ok">&#10003; Every required answer is in, and nothing breaks a Colorado filing rule Lease Desk checks for.</div>' : ''}
+        <div class="card" style="padding:0.5rem 1rem;margin-top:0.8rem;">
+          ${list.map(q => `<div class="ask-row"><span>${esc(q.q(c, a).title)}</span><strong>${esc(show(q)) || '<em style="color:#A0352C;">Not answered</em>'}</strong><a href="#" data-fix="${q.id}">Change</a></div>`).join('')}
+        </div>
+        <div class="card" style="margin-top:0.8rem;">
+          <div class="section-label" style="margin-top:0;">${esc(P.name)}</div>
+          <ul class="tr-plist">${P.forms.map(f => `<li>${esc(f.label)}${f.copies > 1 ? ' &times; ' + f.copies : ''}</li>`).join('')}</ul>
+          <button class="btn btn-primary" id="ask-dl" ${stops.length ? 'disabled' : ''} style="margin-top:0.6rem;">${stops.length ? 'Fix the items above to print' : 'Download the packet, filled in'}</button>
+          <div id="ask-note"></div>
+        </div>
+        <button class="btn ${stops.length ? 'btn-ghost' : 'btn-primary'} wz-next" id="ask-done">${phase === 'court' && a.answered === 'over' ? 'Close the case' : 'Done with this part'}</button>
+      </div>`;
+    window.scrollTo(0, 0);
+    document.getElementById('ask-back').addEventListener('click', () => askDraw(c, phase, Math.max(0, list.length - 1)));
+    document.querySelectorAll('[data-fix]').forEach(x => x.addEventListener('click', (e) => { e.preventDefault(); askStart(phase, x.dataset.fix); }));
+    document.getElementById('ask-dl').addEventListener('click', async function () {
+      const b = this; const note = document.getElementById('ask-note'); const d = courtDataFull(c); d.x.cover = P.cover;
+      const spanish = /span|espa/i.test(c.language || ''); const esOk = new Set(['JDF101', 'JDF102', 'JDF103']);
+      b.disabled = true; b.textContent = 'Getting the newest forms from the court…';
+      try {
+        const info = await downloadOfficial(P.forms.map(f => ({ form: f.form, copies: f.copies, lang: spanish && esOk.has(f.form) ? 'es' : 'en' })), d, P.name + ' - ' + c.tenantName + '.pdf', P.name + ' - ' + c.tenantName);
+        note.innerHTML = officialNote(info.filter(x => !x.own)); a.printed = a.printed || {}; a.printed[phase] = todayISO(); trSave(c);
+        b.textContent = 'Downloaded. Download again';
+      } catch (e) { note.innerHTML = badBox('The court website didn\'t answer. Try again in a minute.'); b.textContent = 'Download the packet, filled in'; }
+      b.disabled = false;
+    });
+    document.getElementById('ask-done').addEventListener('click', () => { askFinish(c, phase); });
+  }
+  function askFinish(c, phase) {
+    const a = askA(c); const t = c.track; t.f = t.f || {}; t.checks = t.checks || {};
+    const tick = (...ks) => ks.forEach(k => { if (!t.checks[k]) t.checks[k] = todayISO(); });
+    a.done = a.done || {}; if (!askCheck(c, phase).some(x => x.lvl === 'stop')) a.done[phase] = todayISO();
+    if (phase === 'file' && a.printed && a.printed.file) tick('papers.print', 'papers.check');
+    if (phase === 'filed') { Object.assign(t.f, { filedISO: a.filedISO, caseNumber: a.caseNumber, returnISO: a.returnISO, returnTime: a.returnTime }); tick('file.filed', 'file.wrote'); }
+    if (phase === 'serve') { Object.assign(t.f, { servedHow: a.service === 'posted' ? 'posted' : 'personal', servedOnISO: a.servedISO }); tick('serve.give', 'serve.served'); if (a.service === 'posted' && a.mailedISO) tick('serve.mailed'); }
+    if (phase === 'court') { if (a.answered === 'no') t.outcome = 'default'; if (a.answered === 'yes') { t.outcome = 'answered'; t.f.trialISO = a.trialISO; } if (a.answered === 'settled') t.outcome = 'settled';
+      if (a.answered === 'over') t.closed = { why: 'They paid or moved out', date: todayISO(), snap: { servedISO: trServed(c), deadlineISO: trDeadline(c) } }; }
+    if (phase === 'writ') { Object.assign(t.f, { judgmentISO: a.judgmentISO, money: a.judgmentMoney === 'yes' }); tick('judgment.copy'); if (a.judgmentMoney === 'yes') t.garnish = true; }
+    if (phase === 'collect') { tick('garnish.forms'); if (a.know === 'job' || a.know === 'both') tick('garnish.job'); }
+    trSave(c, true);
+    const next = askNextPhase(c);
+    app.innerHTML = header() + `<div class="wz" style="text-align:center;">
+      <div style="font-size:2.6rem;">&#10003;</div><h1 class="wz-q">${esc(ASK_PHASES[phase].title)}: saved</h1>
+      ${next ? `<p class="wz-help">Next: <strong>${esc(ASK_PHASES[next].title)}</strong>. ${askWhen(c, next)}</p><button class="btn btn-primary wz-next" id="ask-next">Start the next questions</button>` : ''}
+      <button class="btn btn-ghost wz-next" id="ask-track">Back to the checklist</button></div>`;
+    const nx = document.getElementById('ask-next'); if (nx) nx.addEventListener('click', () => askStart(next));
+    document.getElementById('ask-track').addEventListener('click', () => renderTrack(c));
+  }
+  function askWhen(c, phase) {
+    const a = askA(c);
+    if (phase === 'filed') return 'Answer these right after the clerk gives you the case number.';
+    if (phase === 'serve') return 'Answer these once the papers are served (by ' + fmtDate(a.returnISO ? addDaysISO(a.returnISO, -7) : '') + ').';
+    if (phase === 'court') return 'Answer these on or after the court date, ' + fmtDate(a.returnISO) + '.';
+    if (phase === 'writ') return 'Answer these once the judge grants judgment.';
+    if (phase === 'collect') return 'Answer these 14 days or more after judgment.';
+    return '';
+  }
+  window.askNextPhase = askNextPhase;
 
   // ---- one tenant file
   function caseWarnings(c) {

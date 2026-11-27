@@ -226,7 +226,7 @@ export default async (req) => {
         info.push({ form: item.form, lang, own: OWN.has(item.form), posted: ((srcUrl || '').match(/files\/(\d{4}-\d{2})\//) || [])[1] || '', live, url: srcUrl });
         if (m.length) misses[item.form] = m;
         try { doc.getForm().flatten(); } catch (e) {}
-        const copies = Math.max(1, Math.min(4, parseInt(item.copies, 10) || 1));
+        const copies = Math.max(1, Math.min(8, parseInt(item.copies, 10) || 1));
         for (let c = 0; c < copies; c++) {
           const pages = await out.copyPages(doc, doc.getPageIndices());
           pages.forEach(pg => out.addPage(pg));
