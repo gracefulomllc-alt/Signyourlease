@@ -33,7 +33,7 @@ const PAGES = {
 // file name on the court site, when it isn't the form id
 const FILE = { FORM7: 'Form7', FORM26: 'Form26', FORM27: 'Form27', FORM29: 'Form29', JDF89: 'JDF89', JDF111: 'JDF111' };
 // Forms Lease Desk writes itself (no court version exists statewide)
-const OWN = new Set(['LDREP']);
+const OWN = new Set(['LDREP', 'LDMIL', 'LDCOVER']);
 // Last known good links, used only if the form page can't be read.
 const FALLBACK = {
   JDF98: '/sites/default/files/2025-04/JDF98.pdf',
@@ -139,7 +139,7 @@ function findField(form, fields, key) {
   try { return form.getField(key); } catch (e) { return null; }
 }
 
-async function fillOne(formId, lang, values, store) {
+export async function fillOne(formId, lang, values, store) {
   if (OWN.has(formId)) return { doc: await buildOwn(formId, values), misses: [], srcUrl: '', live: true, own: true };
   const { bytes, url: srcUrl, live } = await formBytes(formId, lang, store);
   const doc = await PDFDocument.load(bytes, { ignoreEncryption: true, updateMetadata: false });

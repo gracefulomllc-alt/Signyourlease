@@ -1,0 +1,23 @@
+name: Test form filling
+on:
+  workflow_dispatch:
+    inputs:
+      forms: { description: 'form ids', required: false, default: '' }
+permissions:
+  contents: write
+jobs:
+  fill:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with: { node-version: 20 }
+      - run: npm install --no-save
+      - run: node scripts/test-fill.mjs
+        env: { FORMS: '${{ github.event.inputs.forms }}' }
+      - name: Save results
+        run: |
+          mkdir /tmp/po && cp -r probe-out/* /tmp/po/
+          git config user.name "probe-bot"; git config user.email "probe-bot@users.noreply.github.com"
+          git checkout --orphan fill-tmp && git rm -rfq . && rm -rf node_modules probe-out
+          cp -r /tmp/po/* . && git add -A && git commit -qm "fill results" && git push -f origin HEAD:refs/heads/fill-out

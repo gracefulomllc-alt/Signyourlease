@@ -12,17 +12,19 @@ function wrap(font, text, size, width) {
   return out;
 }
 function page(doc, fonts) {
-  const p = doc.addPage([W, H]); let y = H - M;
+  let p = doc.addPage([W, H]); let y = H - M;
+  const brk = (need) => { if (y - need < M) { p = doc.addPage([W, H]); y = H - M; } };
   const api = {
     text(t, o = {}) {
       const f = o.bold ? fonts.b : fonts.r; const size = o.size || 11; const lh = size * 1.4;
       wrap(f, t, size, W - 2 * M - (o.indent || 0)).forEach(l => {
+        brk(lh);
         const x = o.center ? (W - f.widthOfTextAtSize(l, size)) / 2 : M + (o.indent || 0);
         p.drawText(l.replace(/[^\x20-\xFF]/g, ''), { x, y, size, font: f, color: rgb(0, 0, 0) }); y -= lh;
       });
       y -= o.after == null ? 4 : o.after;
     },
-    line(label, x2) { p.drawLine({ start: { x: M, y: y + 2 }, end: { x: x2 || W - M, y: y + 2 }, thickness: 0.6 }); p.drawText(label, { x: M, y: y - 10, size: 8, font: fonts.r }); y -= 30; },
+    line(label, x2) { brk(34); p.drawLine({ start: { x: M, y: y + 2 }, end: { x: x2 || W - M, y: y + 2 }, thickness: 0.6 }); p.drawText(label, { x: M, y: y - 10, size: 8, font: fonts.r }); y -= 30; },
     gap(n) { y -= n; },
     box(lines) {
       const top = y + 8; lines.forEach(l => api.text(l, { size: 10, after: 0 })); const bot = y + 4;
@@ -72,6 +74,34 @@ export async function buildOwn(formId, v) {
     pg.text('This consent stays in effect until revoked in writing.', { after: 20 });
     (v.members && v.members.length ? v.members : ['']).forEach(m => { pg.line('Signature' + (m ? ' of ' + m + ', Member' : ' of Member') + '                                                       Date', W - M); });
     if (v.members && v.members.length < 3) pg.line('Signature of Member (if any)                                                      Date', W - M);
+  }
+  if (formId === 'LDMIL') {
+    const pg = page(doc, fonts); caption(pg, v);
+    const m = v.mil || {};
+    pg.text('DECLARATION REGARDING MILITARY SERVICE', { bold: true, center: true, size: 13, after: 2 });
+    pg.text('(Servicemembers Civil Relief Act, 50 U.S.C. 3931)', { center: true, size: 10, after: 12 });
+    pg.text('I, ' + v.signer + (v.signerTitle ? ', ' + v.signerTitle + ' of ' + v.entity : '') + ', state:');
+    (v.tenantsList || []).forEach((t, i) => {
+      const r = (m.results || {})[t] || m.result || '';
+      pg.text((i + 1) + '. ' + t + ': ' + (r === 'not' ? 'is NOT in military service. I checked the Department of Defense SCRA website (scra.dmdc.osd.mil) on ' + (m.dateText || '____________') + '. A copy of the status report is attached.'
+        : r === 'yes' ? 'IS in military service, or I have reason to believe so.' : 'I am unable to determine whether this person is in military service, for this reason: ____________________________________________'), { indent: 10 });
+    });
+    pg.text('I declare under penalty of perjury under the law of Colorado that the foregoing is true and correct.', { after: 20 });
+    pg.line('Signature                                                                                                     Date', W - M);
+    pg.line('Printed name: ' + v.signer + (v.signerTitle ? ', ' + v.signerTitle : '') + '      City and state where signed: ____________________', W - M);
+    pg.text('Attach the SCRA status report for each tenant. Run the search with the tenant\'s date of birth or Social Security number from the rental application. A report older than 30 days may not be accepted, so run it close to the day you ask for judgment.', { size: 8.5 });
+  }
+  if (formId === 'LDCOVER') {
+    const cv = v.cover || {}; let pg = page(doc, fonts);
+    pg.text(cv.title || 'Packet checklist', { bold: true, size: 16, after: 2 });
+    pg.text((v.plaintiff || '') + ' v. ' + (v.defendants || '') + (v.caseNumber ? '   Case ' + v.caseNumber : ''), { size: 10 });
+    pg.text((v.premises || ''), { size: 10, after: 12 });
+    (cv.sections || []).forEach(sec => {
+      pg.text(sec.h, { bold: true, size: 12, after: 2 });
+      (sec.lines || []).forEach(l => pg.text('[  ]  ' + l, { size: 10.5, indent: 6, after: 1 }));
+      pg.gap(8);
+    });
+    pg.text('Made by Lease Desk from your answers. Lease Desk is not a lawyer; your court\'s instructions and the judge\'s orders control.', { size: 8 });
   }
   return doc;
 }
